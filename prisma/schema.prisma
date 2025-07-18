@@ -1,0 +1,225 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// EXTERNAL TABLES (Read-only, no CRUD operations)
+// ============================================================================
+
+// Main user table managed externally
+model User {
+  userId    String   @id @default(cuid()) @db.VarChar(191)
+  email     String   @unique @db.VarChar(191)
+  password  String   @db.VarChar(255) // Hashed password for main system
+  name      String   @db.VarChar(191)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  instituteUsers    InstituteUser[]
+  organizationUsers OrganizationUser[]
+  userAuth          UserAuth?
+
+  @@map("user")
+}
+
+// Institute table managed externally
+model Institute {
+  instituteId String   @id @default(cuid()) @db.VarChar(191)
+  name        String   @db.VarChar(191)
+  imageUrl    String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  instituteUsers InstituteUser[]
+
+  @@map("institute")
+}
+
+// Junction table for institute users (managed externally)
+model InstituteUser {
+  instituteId String   @db.VarChar(191)
+  userId      String   @db.VarChar(191)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  institute Institute @relation(fields: [instituteId], references: [instituteId], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([instituteId, userId])
+  @@map("institute_users")
+}
+
+// ============================================================================
+// AUTHENTICATION SYSTEM (Full CRUD)
+// ============================================================================
+
+// Separate authentication system for this service
+model UserAuth {
+  authId    String    @id @default(cuid()) @db.VarChar(191)
+  userId    String    @unique @db.VarChar(191)
+  password  String    @db.VarChar(255) // Hashed password for this system (bcrypt)
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("user_auth")
+}
+
+// ============================================================================
+// ORGANIZATION SYSTEM (Full CRUD)
+// ============================================================================
+
+// Enum for organization types
+enum OrganizationType {
+  INSTITUTE
+  GLOBAL
+}
+
+// Organization table
+model Organization {
+  organizationId String           @id @default(cuid()) @db.VarChar(191)
+  name           String           @db.VarChar(191)
+  type           OrganizationType
+  isPublic       Boolean          @default(false)
+  enrollmentKey  String?          @unique @db.VarChar(191) // Nullable for public organizations
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Relations
+  organizationUsers OrganizationUser[]
+  causes            Cause[]
+
+  @@index([type])
+  @@index([isPublic])
+  @@map("organization")
+}
+
+// Enum for user roles in organizations
+enum OrganizationRole {
+  MEMBER
+  MODERATOR
+  ADMIN
+  PRESIDENT
+}
+
+// Junction table for organization users
+model OrganizationUser {
+  organizationId String           @db.VarChar(191)
+  userId         String           @db.VarChar(191)
+  role           OrganizationRole @default(MEMBER)
+  isVerified     Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@index([role])
+  @@index([isVerified])
+  @@map("organization_users")
+}
+
+// ============================================================================
+// CAUSE SYSTEM (Full CRUD)
+// ============================================================================
+
+// Cause table linked to organizations
+model Cause {
+  causeId        String   @id @default(cuid()) @db.VarChar(191)
+  organizationId String   @db.VarChar(191)
+  title          String   @db.VarChar(191)
+  description    String?  @db.Text
+  isPublic       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
+  lectures     Lecture[]
+  assignments  Assignment[]
+
+  @@index([organizationId])
+  @@index([isPublic])
+  @@map("cause")
+}
+
+// ============================================================================
+// LECTURE SYSTEM (Full CRUD)
+// ============================================================================
+
+// Lecture table linked to causes
+model Lecture {
+  lectureId      String   @id @default(cuid()) @db.VarChar(191)
+  causeId        String   @db.VarChar(191)
+  title          String   @db.VarChar(191)
+  content        String?  @db.Text
+  isPublic       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  cause           Cause           @relation(fields: [causeId], references: [causeId], onDelete: Cascade)
+  documentations  Documentation[]
+
+  @@index([causeId])
+  @@index([isPublic])
+  @@map("lecture")
+}
+
+// ============================================================================
+// ASSIGNMENT SYSTEM (Full CRUD)
+// ============================================================================
+
+// Assignment table linked to causes
+model Assignment {
+  assignmentId String    @id @default(cuid()) @db.VarChar(191)
+  causeId      String    @db.VarChar(191)
+  title        String    @db.VarChar(191)
+  description  String?   @db.Text
+  dueDate      DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  cause Cause @relation(fields: [causeId], references: [causeId], onDelete: Cascade)
+
+  @@index([causeId])
+  @@index([dueDate])
+  @@map("assignment")
+}
+
+// ============================================================================
+// DOCUMENTATION SYSTEM (Full CRUD)
+// ============================================================================
+
+// Documentation table linked to lectures
+model Documentation {
+  documentationId String   @id @default(cuid()) @db.VarChar(191)
+  lectureId       String   @db.VarChar(191)
+  title           String   @db.VarChar(191)
+  content         String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  lecture Lecture @relation(fields: [lectureId], references: [lectureId], onDelete: Cascade)
+
+  @@index([lectureId])
+  @@map("documentation")
+}
