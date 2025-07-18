@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { EnhancedAuthService } from './enhanced-auth.service';
 import { LoginDto, SetupPasswordDto, ChangePasswordDto } from './dto/auth.dto';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private enhancedAuthService: EnhancedAuthService,
   ) {}
 
   /**
@@ -34,8 +36,8 @@ export class AuthService {
       throw new BadRequestException('Password not set up. Please set up your password first.');
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.userAuth.password);
+    // Verify password using enhanced authentication
+    const isPasswordValid = await this.enhancedAuthService.validatePassword(password, user.userAuth.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -86,9 +88,8 @@ export class AuthService {
       throw new ConflictException('Password already set up. Use change password instead.');
     }
 
-    // Hash the new password
-    const saltRounds = this.configService.get<number>('auth.bcryptSaltRounds') || 12;
-    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+    // Hash the new password using enhanced encryption
+    const hashedPassword = await this.enhancedAuthService.hashPassword(newPassword);
 
     // Create user auth record
     await this.prisma.userAuth.create({
@@ -118,15 +119,14 @@ export class AuthService {
       throw new BadRequestException('Password not set up. Please set up your password first.');
     }
 
-    // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, userAuth.password);
+    // Verify current password using enhanced authentication
+    const isCurrentPasswordValid = await this.enhancedAuthService.validatePassword(currentPassword, userAuth.password);
     if (!isCurrentPasswordValid) {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
-    // Hash the new password
-    const saltRounds = this.configService.get<number>('auth.bcryptSaltRounds') || 12;
-    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+    // Hash the new password using enhanced encryption
+    const hashedPassword = await this.enhancedAuthService.hashPassword(newPassword);
 
     // Update password
     await this.prisma.userAuth.update({

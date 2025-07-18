@@ -3,6 +3,11 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+// Simple bcrypt hashing for seed data (compatible with existing auth)
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
+}
+
 async function main() {
   console.log('🌱 Seeding database...');
 
@@ -10,46 +15,61 @@ async function main() {
   const users = await Promise.all([
     prisma.user.upsert({
       where: { email: 'admin@example.com' },
-      update: {},
+      update: {
+        password: await hashPassword('AdminPassword123!'),
+        name: 'Admin User',
+      },
       create: {
         email: 'admin@example.com',
-        password: await bcrypt.hash('AdminPassword123!', 12),
+        password: await hashPassword('AdminPassword123!'),
         name: 'Admin User',
       },
     }),
     prisma.user.upsert({
       where: { email: 'student@example.com' },
-      update: {},
+      update: {
+        password: await hashPassword('StudentPassword123!'),
+        name: 'Student User',
+      },
       create: {
         email: 'student@example.com',
-        password: await bcrypt.hash('StudentPassword123!', 12),
+        password: await hashPassword('StudentPassword123!'),
         name: 'Student User',
       },
     }),
     prisma.user.upsert({
       where: { email: 'teacher@example.com' },
-      update: {},
+      update: {
+        password: await hashPassword('TeacherPassword123!'),
+        name: 'Teacher User',
+      },
       create: {
         email: 'teacher@example.com',
-        password: await bcrypt.hash('TeacherPassword123!', 12),
+        password: await hashPassword('TeacherPassword123!'),
         name: 'Teacher User',
       },
     }),
     prisma.user.upsert({
       where: { email: 'moderator@example.com' },
-      update: {},
+      update: {
+        password: await hashPassword('ModeratorPassword123!'),
+        name: 'Moderator User',
+      },
       create: {
         email: 'moderator@example.com',
-        password: await bcrypt.hash('ModeratorPassword123!', 12),
+        password: await hashPassword('ModeratorPassword123!'),
         name: 'Moderator User',
       },
     }),
     prisma.user.upsert({
       where: { email: 'president@example.com' },
-      update: {},
+      update: {
+        password: await hashPassword('PresidentPassword123!'),
+        name: 'President User',
+      },
       create: {
         email: 'president@example.com',
-        password: await bcrypt.hash('PresidentPassword123!', 12),
+        password: await hashPassword('PresidentPassword123!'),
         name: 'President User',
       },
     }),
@@ -524,7 +544,9 @@ async function main() {
     users.map(user =>
       prisma.userAuth.upsert({
         where: { userId: user.userId },
-        update: {},
+        update: {
+          password: user.password, // Update password on reseed
+        },
         create: {
           userId: user.userId,
           password: user.password, // Already hashed above
