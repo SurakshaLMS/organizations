@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { LoginDto, SetupPasswordDto, ChangePasswordDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GetUser } from './decorators/get-user.decorator';
+import { EnhancedJwtPayload } from './organization-access.service';
 
 @Controller('auth')
 export class AuthController {
@@ -33,23 +34,36 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async changePassword(
-    @GetUser('userId') userId: string,
+    @GetUser() user: EnhancedJwtPayload,
     @Body() changePasswordDto: ChangePasswordDto,
   ) {
-    return this.authService.changePassword(userId, changePasswordDto);
+    return this.authService.changePassword(user.sub, changePasswordDto);
   }
 
   /**
-   * Get current user profile
+   * Get current user profile with organization access
    */
   @Post('profile')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async getProfile(@GetUser() user: any) {
+  async getProfile(@GetUser() user: EnhancedJwtPayload) {
     return {
-      userId: user.userId,
+      userId: user.sub,
       email: user.email,
       name: user.name,
+      organizationAccess: user.organizationAccess,
+      isGlobalAdmin: user.isGlobalAdmin,
     };
+  }
+
+  /**
+   * Refresh JWT token with updated organization access
+   * Call this after user joins/leaves organizations or role changes
+   */
+  @Post('refresh-token')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async refreshToken(@GetUser() user: EnhancedJwtPayload) {
+    return this.authService.refreshUserToken(user.sub);
   }
 }

@@ -2,84 +2,159 @@
 
 ## 📋 Overview
 
-This API provides **optimized organization management** with enhanced performance, security, and data minimization. All responses return only necessary data, exclude sensitive information, and support comprehensive pagination.
+This API provides **enhanced JWT-based organization access control** with optimized performance, security, and data minimization. All responses return only necessary data, exclude sensitive information, and support comprehensive pagination.
+
+**🔐 Enhanced Security Features:**
+- **Organization-Based Access Control**: JWT tokens include user's organization IDs and roles
+- **Role-Based Authorization**: Verify user has required permissions before executing methods  
+- **Global Admin Support**: ORGANIZATION ADMIN has access to any organization
+- **Real-time Access Updates**: Token refresh when organization memberships change
 
 **Base URL:** `http://localhost:3000/api/v1`
 
-**Authentication:** JWT Bearer Token (where specified)
+**Authentication:** JWT Bearer Token (required for protected endpoints)
 
 ---
 
-## 🚀 Key Optimizations
+## 🚀 Enhanced JWT Authentication System
 
-### ✅ Data Minimization
-- **Minimal Responses**: Only essential fields returned
-- **No Sensitive Data**: Enrollment keys, timestamps excluded from responses
-- **ID-Based Relations**: Return IDs instead of full relational data
-- **Performance Focus**: 60-80% smaller response payloads
-
-### ✅ Enhanced Security  
-- **Non-Unique Enrollment Keys**: Multiple organizations can use same keys
-- **Protected Sensitive Fields**: enrollmentKey, passwords never exposed
-- **Selective Data Access**: Return only what clients need
-
-### ✅ Comprehensive Pagination
-- **All Array Endpoints**: Support pagination, search, and sorting
-- **Consistent Format**: Standardized pagination across all endpoints
-- **Performance Optimized**: Efficient offset-based pagination
-
-### ✅ Separated Concerns
-- **Dedicated Endpoints**: Separate endpoints for members and causes
-- **Scalable Architecture**: Independent data fetching capabilities
-
----
-
-## 📊 Response Format
-
-### Standard Response Structure
-All paginated responses follow this format:
+### JWT Token Structure
+The enhanced JWT tokens now include:
 
 ```json
 {
-  "data": [...],
-  "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 25,
-    "totalPages": 3,
-    "hasNext": true,
-    "hasPrev": false
-  },
-  "meta": {
-    "sortBy": "createdAt",
-    "sortOrder": "desc",
-    "search": "optional_search_term"
-  }
+  "sub": "user-id",
+  "email": "user@example.com", 
+  "name": "User Name",
+  "organizationAccess": [
+    {
+      "organizationId": "org-123",
+      "role": "PRESIDENT",
+      "isVerified": true
+    },
+    {
+      "organizationId": "org-456", 
+      "role": "MEMBER",
+      "isVerified": true
+    }
+  ],
+  "isGlobalAdmin": false,
+  "iat": 1752958468,
+  "exp": 1753563268
 }
 ```
 
-### Common Query Parameters
-All paginated endpoints support these parameters:
+### Access Control Rules
+1. **Organization Membership**: User must be a verified member of the organization
+2. **Role-Based Permissions**: Methods check for required roles (MEMBER, MODERATOR, ADMIN, PRESIDENT)
+3. **Global Admin Override**: Users with `isGlobalAdmin: true` can access any organization
+4. **Automatic Verification**: JWT includes only verified organization memberships
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `page` | number | 1 | Page number (1-indexed) |
-| `limit` | number | 10 | Items per page (max 100) |
-| `sortBy` | string | varies | Field to sort by |
-| `sortOrder` | string | "desc" | Sort order ("asc" or "desc") |
-| `search` | string | - | Search term for text fields |
+### Role Hierarchy
+- **MEMBER**: Basic access (view members, leave organization)
+- **MODERATOR**: Moderate content (MEMBER permissions + content management)
+- **ADMIN**: Administrative tasks (MODERATOR permissions + user verification, institute assignment)
+- **PRESIDENT**: Full control (ADMIN permissions + organization deletion)
+- **GLOBAL_ADMIN**: Access to any organization (system-wide permissions)
 
 ---
 
-## 🏢 Organizations API
+## 🔐 Authentication Endpoints
+
+### POST /auth/login
+Enhanced login with organization access information.
+
+**Request Body:**
+```json
+{
+  "email": "admin@example.com",
+  "password": "AdminPassword123!"
+}
+```
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "userId": "user-123",
+    "email": "admin@example.com",
+    "name": "Admin User"
+  },
+  "organizationAccess": [
+    {
+      "organizationId": "org-123",
+      "role": "PRESIDENT", 
+      "isVerified": true
+    }
+  ],
+  "isGlobalAdmin": false
+}
+```
+
+### POST /auth/refresh-token
+**NEW ENDPOINT** - Refresh JWT token with updated organization access.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "userId": "user-123",
+    "email": "admin@example.com", 
+    "name": "Admin User"
+  },
+  "organizationAccess": [
+    {
+      "organizationId": "org-123",
+      "role": "ADMIN",
+      "isVerified": true
+    }
+  ],
+  "isGlobalAdmin": false
+}
+```
+
+### POST /auth/profile
+Get user profile with organization access information.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "userId": "user-123",
+  "email": "admin@example.com",
+  "name": "Admin User",
+  "organizationAccess": [
+    {
+      "organizationId": "org-123",
+      "role": "PRESIDENT",
+      "isVerified": true
+    }
+  ],
+  "isGlobalAdmin": false
+}
+```
+
+---
+
+## 🏢 Organizations API with Enhanced Access Control
 
 ### GET /organizations
-Get all public organizations with pagination.
+Get all public organizations (no authentication required).
 
 **Query Parameters:**
 - All common pagination parameters
 - `userId` (optional): Filter user's organizations  
-- `sortBy`: `name`, `type`, `memberCount`, `causeCount`, `createdAt`
 
 **Response Example:**
 ```json
@@ -93,18 +168,7 @@ Get all public organizations with pagination.
       "instituteId": "inst-456"
     }
   ],
-  "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 1,
-    "totalPages": 1,
-    "hasNext": false,
-    "hasPrev": false
-  },
-  "meta": {
-    "sortBy": "name",
-    "sortOrder": "desc"
-  }
+  "pagination": { ... }
 }
 ```
 
@@ -123,16 +187,19 @@ Get organization by ID (minimal data).
 ```
 
 ### GET /organizations/:id/members
-**NEW ENDPOINT** - Get organization members with pagination.
+Get organization members with enhanced access control.
+
+**🔐 Access Control**: Requires organization membership (any role)
 
 **Headers:**
 ```
 Authorization: Bearer <jwt_token>
 ```
 
-**Query Parameters:**
-- All common pagination parameters
-- `sortBy`: `role`, `userName`, `userEmail`, `isVerified`
+**Access Validation:**
+- ✅ User must be a verified member of the organization
+- ✅ Global admins can access any organization  
+- ❌ Non-members receive `403 Forbidden`
 
 **Response Example:**
 ```json
@@ -145,484 +212,224 @@ Authorization: Bearer <jwt_token>
       "isVerified": true
     }
   ],
-  "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 1,
-    "totalPages": 1,
-    "hasNext": false,
-    "hasPrev": false
-  },
-  "meta": {
-    "sortBy": "role",
-    "sortOrder": "desc"
-  }
-}
-```
-
-### GET /organizations/:id/causes
-**NEW ENDPOINT** - Get organization causes with pagination.
-
-**Query Parameters:**
-- All common pagination parameters  
-- `sortBy`: `title`, `description`, `isPublic`
-
-**Response Example:**
-```json
-{
-  "data": [
-    {
-      "causeId": "cause-123",
-      "title": "Data Structures Course",
-      "description": "Advanced data structures...",
-      "isPublic": true,
-      "organizationId": "org-456"
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 1,
-    "totalPages": 1,
-    "hasNext": false,
-    "hasPrev": false
-  },
-  "meta": {
-    "sortBy": "title",
-    "sortOrder": "desc"
-  }
-}
-```
-
-### POST /organizations
-Create new organization. Requires authentication.
-
-**Request Body:**
-```json
-{
-  "name": "New Department",
-  "type": "INSTITUTE",
-  "isPublic": true,
-  "enrollmentKey": "optional-key",
-  "instituteId": "inst-123"
-}
-```
-
-**Response (Minimal Data):**
-```json
-{
-  "organizationId": "org-789",
-  "name": "New Department",
-  "type": "INSTITUTE",
-  "isPublic": true,
-  "instituteId": "inst-123"
+  "pagination": { ... }
 }
 ```
 
 ### PUT /organizations/:id
-Update organization. Requires admin/president role.
+Update organization with enhanced access control.
 
-**Response (Minimal Data):**
-```json
-{
-  "organizationId": "org-789",
-  "name": "Updated Department",
-  "type": "INSTITUTE",
-  "isPublic": false,
-  "instituteId": "inst-123"
-}
+**🔐 Access Control**: Requires ADMIN or PRESIDENT role
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
 ```
 
----
+**Access Validation:**
+- ✅ User must have ADMIN or PRESIDENT role in the organization
+- ✅ Global admins can access any organization
+- ❌ Members/Moderators receive `403 Forbidden: Required role(s): ADMIN, PRESIDENT`
 
-## 🎯 Causes API
+### DELETE /organizations/:id
+Delete organization with enhanced access control.
 
-### GET /causes
-Get all public causes with pagination.
+**🔐 Access Control**: Requires PRESIDENT role
 
-**Query Parameters:**
-- All common pagination parameters
-- `sortBy`: `title`, `organizationName`, `lectureCount`, `assignmentCount`
-
-**Response Example:**
-```json
-{
-  "data": [
-    {
-      "causeId": "cause-123",
-      "title": "Introduction to Programming", 
-      "description": "Learn programming basics...",
-      "isPublic": true,
-      "organizationId": "org-456"
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 1,
-    "totalPages": 1,
-    "hasNext": false,
-    "hasPrev": false
-  },
-  "meta": {
-    "sortBy": "title",
-    "sortOrder": "desc"
-  }
-}
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
 ```
 
-### GET /causes/:id
-Get cause by ID (minimal data).
+**Access Validation:**
+- ✅ User must have PRESIDENT role in the organization
+- ✅ Global admins can access any organization  
+- ❌ Other roles receive `403 Forbidden: Required role(s): PRESIDENT`
 
-**Response:**
-```json
-{
-  "causeId": "cause-123",
-  "title": "Introduction to Programming",
-  "description": "Learn programming basics...", 
-  "isPublic": true,
-  "organizationId": "org-456"
-}
+### POST /organizations/enroll
+Enroll user in organization (triggers automatic token refresh).
+
+**Headers:**
 ```
-
-### POST /causes
-Create new cause. Requires authentication.
+Authorization: Bearer <jwt_token>
+```
 
 **Request Body:**
 ```json
 {
   "organizationId": "org-123",
-  "title": "New Course",
-  "description": "Course description...",
-  "isPublic": true
+  "enrollmentKey": "optional-key"
 }
-```
-
-**Response (Minimal Data):**
-```json
-{
-  "causeId": "cause-789",
-  "title": "New Course",
-  "description": "Course description...",
-  "isPublic": true,
-  "organizationId": "org-123"
-}
-```
-
----
-
-## 🏛️ Institute Users API
-
-### GET /institute-users
-Get all institute user assignments with pagination. Requires authentication.
-
-**Query Parameters:**
-- All common pagination parameters
-- `sortBy`: `role`, `userName`, `instituteName`, `isActive`
-
-**Response Example:**
-```json
-{
-  "data": [
-    {
-      "userId": "user-123",
-      "instituteId": "inst-456",
-      "role": "FACULTY", 
-      "isActive": true,
-      "assignedBy": "admin-789"
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 1,
-    "totalPages": 1,
-    "hasNext": false,
-    "hasPrev": false
-  },
-  "meta": {
-    "sortBy": "role",
-    "sortOrder": "desc"
-  }
-}
-```
-
-### POST /institute-users/assign
-Assign user to institute with role. Requires authentication.
-
-**Request Body:**
-```json
-{
-  "userId": "user-123",
-  "instituteId": "inst-456", 
-  "role": "FACULTY",
-  "isActive": true,
-  "notes": "Optional notes"
-}
-```
-
-**Response (Minimal Data):**
-```json
-{
-  "message": "User successfully assigned to institute",
-  "assignment": {
-    "userId": "user-123",
-    "instituteId": "inst-456",
-    "role": "FACULTY",
-    "isActive": true,
-    "assignedBy": "admin-789"
-  }
-}
-```
-
-### GET /institute-users/roles
-Get available institute roles.
-
-**Response:**
-```json
-{
-  "roles": ["STUDENT", "FACULTY", "STAFF", "ADMIN", "DIRECTOR"]
-}
-```
-
----
-
-## 🔐 Authentication API
-
-### POST /auth/login
-User login with enhanced password validation.
-
-**Request Body:**
-```json
-{
-  "email": "admin@example.com",
-  "password": "AdminPassword123!"
-}
-```
-
-**Response:**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "userId": "user-123",
-    "email": "admin@example.com",
-    "name": "Admin User"
-  }
-}
-```
-
-### POST /auth/setup-password
-Set up password for first-time users.
-
-**Request Body:**
-```json
-{
-  "email": "newuser@example.com",
-  "newPassword": "NewSecurePassword123!"
-}
-```
-
-### POST /auth/change-password
-Change password. Requires authentication.
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Request Body:**
-```json
-{
-  "currentPassword": "CurrentPassword123!",
-  "newPassword": "NewEnhancedPassword123!"
-}
-```
-
-### POST /auth/profile
-Get user profile. Requires authentication.
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
 ```
 
 **Response:**
 ```json
 {
   "userId": "user-123",
-  "email": "admin@example.com",
-  "name": "Admin User"
+  "organizationId": "org-123",
+  "role": "MEMBER",
+  "isVerified": true
 }
+```
+
+**🔄 Automatic Token Refresh**: User's JWT token is automatically refreshed with new organization access.
+
+---
+
+## 🎯 Enhanced Access Control Examples
+
+### Successful Access (President)
+```bash
+# User with PRESIDENT role accessing organization
+curl -X GET "http://localhost:3000/api/v1/organizations/org-123/members" \
+  -H "Authorization: Bearer <jwt_with_president_role>"
+
+# Response: 200 OK with member list
+```
+
+### Access Denied (Member trying Admin action)
+```bash  
+# User with MEMBER role trying to update organization
+curl -X PUT "http://localhost:3000/api/v1/organizations/org-123" \
+  -H "Authorization: Bearer <jwt_with_member_role>"
+
+# Response: 403 Forbidden
+# Error: "Access denied: Required role(s): ADMIN, PRESIDENT, User role: MEMBER"
+```
+
+### Global Admin Access
+```bash
+# Global admin accessing any organization
+curl -X DELETE "http://localhost:3000/api/v1/organizations/any-org-id" \
+  -H "Authorization: Bearer <jwt_with_global_admin>"
+
+# Response: 200 OK (Global admin can access any organization)
+```
+
+### Non-Member Access
+```bash
+# User not a member of organization
+curl -X GET "http://localhost:3000/api/v1/organizations/org-999/members" \
+  -H "Authorization: Bearer <jwt_without_org_access>"
+
+# Response: 403 Forbidden  
+# Error: "Access denied: User is not a member of this organization"
 ```
 
 ---
 
-## 🔄 Key Changes Made
+## 🔄 Key Features Implemented
 
-### 1. Enrollment Key Non-Unique ✅
-- **Schema Change**: Removed `@unique` constraint from `enrollmentKey` field
-- **Multiple Usage**: Organizations can now share the same enrollment key
-- **Database Migration**: Applied with `npx prisma db push`
+### 1. Enhanced JWT Tokens ✅
+- **Organization Access Array**: JWT includes all user's organization memberships with roles
+- **Global Admin Flag**: Special flag for system-wide access
+- **Real-time Updates**: Tokens refreshed when memberships change
 
-### 2. Minimal Response Data ✅
-- **Excluded Sensitive Fields**: `enrollmentKey`, `password` never returned
-- **Excluded Timestamps**: `createdAt`, `updatedAt`, `assignedDate` removed
-- **Excluded Relations**: Return IDs instead of nested objects
-- **Performance**: 60-80% smaller response payloads
+### 2. Organization Access Control ✅  
+- **Membership Verification**: Check user belongs to organization
+- **Role-Based Permissions**: Verify user has required role for action
+- **Global Admin Override**: System admins can access any organization
+- **Automatic Validation**: Guards automatically check access before method execution
 
-### 3. Comprehensive Pagination ✅
-- **All Array Endpoints**: Every endpoint returning arrays supports pagination
-- **Consistent Parameters**: Same pagination params across all endpoints
-- **Enhanced Metadata**: Includes sorting and search information
+### 3. Access Control Rules ✅
+- **GET /organizations/:id/members**: Requires any membership role
+- **PUT /organizations/:id**: Requires ADMIN or PRESIDENT role  
+- **DELETE /organizations/:id**: Requires PRESIDENT role
+- **All modifications**: Require appropriate role levels
 
-### 4. New Separated Endpoints ✅
-- **GET /organizations/:id/members**: Dedicated members endpoint with pagination
-- **GET /organizations/:id/causes**: Dedicated causes endpoint with pagination
-- **Independent Data Fetching**: Clients can fetch related data separately
+### 4. Error Handling ✅
+- **Clear Error Messages**: Specific reasons for access denial
+- **HTTP Status Codes**: Proper 401 (Unauthorized) vs 403 (Forbidden)
+- **Role Information**: Shows required vs actual user role
 
-### 5. Enhanced Search & Sorting ✅
-- **Text Search**: Search across relevant fields (names, emails, descriptions)
-- **Flexible Sorting**: Sort by any relevant field
-- **Performance Optimized**: Uses database indexes for efficient queries
+### 5. Token Management ✅
+- **Automatic Refresh**: Tokens updated when organization memberships change
+- **Manual Refresh**: `/auth/refresh-token` endpoint for manual updates
+- **Membership Tracking**: Only verified memberships included in tokens
 
 ---
 
 ## 🔒 Security Improvements
 
-### Data Protection
-1. **No Sensitive Data Exposure**: Enrollment keys, passwords excluded from all responses
-2. **Minimal Data Transfer**: Only essential fields returned
-3. **ID-Based Relations**: Prevents data leakage through nested objects
-4. **Authentication Required**: JWT tokens required for modification operations
+### Organization-Level Security
+1. **Membership Validation**: Every organization action validates user membership
+2. **Role Verification**: Actions check for specific role requirements
+3. **Access Isolation**: Users can only access organizations they belong to
+4. **Global Admin Support**: System administrators can access any organization
 
-### Database Security
-1. **Non-Unique Enrollment Keys**: Reduces constraint conflicts
-2. **Selective Queries**: Use `select` instead of `include` for better performance
-3. **Input Validation**: Comprehensive validation on all inputs
-4. **Role-Based Access**: Proper authorization checks
-
----
-
-## 📈 Performance Benefits
-
-### Response Optimization
-1. **Reduced Payload Size**: 60-80% smaller responses
-2. **Faster Network Transfer**: Less data to transmit
-3. **Better Client Performance**: Faster JSON parsing
-
-### Database Optimization
-1. **Selective Queries**: Using `select` instead of `include`
-2. **Efficient Pagination**: Offset-based pagination with proper indexing
-3. **Minimal Joins**: Reduced database complexity
-4. **Better Caching**: Smaller, predictable response structures
-
----
-
-## 🔧 Migration Guide
-
-### For Existing Clients
-
-#### 1. Update Response Parsing
-```typescript
-// OLD: Full object access
-const enrollmentKey = organization.enrollmentKey; // ❌ No longer available
-const createdAt = organization.createdAt; // ❌ No longer available
-
-// NEW: Use only available minimal fields
-const organizationId = organization.organizationId; // ✅ Available
-const name = organization.name; // ✅ Available
-const instituteId = organization.instituteId; // ✅ Available
-```
-
-#### 2. Use Separate Endpoints for Relations
-```typescript
-// OLD: Nested access
-const members = organization.members; // ❌ No longer included
-
-// NEW: Separate API calls
-const members = await fetch(`/organizations/${orgId}/members?page=1&limit=10`);
-const causes = await fetch(`/organizations/${orgId}/causes?page=1&limit=10`);
-```
-
-#### 3. Handle Pagination
-```typescript
-// OLD: Array response
-const organizations = await fetch('/organizations'); // ❌ Direct array
-
-// NEW: Paginated response
-const response = await fetch('/organizations?page=1&limit=10');
-const { data: organizations, pagination } = response; // ✅ Paginated structure
-```
-
-#### 4. Use IDs for Related Data
-```typescript
-// OLD: Full nested objects
-const instituteName = organization.institute.name; // ❌ Not available
-
-// NEW: Fetch by ID separately
-const instituteId = organization.instituteId; // ✅ Get ID
-const institute = await fetch(`/institutes/${instituteId}`); // ✅ Fetch separately
-```
+### Token Security  
+1. **Minimal Token Size**: Only includes essential organization access data
+2. **Real-time Updates**: Tokens refreshed when permissions change
+3. **Verified Memberships**: Only verified organization memberships included
+4. **Automatic Cleanup**: Tokens automatically updated when users leave organizations
 
 ---
 
 ## 📊 Error Codes
 
-| Status Code | Description |
-|-------------|-------------|
-| 200 | Success |
-| 201 | Created |
-| 400 | Bad Request |
-| 401 | Unauthorized |
-| 403 | Forbidden |
-| 404 | Not Found |
-| 409 | Conflict |
-| 500 | Internal Server Error |
+| Status Code | Description | Example |
+|-------------|-------------|---------|
+| 200 | Success | Action completed successfully |
+| 401 | Unauthorized | Invalid or missing JWT token |
+| 403 | Forbidden | Valid token but insufficient permissions |
+| 404 | Not Found | Organization or resource not found |
+
+### Common Error Messages
+- `"Access denied: User is not a member of this organization"`
+- `"Access denied: Required role(s): ADMIN, PRESIDENT, User role: MEMBER"`
+- `"Access denied: User membership is not verified"`
+- `"Authentication required"`
 
 ---
 
-## 🧪 Testing Examples
+## 🧪 Testing the Enhanced System
 
-### Test Organization Creation
+### 1. Login and Get Enhanced Token
 ```bash
-curl -X POST http://localhost:3000/api/v1/organizations \
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
   -d '{
-    "name": "Test Department",
-    "type": "INSTITUTE",
-    "isPublic": true,
-    "enrollmentKey": "SHARED-KEY",
-    "instituteId": "inst-123"
+    "email": "admin@example.com",
+    "password": "AdminPassword123!"
   }'
 ```
 
-### Test Paginated Members
+### 2. Access Organization with Proper Role
 ```bash
-curl -X GET "http://localhost:3000/api/v1/organizations/org-123/members?page=1&limit=5&sortBy=role" \
-  -H "Authorization: Bearer <token>"
+curl -X GET "http://localhost:3000/api/v1/organizations/org-123/members" \
+  -H "Authorization: Bearer <token_with_org_access>"
 ```
 
-### Test Paginated Causes
+### 3. Test Access Control
 ```bash
-curl -X GET "http://localhost:3000/api/v1/organizations/org-123/causes?page=1&limit=5&search=programming" \
-  -H "Authorization: Bearer <token>"
+# Try accessing organization without membership (should fail)
+curl -X GET "http://localhost:3000/api/v1/organizations/unauthorized-org/members" \
+  -H "Authorization: Bearer <token_without_access>"
+```
+
+### 4. Test Role-Based Access
+```bash  
+# Try admin action with member role (should fail)
+curl -X PUT "http://localhost:3000/api/v1/organizations/org-123" \
+  -H "Authorization: Bearer <member_role_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Updated Name"}'
 ```
 
 ---
 
-**Last Updated:** December 2024  
-**API Version:** v1 (Optimized)  
+**Last Updated:** July 2025  
+**API Version:** v1 (Enhanced JWT Access Control)  
 **Server:** http://localhost:3000/api/v1  
 
 ## 📝 Summary
 
-This optimized API provides:
-- ✅ **60-80% smaller response payloads** through data minimization
-- ✅ **Enhanced security** by excluding sensitive data
-- ✅ **Non-unique enrollment keys** for flexible organization management
-- ✅ **Comprehensive pagination** across all array endpoints
-- ✅ **Separated concerns** with dedicated member/cause endpoints
-- ✅ **Better performance** through selective database queries
-- ✅ **Consistent API patterns** for easier client integration
+This enhanced API provides:
+- ✅ **JWT-based organization access control** with role verification
+- ✅ **Automatic permission checking** before method execution  
+- ✅ **Global admin support** for system-wide access
+- ✅ **Real-time token updates** when organization memberships change
+- ✅ **Comprehensive error handling** with clear access denial messages
+- ✅ **Role-based permissions** (MEMBER, MODERATOR, ADMIN, PRESIDENT, GLOBAL_ADMIN)
+- ✅ **Security isolation** - users can only access their organizations
+- ✅ **Automatic token refresh** when enrolling in new organizations

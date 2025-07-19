@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -7,6 +7,8 @@ import { AuthController } from './auth.controller';
 import { DebugController } from './debug.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { EnhancedAuthService } from './enhanced-auth.service';
+import { OrganizationAccessService } from './organization-access.service';
+import { OrganizationAccessGuard } from './guards/organization-access.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
@@ -25,7 +27,19 @@ import { PrismaModule } from '../prisma/prisma.module';
     PrismaModule,
   ],
   controllers: [AuthController, DebugController],
-  providers: [AuthService, JwtStrategy, EnhancedAuthService],
-  exports: [AuthService, JwtStrategy, EnhancedAuthService],
+  providers: [
+    AuthService, 
+    JwtStrategy, 
+    EnhancedAuthService, 
+    OrganizationAccessService,
+    OrganizationAccessGuard,
+  ],
+  exports: [
+    AuthService, 
+    JwtStrategy, 
+    EnhancedAuthService, 
+    OrganizationAccessService,
+    OrganizationAccessGuard,
+  ],
 })
 export class AuthModule {}

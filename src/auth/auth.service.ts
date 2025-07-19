@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnhancedAuthService } from './enhanced-auth.service';
+import { OrganizationAccessService, EnhancedJwtPayload } from './organization-access.service';
 import { LoginDto, SetupPasswordDto, ChangePasswordDto } from './dto/auth.dto';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private enhancedAuthService: EnhancedAuthService,
+    private organizationAccessService: OrganizationAccessService,
   ) {}
 
   /**
@@ -48,11 +50,17 @@ export class AuthService {
       data: { lastLogin: new Date() },
     });
 
-    // Generate JWT token
-    const payload = { 
+    // Get user's organization access for JWT token
+    const organizationAccess = await this.organizationAccessService.getUserOrganizationAccess(user.userId);
+    const isGlobalAdmin = await this.organizationAccessService.isGlobalOrganizationAdmin(user.userId);
+
+    // Generate enhanced JWT token with organization access
+    const payload: EnhancedJwtPayload = { 
       sub: user.userId, 
       email: user.email, 
-      name: user.name 
+      name: user.name,
+      organizationAccess,
+      isGlobalAdmin,
     };
 
     const token = this.jwtService.sign(payload);
@@ -64,6 +72,8 @@ export class AuthService {
         email: user.email,
         name: user.name,
       },
+      organizationAccess, // Include organization access info in response
+      isGlobalAdmin,
     };
   }
 
@@ -152,5 +162,45 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  /**
+   * Refresh organization access in JWT token
+   * Call this after user joins/leaves organizations or role changes
+   */
+  async refreshUserToken(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Get updated organization access
+    const organizationAccess = await this.organizationAccessService.getUserOrganizationAccess(userId);
+    const isGlobalAdmin = await this.organizationAccessService.isGlobalOrganizationAdmin(userId);
+
+    // Generate new JWT token with updated access
+    const payload: EnhancedJwtPayload = { 
+      sub: user.userId, 
+      email: user.email, 
+      name: user.name,
+      organizationAccess,
+      isGlobalAdmin,
+    };
+
+    const token = this.jwtService.sign(payload);
+
+    return {
+      access_token: token,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        name: user.name,
+      },
+      organizationAccess,
+      isGlobalAdmin,
+    };
   }
 }

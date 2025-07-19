@@ -1,11 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthService } from '../auth/auth.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class OrganizationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => AuthService))
+    private authService: AuthService,
+  ) {}
 
   /**
    * Create a new organization
@@ -240,6 +245,19 @@ export class OrganizationService {
   }
 
   /**
+   * Trigger token refresh for user when organization membership changes
+   */
+  private async triggerTokenRefresh(userId: string): Promise<void> {
+    try {
+      // Refresh user's token with updated organization access
+      await this.authService.refreshUserToken(userId);
+    } catch (error) {
+      // Log error but don't fail the main operation
+      console.warn(`Failed to refresh token for user ${userId}:`, error.message);
+    }
+  }
+
+  /**
    * Enroll user in organization
    */
   async enrollUser(enrollUserDto: EnrollUserDto, userId: string) {
@@ -275,7 +293,7 @@ export class OrganizationService {
     }
 
     // Enroll user
-    return this.prisma.organizationUser.create({
+    const enrollment = await this.prisma.organizationUser.create({
       data: {
         organizationId,
         userId,
@@ -299,6 +317,11 @@ export class OrganizationService {
         },
       },
     });
+
+    // Trigger token refresh for the user to update organization access
+    await this.triggerTokenRefresh(userId);
+
+    return enrollment;
   }
 
   /**

@@ -3,9 +3,14 @@ import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RoleGuard } from '../auth/guards/role.guard';
-import { Roles, OrganizationRole } from '../auth/decorators/roles.decorator';
+import { OrganizationAccessGuard } from '../auth/guards/organization-access.guard';
+import { 
+  RequireOrganizationMember, 
+  RequireOrganizationAdmin, 
+  RequireOrganizationPresident 
+} from '../auth/decorators/organization-access.decorator';
 import { GetUser } from '../auth/decorators/get-user.decorator';
+import { EnhancedJwtPayload } from '../auth/organization-access.service';
 
 @Controller('organizations')
 export class OrganizationController {
@@ -18,9 +23,9 @@ export class OrganizationController {
   @UseGuards(JwtAuthGuard)
   async createOrganization(
     @Body() createOrganizationDto: CreateOrganizationDto,
-    @GetUser('userId') userId: string,
+    @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.createOrganization(createOrganizationDto, userId);
+    return this.organizationService.createOrganization(createOrganizationDto, user.sub);
   }
 
   /**
@@ -60,27 +65,27 @@ export class OrganizationController {
    * Update organization
    */
   @Put(':id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(OrganizationRole.ADMIN, OrganizationRole.PRESIDENT)
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   async updateOrganization(
     @Param('id') organizationId: string,
     @Body() updateOrganizationDto: UpdateOrganizationDto,
-    @GetUser('userId') userId: string,
+    @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.updateOrganization(organizationId, updateOrganizationDto, userId);
+    return this.organizationService.updateOrganization(organizationId, updateOrganizationDto, user.sub);
   }
 
   /**
    * Delete organization
    */
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(OrganizationRole.PRESIDENT)
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationPresident('id')
   async deleteOrganization(
     @Param('id') organizationId: string,
-    @GetUser('userId') userId: string,
+    @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.deleteOrganization(organizationId, userId);
+    return this.organizationService.deleteOrganization(organizationId, user.sub);
   }
 
   /**
@@ -90,29 +95,31 @@ export class OrganizationController {
   @UseGuards(JwtAuthGuard)
   async enrollUser(
     @Body() enrollUserDto: EnrollUserDto,
-    @GetUser('userId') userId: string,
+    @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.enrollUser(enrollUserDto, userId);
+    return this.organizationService.enrollUser(enrollUserDto, user.sub);
   }
 
   /**
    * Verify user in organization
    */
   @Put(':id/verify')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(OrganizationRole.ADMIN, OrganizationRole.PRESIDENT)
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   async verifyUser(
     @Param('id') organizationId: string,
     @Body() verifyUserDto: VerifyUserDto,
-    @GetUser('userId') userId: string,
+    @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.verifyUser(organizationId, verifyUserDto, userId);
+    return this.organizationService.verifyUser(organizationId, verifyUserDto, user.sub);
   }
 
   /**
    * Get organization members with pagination
    */
   @Get(':id/members')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationMember('id')
   async getOrganizationMembers(
     @Param('id') organizationId: string,
     @Query('page') page?: string,
@@ -135,39 +142,40 @@ export class OrganizationController {
    * Leave organization
    */
   @Delete(':id/leave')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationMember('id')
   async leaveOrganization(
     @Param('id') organizationId: string,
-    @GetUser('userId') userId: string,
+    @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.leaveOrganization(organizationId, userId);
+    return this.organizationService.leaveOrganization(organizationId, user.sub);
   }
 
   /**
    * Assign organization to institute
    */
   @Put(':id/assign-institute')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(OrganizationRole.ADMIN, OrganizationRole.PRESIDENT)
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   async assignToInstitute(
     @Param('id') organizationId: string,
     @Body() assignInstituteDto: AssignInstituteDto,
-    @GetUser('userId') userId: string,
+    @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.assignToInstitute(organizationId, assignInstituteDto, userId);
+    return this.organizationService.assignToInstitute(organizationId, assignInstituteDto, user.sub);
   }
 
   /**
    * Remove organization from institute
    */
   @Delete(':id/remove-institute')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(OrganizationRole.ADMIN, OrganizationRole.PRESIDENT)
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   async removeFromInstitute(
     @Param('id') organizationId: string,
-    @GetUser('userId') userId: string,
+    @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.removeFromInstitute(organizationId, userId);
+    return this.organizationService.removeFromInstitute(organizationId, user.sub);
   }
 
   /**

@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
+import { EnhancedJwtPayload } from '../organization-access.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -17,11 +18,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
+  async validate(payload: EnhancedJwtPayload) {
     const user = await this.authService.validateUser(payload);
     if (!user) {
       throw new UnauthorizedException();
     }
-    return user;
+    
+    // Return enhanced payload with organization access
+    return {
+      sub: payload.sub,
+      userId: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      organizationAccess: payload.organizationAccess || [],
+      isGlobalAdmin: payload.isGlobalAdmin || false,
+    };
   }
 }
