@@ -10,7 +10,7 @@ This API provides **enhanced JWT-based organization access control** with optimi
 - **Global Admin Support**: ORGANIZATION ADMIN has access to any organization
 - **Real-time Access Updates**: Token refresh when organization memberships change
 
-**Base URL:** `http://localhost:3000/api/v1`
+**Base URL:** `http://localhost:3000/organization/api/v1`
 
 **Authentication:** JWT Bearer Token (required for protected endpoints)
 
@@ -281,7 +281,7 @@ Authorization: Bearer <jwt_token>
 ### Successful Access (President)
 ```bash
 # User with PRESIDENT role accessing organization
-curl -X GET "http://localhost:3000/api/v1/organizations/org-123/members" \
+curl -X GET "http://localhost:3000/organization/api/v1/organizations/org-123/members" \
   -H "Authorization: Bearer <jwt_with_president_role>"
 
 # Response: 200 OK with member list
@@ -290,7 +290,7 @@ curl -X GET "http://localhost:3000/api/v1/organizations/org-123/members" \
 ### Access Denied (Member trying Admin action)
 ```bash  
 # User with MEMBER role trying to update organization
-curl -X PUT "http://localhost:3000/api/v1/organizations/org-123" \
+curl -X PUT "http://localhost:3000/organization/api/v1/organizations/org-123" \
   -H "Authorization: Bearer <jwt_with_member_role>"
 
 # Response: 403 Forbidden
@@ -300,7 +300,7 @@ curl -X PUT "http://localhost:3000/api/v1/organizations/org-123" \
 ### Global Admin Access
 ```bash
 # Global admin accessing any organization
-curl -X DELETE "http://localhost:3000/api/v1/organizations/any-org-id" \
+curl -X DELETE "http://localhost:3000/organization/api/v1/organizations/any-org-id" \
   -H "Authorization: Bearer <jwt_with_global_admin>"
 
 # Response: 200 OK (Global admin can access any organization)
@@ -309,7 +309,7 @@ curl -X DELETE "http://localhost:3000/api/v1/organizations/any-org-id" \
 ### Non-Member Access
 ```bash
 # User not a member of organization
-curl -X GET "http://localhost:3000/api/v1/organizations/org-999/members" \
+curl -X GET "http://localhost:3000/organization/api/v1/organizations/org-999/members" \
   -H "Authorization: Bearer <jwt_without_org_access>"
 
 # Response: 403 Forbidden  
@@ -386,7 +386,7 @@ curl -X GET "http://localhost:3000/api/v1/organizations/org-999/members" \
 
 ### 1. Login and Get Enhanced Token
 ```bash
-curl -X POST http://localhost:3000/api/v1/auth/login \
+curl -X POST http://localhost:3000/organization/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@example.com",
@@ -396,21 +396,21 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 
 ### 2. Access Organization with Proper Role
 ```bash
-curl -X GET "http://localhost:3000/api/v1/organizations/org-123/members" \
+curl -X GET "http://localhost:3000/organization/api/v1/organizations/org-123/members" \
   -H "Authorization: Bearer <token_with_org_access>"
 ```
 
 ### 3. Test Access Control
 ```bash
 # Try accessing organization without membership (should fail)
-curl -X GET "http://localhost:3000/api/v1/organizations/unauthorized-org/members" \
+curl -X GET "http://localhost:3000/organization/api/v1/organizations/unauthorized-org/members" \
   -H "Authorization: Bearer <token_without_access>"
 ```
 
 ### 4. Test Role-Based Access
 ```bash  
 # Try admin action with member role (should fail)
-curl -X PUT "http://localhost:3000/api/v1/organizations/org-123" \
+curl -X PUT "http://localhost:3000/organization/api/v1/organizations/org-123" \
   -H "Authorization: Bearer <member_role_token>" \
   -H "Content-Type: application/json" \
   -d '{"name": "Updated Name"}'
@@ -420,7 +420,7 @@ curl -X PUT "http://localhost:3000/api/v1/organizations/org-123" \
 
 **Last Updated:** July 2025  
 **API Version:** v1 (Enhanced JWT Access Control)  
-**Server:** http://localhost:3000/api/v1  
+**Server:** http://localhost:3000/organization/api/v1  
 
 ## 📝 Summary
 

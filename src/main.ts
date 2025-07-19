@@ -47,7 +47,7 @@ async function bootstrap() {
   );
 
   // Global prefix
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('organization/api/v1');
 
   // Prisma shutdown hooks
   await prismaService.enableShutdownHooks(app);
@@ -56,8 +56,8 @@ async function bootstrap() {
   const port = configService.get<number>('app.port') || 3000;
   await app.listen(port);
   
-  console.log(`🚀 Application is running on: http://localhost:${port}/api/v1`);
-  console.log(`📚 API Documentation: http://localhost:${port}/api/v1/docs`);
+  console.log(`🚀 Application is running on: http://localhost:${port}/organization/api/v1`);
+  console.log(`📚 API Documentation: http://localhost:${port}/organization/api/v1/docs`);
 }
 
 bootstrap().catch((error) => {

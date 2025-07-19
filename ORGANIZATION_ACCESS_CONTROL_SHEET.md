@@ -159,7 +159,7 @@ export class OrganizationController {
 ### 2. Testing Access Control
 ```bash
 # Login and get JWT with organization access
-curl -X POST http://localhost:3000/api/v1/auth/login \
+curl -X POST http://localhost:3000/organization/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"password"}'
 
@@ -172,11 +172,11 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 }
 
 # Access organization members (requires membership)
-curl -X GET http://localhost:3000/api/v1/organizations/org-123/members \
+curl -X GET http://localhost:3000/organization/api/v1/organizations/org-123/members \
   -H "Authorization: Bearer jwt_token_here"
 
 # Try unauthorized access (will fail with 403)
-curl -X GET http://localhost:3000/api/v1/organizations/unauthorized-org/members \
+curl -X GET http://localhost:3000/organization/api/v1/organizations/unauthorized-org/members \
   -H "Authorization: Bearer jwt_token_here"
 ```
 

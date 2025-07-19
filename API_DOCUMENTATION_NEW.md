@@ -4,7 +4,7 @@
 
 This API provides **optimized organization management** with enhanced performance, security, and data minimization. All responses return only necessary data, exclude sensitive information, and support comprehensive pagination.
 
-**Base URL:** `http://localhost:3000/api/v1`
+**Base URL:** `http://localhost:3000/organization/api/v1`
 
 **Authentication:** JWT Bearer Token (where specified)
 
@@ -586,7 +586,7 @@ const institute = await fetch(`/institutes/${instituteId}`); // ✅ Fetch separa
 
 ### Test Organization Creation
 ```bash
-curl -X POST http://localhost:3000/api/v1/organizations \
+curl -X POST http://localhost:3000/organization/api/v1/organizations \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
   -d '{
@@ -600,13 +600,13 @@ curl -X POST http://localhost:3000/api/v1/organizations \
 
 ### Test Paginated Members
 ```bash
-curl -X GET "http://localhost:3000/api/v1/organizations/org-123/members?page=1&limit=5&sortBy=role" \
+curl -X GET "http://localhost:3000/organization/api/v1/organizations/org-123/members?page=1&limit=5&sortBy=role" \
   -H "Authorization: Bearer <token>"
 ```
 
 ### Test Paginated Causes
 ```bash
-curl -X GET "http://localhost:3000/api/v1/organizations/org-123/causes?page=1&limit=5&search=programming" \
+curl -X GET "http://localhost:3000/organization/api/v1/organizations/org-123/causes?page=1&limit=5&search=programming" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -614,7 +614,7 @@ curl -X GET "http://localhost:3000/api/v1/organizations/org-123/causes?page=1&li
 
 **Last Updated:** December 2024  
 **API Version:** v1 (Optimized)  
-**Server:** http://localhost:3000/api/v1  
+**Server:** http://localhost:3000/organization/api/v1  
 
 ## 📝 Summary
 
