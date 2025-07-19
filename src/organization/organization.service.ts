@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto } from './dto/organization.dto';
+import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
+import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class OrganizationService {
@@ -10,7 +11,7 @@ export class OrganizationService {
    * Create a new organization
    */
   async createOrganization(createOrganizationDto: CreateOrganizationDto, creatorUserId: string) {
-    const { name, type, isPublic, enrollmentKey } = createOrganizationDto;
+    const { name, type, isPublic, enrollmentKey, instituteId } = createOrganizationDto;
 
     // Validate enrollment key requirement
     if (!isPublic && !enrollmentKey) {
@@ -27,6 +28,16 @@ export class OrganizationService {
       }
     }
 
+    // Validate institute exists if provided
+    if (instituteId) {
+      const institute = await this.prisma.institute.findUnique({
+        where: { instituteId },
+      });
+      if (!institute) {
+        throw new BadRequestException('Institute not found');
+      }
+    }
+
     // Create organization
     const organization = await this.prisma.organization.create({
       data: {
@@ -34,6 +45,7 @@ export class OrganizationService {
         type,
         isPublic,
         enrollmentKey: isPublic ? null : enrollmentKey,
+        instituteId,
         organizationUsers: {
           create: {
             userId: creatorUserId,
@@ -43,6 +55,13 @@ export class OrganizationService {
         },
       },
       include: {
+        institute: {
+          select: {
+            instituteId: true,
+            name: true,
+            imageUrl: true,
+          },
+        },
         organizationUsers: {
           include: {
             user: {
@@ -61,9 +80,11 @@ export class OrganizationService {
   }
 
   /**
-   * Get all organizations (public ones or user's organizations)
+   * Get all organizations with pagination (public ones or user's organizations)
    */
-  async getOrganizations(userId?: string) {
+  async getOrganizations(userId?: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any>> {
+    const pagination = paginationDto || new PaginationDto();
+    
     const where: any = {};
 
     if (userId) {
@@ -83,9 +104,56 @@ export class OrganizationService {
       where.isPublic = true;
     }
 
-    return this.prisma.organization.findMany({
+    // Add search functionality
+    if (pagination.search) {
+      const searchCondition = {
+        name: {
+          contains: pagination.search,
+        },
+      };
+      
+      if (where.OR) {
+        where.OR = where.OR.map((condition: any) => ({
+          ...condition,
+          ...searchCondition,
+        }));
+      } else {
+        where.name = searchCondition.name;
+      }
+    }
+
+    // Build order by
+    const orderBy: any = {};
+    if (pagination.sortBy === 'memberCount') {
+      // For member count, we need to sort by the count of organization users
+      orderBy.organizationUsers = {
+        _count: pagination.sortOrder,
+      };
+    } else if (pagination.sortBy === 'causeCount') {
+      orderBy.causes = {
+        _count: pagination.sortOrder,
+      };
+    } else {
+      orderBy[pagination.sortBy || 'createdAt'] = pagination.sortOrder;
+    }
+
+    // Get total count
+    const total = await this.prisma.organization.count({ where });
+
+    // Get paginated data
+    const organizations = await this.prisma.organization.findMany({
       where,
+      orderBy,
+      skip: pagination.skip,
+      take: pagination.limitNumber,
       include: {
+        institute: {
+          select: {
+            instituteId: true,
+            name: true,
+            imageUrl: true,
+          },
+        },
         organizationUsers: {
           include: {
             user: {
@@ -105,6 +173,8 @@ export class OrganizationService {
         },
       },
     });
+
+    return createPaginatedResponse(organizations, total, pagination);
   }
 
   /**
@@ -165,7 +235,7 @@ export class OrganizationService {
    * Update organization
    */
   async updateOrganization(organizationId: string, updateOrganizationDto: UpdateOrganizationDto, userId: string) {
-    const { name, isPublic, enrollmentKey } = updateOrganizationDto;
+    const { name, isPublic, enrollmentKey, instituteId } = updateOrganizationDto;
 
     // Check if user has admin/president role
     await this.checkUserRole(organizationId, userId, ['ADMIN', 'PRESIDENT']);
@@ -188,17 +258,37 @@ export class OrganizationService {
       }
     }
 
+    // Validate institute exists if provided
+    if (instituteId !== undefined) {
+      if (instituteId) {
+        const institute = await this.prisma.institute.findUnique({
+          where: { instituteId },
+        });
+        if (!institute) {
+          throw new BadRequestException('Institute not found');
+        }
+      }
+    }
+
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (isPublic !== undefined) {
       updateData.isPublic = isPublic;
       updateData.enrollmentKey = isPublic ? null : enrollmentKey;
     }
+    if (instituteId !== undefined) updateData.instituteId = instituteId;
 
     return this.prisma.organization.update({
       where: { organizationId },
       data: updateData,
       include: {
+        institute: {
+          select: {
+            instituteId: true,
+            name: true,
+            imageUrl: true,
+          },
+        },
         organizationUsers: {
           include: {
             user: {
@@ -433,5 +523,282 @@ export class OrganizationService {
     if (!organization.isPublic && organization.organizationUsers.length === 0) {
       throw new ForbiddenException('Access denied to this organization');
     }
+  }
+
+  /**
+   * Assign organization to institute
+   */
+  async assignToInstitute(organizationId: string, assignInstituteDto: AssignInstituteDto, userId: string) {
+    // Check if user has permission (Admin or President)
+    await this.checkUserRole(organizationId, userId, ['ADMIN', 'PRESIDENT']);
+
+    const { instituteId } = assignInstituteDto;
+
+    // Validate institute exists
+    const institute = await this.prisma.institute.findUnique({
+      where: { instituteId },
+    });
+
+    if (!institute) {
+      throw new NotFoundException('Institute not found');
+    }
+
+    // Update organization with institute assignment
+    const updatedOrganization = await this.prisma.organization.update({
+      where: { organizationId },
+      data: { instituteId },
+      include: {
+        institute: {
+          select: {
+            instituteId: true,
+            name: true,
+            imageUrl: true,
+          },
+        },
+        organizationUsers: {
+          include: {
+            user: {
+              select: {
+                userId: true,
+                email: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      message: 'Organization successfully assigned to institute',
+      organization: updatedOrganization,
+    };
+  }
+
+  /**
+   * Remove organization from institute
+   */
+  async removeFromInstitute(organizationId: string, userId: string) {
+    // Check if user has permission (Admin or President)
+    await this.checkUserRole(organizationId, userId, ['ADMIN', 'PRESIDENT']);
+
+    // Check if organization is currently assigned to an institute
+    const organization = await this.prisma.organization.findUnique({
+      where: { organizationId },
+      include: { institute: true },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    if (!organization.instituteId) {
+      throw new BadRequestException('Organization is not assigned to any institute');
+    }
+
+    // Remove institute assignment
+    const updatedOrganization = await this.prisma.organization.update({
+      where: { organizationId },
+      data: { instituteId: null },
+      include: {
+        organizationUsers: {
+          include: {
+            user: {
+              select: {
+                userId: true,
+                email: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      message: 'Organization successfully removed from institute',
+      organization: updatedOrganization,
+    };
+  }
+
+  /**
+   * Get organizations by institute
+   */
+  async getOrganizationsByInstitute(instituteId: string, userId?: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any> & { institute: any }> {
+    const pagination = paginationDto || new PaginationDto();
+    
+    // Validate institute exists
+    const institute = await this.prisma.institute.findUnique({
+      where: { instituteId },
+    });
+
+    if (!institute) {
+      throw new NotFoundException('Institute not found');
+    }
+
+    const where: any = { instituteId };
+
+    if (userId) {
+      // Get organizations where user has access (member or public)
+      where.OR = [
+        { isPublic: true },
+        {
+          organizationUsers: {
+            some: { userId },
+          },
+        },
+      ];
+    } else {
+      // Only public organizations for non-authenticated users
+      where.isPublic = true;
+    }
+
+    // Add search functionality
+    if (pagination.search) {
+      const searchCondition = {
+        name: {
+          contains: pagination.search,
+        },
+      };
+      
+      if (where.OR) {
+        where.OR = where.OR.map((condition: any) => ({
+          ...condition,
+          ...searchCondition,
+        }));
+      } else {
+        where.name = searchCondition.name;
+      }
+    }
+
+    // Build order by
+    const orderBy: any = {};
+    if (pagination.sortBy === 'memberCount') {
+      orderBy.organizationUsers = {
+        _count: pagination.sortOrder,
+      };
+    } else if (pagination.sortBy === 'causeCount') {
+      orderBy.causes = {
+        _count: pagination.sortOrder,
+      };
+    } else {
+      orderBy[pagination.sortBy || 'createdAt'] = pagination.sortOrder;
+    }
+
+    // Get total count
+    const total = await this.prisma.organization.count({ where });
+
+    // Get paginated data
+    const organizations = await this.prisma.organization.findMany({
+      where,
+      orderBy,
+      skip: pagination.skip,
+      take: pagination.limitNumber,
+      include: {
+        institute: {
+          select: {
+            instituteId: true,
+            name: true,
+            imageUrl: true,
+          },
+        },
+        organizationUsers: {
+          select: {
+            role: true,
+            isVerified: true,
+            user: {
+              select: {
+                userId: true,
+                name: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            organizationUsers: true,
+            causes: true,
+          },
+        },
+      },
+    });
+
+    const formattedOrgs = organizations.map(org => ({
+      organizationId: org.organizationId,
+      name: org.name,
+      type: org.type,
+      isPublic: org.isPublic,
+      memberCount: org._count.organizationUsers,
+      causeCount: org._count.causes,
+      createdAt: org.createdAt,
+      institute: org.institute,
+    }));
+
+    const paginatedResponse = createPaginatedResponse(formattedOrgs, total, pagination);
+
+    return {
+      ...paginatedResponse,
+      institute: {
+        instituteId: institute.instituteId,
+        name: institute.name,
+        imageUrl: institute.imageUrl,
+      },
+    };
+  }
+
+  /**
+   * Get available institutes for organization assignment with pagination
+   */
+  async getAvailableInstitutes(paginationDto?: PaginationDto): Promise<PaginatedResponse<any>> {
+    const pagination = paginationDto || new PaginationDto();
+    
+    const where: any = {};
+
+    // Add search functionality
+    if (pagination.search) {
+      where.name = {
+        contains: pagination.search,
+      };
+    }
+
+    // Build order by
+    const orderBy: any = {};
+    if (pagination.sortBy === 'organizationCount') {
+      orderBy.organizations = {
+        _count: pagination.sortOrder,
+      };
+    } else {
+      orderBy[pagination.sortBy || 'name'] = pagination.sortOrder || 'asc';
+    }
+
+    // Get total count
+    const total = await this.prisma.institute.count({ where });
+
+    // Get paginated data
+    const institutes = await this.prisma.institute.findMany({
+      where,
+      orderBy,
+      skip: pagination.skip,
+      take: pagination.limitNumber,
+      select: {
+        instituteId: true,
+        name: true,
+        imageUrl: true,
+        _count: {
+          select: {
+            organizations: true,
+          },
+        },
+      },
+    });
+
+    const formattedInstitutes = institutes.map(institute => ({
+      instituteId: institute.instituteId,
+      name: institute.name,
+      imageUrl: institute.imageUrl,
+      organizationCount: institute._count.organizations,
+    }));
+
+    return createPaginatedResponse(formattedInstitutes, total, pagination);
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
+import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class CauseService {
@@ -41,9 +42,11 @@ export class CauseService {
   }
 
   /**
-   * Get all causes (public or user's organization causes)
+   * Get all causes with pagination (public or user's organization causes)
    */
-  async getCauses(userId?: string) {
+  async getCauses(userId?: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any>> {
+    const pagination = paginationDto || new PaginationDto();
+    
     const where: any = {};
 
     if (userId) {
@@ -66,8 +69,58 @@ export class CauseService {
       where.isPublic = true;
     }
 
-    return this.prisma.cause.findMany({
+    // Add search functionality
+    if (pagination.search) {
+      const searchCondition = {
+        OR: [
+          {
+            title: {
+              contains: pagination.search,
+            },
+          },
+          {
+            description: {
+              contains: pagination.search,
+            },
+          },
+        ],
+      };
+      
+      if (where.OR) {
+        where.OR = where.OR.map((condition: any) => ({
+          ...condition,
+          ...searchCondition,
+        }));
+      } else {
+        where.OR = searchCondition.OR;
+      }
+    }
+
+    // Build order by
+    const orderBy: any = {};
+    if (pagination.sortBy === 'lectureCount') {
+      orderBy.lectures = {
+        _count: pagination.sortOrder,
+      };
+    } else if (pagination.sortBy === 'assignmentCount') {
+      orderBy.assignments = {
+        _count: pagination.sortOrder,
+      };
+    } else if (pagination.sortBy === 'organizationName') {
+      orderBy.organization = { name: pagination.sortOrder };
+    } else {
+      orderBy[pagination.sortBy || 'createdAt'] = pagination.sortOrder;
+    }
+
+    // Get total count
+    const total = await this.prisma.cause.count({ where });
+
+    // Get paginated data
+    const causes = await this.prisma.cause.findMany({
       where,
+      orderBy,
+      skip: pagination.skip,
+      take: pagination.limitNumber,
       include: {
         organization: {
           select: {
@@ -83,8 +136,9 @@ export class CauseService {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
     });
+
+    return createPaginatedResponse(causes, total, pagination);
   }
 
   /**

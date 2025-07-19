@@ -127,7 +127,7 @@ async function main() {
     }),
   ]);
 
-  // Create sample organizations
+  // Create sample organizations with institute assignments
   const organizations = await Promise.all([
     prisma.organization.upsert({
       where: { organizationId: 'org-1' },
@@ -137,6 +137,7 @@ async function main() {
         name: 'Computer Science Department',
         type: 'INSTITUTE',
         isPublic: true,
+        instituteId: institutes[0].instituteId, // Assigned to MIT
       },
     }),
     prisma.organization.upsert({
@@ -148,6 +149,7 @@ async function main() {
         type: 'GLOBAL',
         isPublic: false,
         enrollmentKey: 'GLOBAL2024',
+        // No institute assignment for global organizations
       },
     }),
     prisma.organization.upsert({
@@ -158,6 +160,31 @@ async function main() {
         name: 'Mathematics Department',
         type: 'INSTITUTE',
         isPublic: true,
+        instituteId: institutes[1].instituteId, // Assigned to Stanford
+      },
+    }),
+    // Add a few more organizations for better testing
+    prisma.organization.upsert({
+      where: { organizationId: 'org-4' },
+      update: {},
+      create: {
+        organizationId: 'org-4',
+        name: 'Physics Research Lab',
+        type: 'INSTITUTE',
+        isPublic: false,
+        enrollmentKey: 'PHYSICS2024',
+        instituteId: institutes[0].instituteId, // Also assigned to MIT
+      },
+    }),
+    prisma.organization.upsert({
+      where: { organizationId: 'org-5' },
+      update: {},
+      create: {
+        organizationId: 'org-5',
+        name: 'Unaffiliated Study Group',
+        type: 'GLOBAL',
+        isPublic: true,
+        // No institute assignment
       },
     }),
   ]);

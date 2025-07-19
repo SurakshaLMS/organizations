@@ -20,6 +20,10 @@ export class CreateOrganizationDto {
   @IsString()
   @IsOptional()
   enrollmentKey?: string;
+
+  @IsString()
+  @IsOptional()
+  instituteId?: string; // Optional institute assignment
 }
 
 export class UpdateOrganizationDto {
@@ -34,6 +38,10 @@ export class UpdateOrganizationDto {
   @IsString()
   @IsOptional()
   enrollmentKey?: string;
+
+  @IsString()
+  @IsOptional()
+  instituteId?: string; // Optional institute assignment
 }
 
 export class EnrollUserDto {
@@ -53,4 +61,16 @@ export class VerifyUserDto {
 
   @IsBoolean()
   isVerified: boolean;
+}
+
+export class AssignInstituteDto {
+  @IsString()
+  @IsNotEmpty()
+  instituteId: string;
+}
+
+export class RemoveInstituteDto {
+  @IsString()
+  @IsNotEmpty()
+  organizationId: string;
 }

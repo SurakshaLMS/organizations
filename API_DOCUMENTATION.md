@@ -2,7 +2,7 @@
 
 ## 📋 Overview
 
-This API provides a comprehensive organization management system with **enhanced password encryption** using AES-256-CBC encryption keys. The system supports multi-layer security with backward compatibility.
+This API provides a comprehensive organization management system with **enhanced password encryption** using AES-256-CBC encryption keys. The system supports multi-layer security with backward compatibility and **organization-institute assignment** functionality.
 
 **Base URL:** `http://localhost:3000/api/v1`
 
@@ -16,6 +16,13 @@ This API provides a comprehensive organization management system with **enhanced
 - **Password Encryption Key**: 32-character encryption key for enhanced security
 - **Backward Compatibility**: Supports existing bcrypt-only passwords
 - **JWT Authentication**: Secure token-based authentication
+
+## 🏛️ Institute Assignment Features
+
+- **Organization-Institute Relationships**: Assign organizations to specific institutes
+- **Institute Management**: View organizations by institute
+- **Flexible Assignment**: Optional institute assignment during organization creation
+- **Access Control**: Admin/President roles required for institute assignments
 
 ---
 
@@ -192,7 +199,7 @@ curl -X POST http://localhost:3000/api/v1/auth/profile \
 ### 5. Create Organization
 **POST** `/organizations`
 
-Creates a new organization.
+Creates a new organization with optional institute assignment.
 
 **Headers:**
 ```
@@ -205,7 +212,8 @@ Authorization: Bearer <jwt_token>
   "name": "Computer Science Department",
   "type": "INSTITUTE",
   "isPublic": true,
-  "enrollmentKey": "CS2024"
+  "enrollmentKey": "CS2024",
+  "instituteId": "cmd97yg5f0000v6b0woyhoxhx"
 }
 ```
 
@@ -217,6 +225,12 @@ Authorization: Bearer <jwt_token>
   "type": "INSTITUTE",
   "isPublic": true,
   "enrollmentKey": "CS2024",
+  "instituteId": "cmd97yg5f0000v6b0woyhoxhx",
+  "institute": {
+    "instituteId": "cmd97yg5f0000v6b0woyhoxhx",
+    "name": "Sample Institute",
+    "imageUrl": "https://example.com/logo.png"
+  },
   "createdAt": "2025-07-19T01:30:30.000Z"
 }
 ```
@@ -230,7 +244,8 @@ curl -X POST http://localhost:3000/api/v1/organizations \
     "name": "Computer Science Department",
     "type": "INSTITUTE",
     "isPublic": true,
-    "enrollmentKey": "CS2024"
+    "enrollmentKey": "CS2024",
+    "instituteId": "cmd97yg5f0000v6b0woyhoxhx"
   }'
 ```
 
@@ -315,7 +330,8 @@ Authorization: Bearer <jwt_token>
 {
   "name": "Updated Computer Science Department",
   "isPublic": false,
-  "enrollmentKey": "CS2025"
+  "enrollmentKey": "CS2025",
+  "instituteId": "cmd97yg5f0000v6b0woyhoxhx"
 }
 ```
 
@@ -327,6 +343,12 @@ Authorization: Bearer <jwt_token>
   "type": "INSTITUTE",
   "isPublic": false,
   "enrollmentKey": "CS2025",
+  "instituteId": "cmd97yg5f0000v6b0woyhoxhx",
+  "institute": {
+    "instituteId": "cmd97yg5f0000v6b0woyhoxhx",
+    "name": "Sample Institute",
+    "imageUrl": "https://example.com/logo.png"
+  },
   "updatedAt": "2025-07-19T01:30:30.000Z"
 }
 ```
@@ -339,7 +361,8 @@ curl -X PUT http://localhost:3000/api/v1/organizations/cmd97yg5f0000v6b0woyhoxhx
   -d '{
     "name": "Updated Computer Science Department",
     "isPublic": false,
-    "enrollmentKey": "CS2025"
+    "enrollmentKey": "CS2025",
+    "instituteId": "cmd97yg5f0000v6b0woyhoxhx"
   }'
 ```
 
@@ -519,9 +542,171 @@ curl -X DELETE http://localhost:3000/api/v1/organizations/cmd97yg5f0000v6b0woyho
 
 ---
 
+### 14. Assign Organization to Institute
+**PUT** `/organizations/:id/assign-institute`
+
+Assigns an organization to an institute (Admin/President only).
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
+
+**Path Parameters:**
+- `id`: Organization ID
+
+**Request Body:**
+```json
+{
+  "instituteId": "cmd97yg5f0000v6b0woyhoxhx"
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "message": "Organization successfully assigned to institute",
+  "organization": {
+    "organizationId": "cmd97yg5f0000v6b0woyhoxhx",
+    "name": "Computer Science Department",
+    "type": "INSTITUTE",
+    "isPublic": true,
+    "instituteId": "cmd97yg5f0000v6b0woyhoxhx",
+    "institute": {
+      "instituteId": "cmd97yg5f0000v6b0woyhoxhx",
+      "name": "Sample Institute",
+      "imageUrl": "https://example.com/logo.png"
+    }
+  }
+}
+```
+
+**cURL Example:**
+```bash
+curl -X PUT http://localhost:3000/api/v1/organizations/cmd97yg5f0000v6b0woyhoxhx/assign-institute \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "instituteId": "cmd97yg5f0000v6b0woyhoxhx"
+  }'
+```
+
+---
+
+### 15. Remove Organization from Institute
+**DELETE** `/organizations/:id/remove-institute`
+
+Removes an organization from its assigned institute (Admin/President only).
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
+
+**Path Parameters:**
+- `id`: Organization ID
+
+**Response (Success - 200):**
+```json
+{
+  "message": "Organization successfully removed from institute",
+  "organization": {
+    "organizationId": "cmd97yg5f0000v6b0woyhoxhx",
+    "name": "Computer Science Department",
+    "type": "INSTITUTE",
+    "isPublic": true,
+    "instituteId": null
+  }
+}
+```
+
+**cURL Example:**
+```bash
+curl -X DELETE http://localhost:3000/api/v1/organizations/cmd97yg5f0000v6b0woyhoxhx/remove-institute \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+---
+
+### 16. Get Organizations by Institute
+**GET** `/organizations/institute/:instituteId`
+
+Retrieves all organizations assigned to a specific institute.
+
+**Path Parameters:**
+- `instituteId`: Institute ID
+
+**Query Parameters:**
+- `userId` (optional): User ID for access filtering
+
+**Response (Success - 200):**
+```json
+{
+  "institute": {
+    "instituteId": "cmd97yg5f0000v6b0woyhoxhx",
+    "name": "Sample Institute",
+    "imageUrl": "https://example.com/logo.png"
+  },
+  "organizations": [
+    {
+      "organizationId": "cmd97yg5f0000v6b0woyhoxhx",
+      "name": "Computer Science Department",
+      "type": "INSTITUTE",
+      "isPublic": true,
+      "memberCount": 25,
+      "causeCount": 5,
+      "createdAt": "2025-07-19T01:30:30.000Z",
+      "institute": {
+        "instituteId": "cmd97yg5f0000v6b0woyhoxhx",
+        "name": "Sample Institute",
+        "imageUrl": "https://example.com/logo.png"
+      }
+    }
+  ],
+  "total": 1
+}
+```
+
+**cURL Example:**
+```bash
+curl -X GET "http://localhost:3000/api/v1/organizations/institute/cmd97yg5f0000v6b0woyhoxhx?userId=cmd97yg5f0000v6b0woyhoxhx"
+```
+
+---
+
+### 17. Get Available Institutes
+**GET** `/organizations/institutes/available`
+
+Retrieves all available institutes for organization assignment.
+
+**Response (Success - 200):**
+```json
+[
+  {
+    "instituteId": "cmd97yg5f0000v6b0woyhoxhx",
+    "name": "Sample Institute",
+    "imageUrl": "https://example.com/logo.png",
+    "organizationCount": 5
+  },
+  {
+    "instituteId": "cmd97yg5f0000v6b0woyhoxhy",
+    "name": "Another Institute",
+    "imageUrl": "https://example.com/logo2.png",
+    "organizationCount": 3
+  }
+]
+```
+
+**cURL Example:**
+```bash
+curl -X GET http://localhost:3000/api/v1/organizations/institutes/available
+```
+
+---
+
 ## 🎯 Cause Management Endpoints
 
-### 14. Create Cause
+### 18. Create Cause
 **POST** `/causes`
 
 Creates a new cause within an organization.
@@ -568,7 +753,7 @@ curl -X POST http://localhost:3000/api/v1/causes \
 
 ---
 
-### 15. Get Causes
+### 19. Get Causes
 **GET** `/causes`
 
 Retrieves all causes.
@@ -598,7 +783,7 @@ curl -X GET "http://localhost:3000/api/v1/causes?userId=cmd97yg5f0000v6b0woyhoxh
 
 ---
 
-### 16. Get Cause by ID
+### 20. Get Cause by ID
 **GET** `/causes/:id`
 
 Retrieves specific cause details.
@@ -633,7 +818,7 @@ curl -X GET "http://localhost:3000/api/v1/causes/cmd97yg5f0000v6b0woyhoxhx?userI
 
 ---
 
-### 17. Update Cause
+### 21. Update Cause
 **PUT** `/causes/:id`
 
 Updates cause details.
@@ -680,7 +865,7 @@ curl -X PUT http://localhost:3000/api/v1/causes/cmd97yg5f0000v6b0woyhoxhx \
 
 ---
 
-### 18. Delete Cause
+### 22. Delete Cause
 **DELETE** `/causes/:id`
 
 Deletes a cause.
@@ -708,7 +893,7 @@ curl -X DELETE http://localhost:3000/api/v1/causes/cmd97yg5f0000v6b0woyhoxhx \
 
 ---
 
-### 19. Get Causes by Organization
+### 23. Get Causes by Organization
 **GET** `/causes/organization/:organizationId`
 
 Retrieves causes for a specific organization.
@@ -739,7 +924,7 @@ curl -X GET http://localhost:3000/api/v1/causes/organization/cmd97yg5f0000v6b0wo
 
 ## 📚 Lecture Management Endpoints
 
-### 20. Create Lecture
+### 24. Create Lecture
 **POST** `/lectures`
 
 Creates a new lecture within a cause.
@@ -786,7 +971,7 @@ curl -X POST http://localhost:3000/api/v1/lectures \
 
 ---
 
-### 21. Get Lectures
+### 25. Get Lectures
 **GET** `/lectures`
 
 Retrieves all lectures.
@@ -819,7 +1004,7 @@ curl -X GET "http://localhost:3000/api/v1/lectures?userId=cmd97yg5f0000v6b0woyho
 
 ---
 
-### 22. Get Lecture by ID
+### 26. Get Lecture by ID
 **GET** `/lectures/:id`
 
 Retrieves specific lecture details.
@@ -857,7 +1042,7 @@ curl -X GET "http://localhost:3000/api/v1/lectures/cmd97yg5f0000v6b0woyhoxhx?use
 
 ---
 
-### 23. Update Lecture
+### 27. Update Lecture
 **PUT** `/lectures/:id`
 
 Updates lecture details.
@@ -904,7 +1089,7 @@ curl -X PUT http://localhost:3000/api/v1/lectures/cmd97yg5f0000v6b0woyhoxhx \
 
 ---
 
-### 24. Delete Lecture
+### 28. Delete Lecture
 **DELETE** `/lectures/:id`
 
 Deletes a lecture.
@@ -934,7 +1119,7 @@ curl -X DELETE http://localhost:3000/api/v1/lectures/cmd97yg5f0000v6b0woyhoxhx \
 
 ## 🔧 Debug Endpoints (Development Only)
 
-### 25. Get User Debug Info
+### 29. Get User Debug Info
 **GET** `/debug/user/:email`
 
 Retrieves debug information for a user.
@@ -961,7 +1146,7 @@ curl -X GET http://localhost:3000/api/v1/debug/user/admin@example.com
 
 ---
 
-### 26. Test Password Validation
+### 30. Test Password Validation
 **POST** `/debug/test-password`
 
 Tests password validation against a provided hash.
@@ -996,7 +1181,7 @@ curl -X POST http://localhost:3000/api/v1/debug/test-password \
 
 ---
 
-### 27. Test User Password
+### 31. Test User Password
 **POST** `/debug/test-user-password`
 
 Tests password validation for a specific user.
@@ -1118,10 +1303,13 @@ JWT_SECRET=your-secret-key
 - JWT tokens have configurable expiration times
 - Rate limiting is applied to prevent abuse
 - CORS is configured for cross-origin requests
+- **Organizations can be optionally assigned to institutes**
+- **Institute assignments require Admin or President roles**
+- **Foreign key relationships ensure data integrity**
 
 ---
 
-**Last Updated:** July 19, 2025  
+**Last Updated:** July 20, 2025  
 **API Version:** v1  
 **Server:** http://localhost:3000/api/v1  
 **Documentation:** http://localhost:3000/api/v1/docs

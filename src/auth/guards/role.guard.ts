@@ -22,7 +22,7 @@ export class RoleGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    const organizationId = request.params.organizationId || request.body.organizationId;
+    const organizationId = request.params.organizationId || request.params.id || request.body.organizationId;
 
     if (!organizationId) {
       throw new ForbiddenException('Organization ID is required');

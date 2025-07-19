@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query } from '@nestjs/common';
 import { CauseService } from './cause.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 
@@ -21,11 +22,25 @@ export class CauseController {
   }
 
   /**
-   * Get all causes
+   * Get all causes with pagination
    */
   @Get()
-  async getCauses(@Query('userId') userId?: string) {
-    return this.causeService.getCauses(userId);
+  async getCauses(
+    @Query('userId') userId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+    @Query('search') search?: string,
+  ) {
+    const paginationDto = new PaginationDto();
+    paginationDto.page = page;
+    paginationDto.limit = limit;
+    paginationDto.sortBy = sortBy;
+    paginationDto.sortOrder = sortOrder;
+    paginationDto.search = search;
+
+    return this.causeService.getCauses(userId, paginationDto);
   }
 
   /**

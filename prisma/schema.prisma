@@ -24,9 +24,10 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  instituteUsers    InstituteUser[]
-  organizationUsers OrganizationUser[]
-  userAuth          UserAuth?
+  instituteUsers       InstituteUser[]
+  organizationUsers    OrganizationUser[]
+  userAuth             UserAuth?
+  assignedInstituteUsers InstituteUser[] @relation("AssignedByUser") // Users assigned to institutes by this user
 
   @@map("user")
 }
@@ -41,20 +42,38 @@ model Institute {
 
   // Relations
   instituteUsers InstituteUser[]
+  organizations  Organization[] // Organizations assigned to this institute
 
   @@map("institute")
 }
 
 // Junction table for institute users (managed externally)
+// Enum for institute user roles
+enum InstituteRole {
+  STUDENT
+  FACULTY
+  STAFF
+  ADMIN
+  DIRECTOR
+}
+
 model InstituteUser {
-  instituteId String   @db.VarChar(191)
-  userId      String   @db.VarChar(191)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  instituteId   String        @db.VarChar(191)
+  userId        String        @db.VarChar(191)
+  role          InstituteRole @default(STUDENT)
+  isActive      Boolean       @default(true)
+  assignedBy    String?       @db.VarChar(191) // UserID who assigned this user
+  assignedDate  DateTime      @default(now())
+  activatedDate DateTime?     // When the user was activated/approved
+  deactivatedDate DateTime?   // When the user was deactivated
+  notes         String?       @db.Text // Additional notes about the assignment
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   // Relations
-  institute Institute @relation(fields: [instituteId], references: [instituteId], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  institute    Institute @relation(fields: [instituteId], references: [instituteId], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  assignedByUser User?   @relation("AssignedByUser", fields: [assignedBy], references: [userId], onDelete: SetNull)
 
   @@id([instituteId, userId])
   @@map("institute_users")
@@ -96,15 +115,18 @@ model Organization {
   type           OrganizationType
   isPublic       Boolean          @default(false)
   enrollmentKey  String?          @unique @db.VarChar(191) // Nullable for public organizations
+  instituteId    String?          @db.VarChar(191) // Link to institute (optional)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
   // Relations
+  institute         Institute?         @relation(fields: [instituteId], references: [instituteId], onDelete: SetNull)
   organizationUsers OrganizationUser[]
   causes            Cause[]
 
   @@index([type])
   @@index([isPublic])
+  @@index([instituteId])
   @@map("organization")
 }
 
