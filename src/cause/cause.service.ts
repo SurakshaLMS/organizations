@@ -23,20 +23,13 @@ export class CauseService {
         description,
         isPublic,
       },
-      include: {
-        organization: {
-          select: {
-            organizationId: true,
-            name: true,
-            type: true,
-          },
-        },
-        _count: {
-          select: {
-            lectures: true,
-            assignments: true,
-          },
-        },
+      select: {
+        causeId: true,
+        title: true,
+        description: true,
+        isPublic: true,
+        organizationId: true,
+        // Exclude: createdAt, updatedAt
       },
     });
   }
@@ -121,20 +114,13 @@ export class CauseService {
       orderBy,
       skip: pagination.skip,
       take: pagination.limitNumber,
-      include: {
-        organization: {
-          select: {
-            organizationId: true,
-            name: true,
-            type: true,
-          },
-        },
-        _count: {
-          select: {
-            lectures: true,
-            assignments: true,
-          },
-        },
+      select: {
+        causeId: true,
+        title: true,
+        description: true,
+        isPublic: true,
+        organizationId: true,
+        // Exclude: createdAt, updatedAt
       },
     });
 
@@ -147,38 +133,13 @@ export class CauseService {
   async getCauseById(causeId: string, userId?: string) {
     const cause = await this.prisma.cause.findUnique({
       where: { causeId },
-      include: {
-        organization: {
-          select: {
-            organizationId: true,
-            name: true,
-            type: true,
-            isPublic: true,
-          },
-        },
-        lectures: {
-          where: userId ? {
-            OR: [
-              { isPublic: true },
-              {
-                cause: {
-                  organization: {
-                    organizationUsers: {
-                      some: {
-                        userId,
-                        isVerified: true,
-                      },
-                    },
-                  },
-                },
-              },
-            ],
-          } : { isPublic: true },
-          orderBy: { createdAt: 'asc' },
-        },
-        assignments: {
-          orderBy: { dueDate: 'asc' },
-        },
+      select: {
+        causeId: true,
+        title: true,
+        description: true,
+        isPublic: true,
+        organizationId: true,
+        // Exclude: createdAt, updatedAt, and related data
       },
     });
 
@@ -218,20 +179,13 @@ export class CauseService {
     return this.prisma.cause.update({
       where: { causeId },
       data: updateCauseDto,
-      include: {
-        organization: {
-          select: {
-            organizationId: true,
-            name: true,
-            type: true,
-          },
-        },
-        _count: {
-          select: {
-            lectures: true,
-            assignments: true,
-          },
-        },
+      select: {
+        causeId: true,
+        title: true,
+        description: true,
+        isPublic: true,
+        organizationId: true,
+        // Exclude: createdAt, updatedAt
       },
     });
   }

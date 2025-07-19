@@ -114,7 +114,7 @@ model Organization {
   name           String           @db.VarChar(191)
   type           OrganizationType
   isPublic       Boolean          @default(false)
-  enrollmentKey  String?          @unique @db.VarChar(191) // Nullable for public organizations
+  enrollmentKey  String?          @db.VarChar(191) // Nullable for public organizations (non-unique)
   instituteId    String?          @db.VarChar(191) // Link to institute (optional)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt

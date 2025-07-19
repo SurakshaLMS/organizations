@@ -54,28 +54,13 @@ export class InstituteUserService {
         notes: assignDto.notes,
         activatedDate: assignDto.isActive !== false ? new Date() : null,
       },
-      include: {
-        institute: {
-          select: {
-            instituteId: true,
-            name: true,
-            imageUrl: true,
-          },
-        },
-        user: {
-          select: {
-            userId: true,
-            email: true,
-            name: true,
-          },
-        },
-        assignedByUser: {
-          select: {
-            userId: true,
-            email: true,
-            name: true,
-          },
-        },
+      select: {
+        instituteId: true,
+        userId: true,
+        role: true,
+        isActive: true,
+        assignedBy: true,
+        // Exclude: notes, assignedDate, activatedDate, deactivatedDate, createdAt, updatedAt
       },
     });
 
@@ -288,28 +273,13 @@ export class InstituteUserService {
       orderBy,
       skip: paginationDto.skip,
       take: paginationDto.limitNumber,
-      include: {
-        institute: {
-          select: {
-            instituteId: true,
-            name: true,
-            imageUrl: true,
-          },
-        },
-        user: {
-          select: {
-            userId: true,
-            email: true,
-            name: true,
-          },
-        },
-        assignedByUser: {
-          select: {
-            userId: true,
-            email: true,
-            name: true,
-          },
-        },
+      select: {
+        instituteId: true,
+        userId: true,
+        role: true,
+        isActive: true,
+        assignedBy: true,
+        // Exclude: notes, assignedDate, activatedDate, deactivatedDate, createdAt, updatedAt
       },
     });
 

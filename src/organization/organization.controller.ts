@@ -110,15 +110,25 @@ export class OrganizationController {
   }
 
   /**
-   * Get organization members
+   * Get organization members with pagination
    */
   @Get(':id/members')
-  @UseGuards(JwtAuthGuard)
   async getOrganizationMembers(
     @Param('id') organizationId: string,
-    @GetUser('userId') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+    @Query('search') search?: string,
   ) {
-    return this.organizationService.getOrganizationMembers(organizationId, userId);
+    const paginationDto = new PaginationDto();
+    paginationDto.page = page;
+    paginationDto.limit = limit;
+    paginationDto.sortBy = sortBy;
+    paginationDto.sortOrder = sortOrder;
+    paginationDto.search = search;
+
+    return this.organizationService.getOrganizationMembers(organizationId, paginationDto);
   }
 
   /**
@@ -202,5 +212,27 @@ export class OrganizationController {
     paginationDto.search = search;
 
     return this.organizationService.getAvailableInstitutes(paginationDto);
+  }
+
+  /**
+   * Get organization causes with pagination  
+   */
+  @Get(':id/causes')
+  async getOrganizationCauses(
+    @Param('id') organizationId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+    @Query('search') search?: string,
+  ) {
+    const paginationDto = new PaginationDto();
+    paginationDto.page = page;
+    paginationDto.limit = limit;
+    paginationDto.sortBy = sortBy;
+    paginationDto.sortOrder = sortOrder;
+    paginationDto.search = search;
+
+    return this.organizationService.getOrganizationCauses(organizationId, paginationDto);
   }
 }

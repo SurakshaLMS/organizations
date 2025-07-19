@@ -18,15 +18,7 @@ export class OrganizationService {
       throw new BadRequestException('Enrollment key is required for private organizations');
     }
 
-    // Check if enrollment key is unique (if provided)
-    if (enrollmentKey) {
-      const existingOrg = await this.prisma.organization.findUnique({
-        where: { enrollmentKey },
-      });
-      if (existingOrg) {
-        throw new BadRequestException('Enrollment key already exists');
-      }
-    }
+    // Note: Enrollment keys are no longer unique, multiple organizations can use the same key
 
     // Validate institute exists if provided
     if (instituteId) {
@@ -54,25 +46,13 @@ export class OrganizationService {
           },
         },
       },
-      include: {
-        institute: {
-          select: {
-            instituteId: true,
-            name: true,
-            imageUrl: true,
-          },
-        },
-        organizationUsers: {
-          include: {
-            user: {
-              select: {
-                userId: true,
-                email: true,
-                name: true,
-              },
-            },
-          },
-        },
+      select: {
+        organizationId: true,
+        name: true,
+        type: true,
+        isPublic: true,
+        instituteId: true,
+        // Exclude: enrollmentKey, createdAt, updatedAt
       },
     });
 
@@ -146,31 +126,13 @@ export class OrganizationService {
       orderBy,
       skip: pagination.skip,
       take: pagination.limitNumber,
-      include: {
-        institute: {
-          select: {
-            instituteId: true,
-            name: true,
-            imageUrl: true,
-          },
-        },
-        organizationUsers: {
-          include: {
-            user: {
-              select: {
-                userId: true,
-                email: true,
-                name: true,
-              },
-            },
-          },
-        },
-        _count: {
-          select: {
-            organizationUsers: true,
-            causes: true,
-          },
-        },
+      select: {
+        organizationId: true,
+        name: true,
+        type: true,
+        isPublic: true,
+        instituteId: true,
+        // Exclude: enrollmentKey, createdAt, updatedAt
       },
     });
 
@@ -183,34 +145,13 @@ export class OrganizationService {
   async getOrganizationById(organizationId: string, userId?: string) {
     const organization = await this.prisma.organization.findUnique({
       where: { organizationId },
-      include: {
-        organizationUsers: {
-          include: {
-            user: {
-              select: {
-                userId: true,
-                email: true,
-                name: true,
-              },
-            },
-          },
-        },
-        causes: {
-          where: userId ? {
-            OR: [
-              { isPublic: true },
-              {
-                organization: {
-                  organizationUsers: {
-                    some: {
-                      userId,
-                    },
-                  },
-                },
-              },
-            ],
-          } : { isPublic: true },
-        },
+      select: {
+        organizationId: true,
+        name: true,
+        type: true,
+        isPublic: true,
+        instituteId: true,
+        // Exclude: enrollmentKey, createdAt, updatedAt, and related data
       },
     });
 
@@ -218,9 +159,14 @@ export class OrganizationService {
       throw new NotFoundException('Organization not found');
     }
 
-    // Check if user has access to this organization
+    // Check if user has access to this organization (if it's private)
     if (!organization.isPublic && userId) {
-      const userInOrg = organization.organizationUsers.find(ou => ou.userId === userId);
+      const userInOrg = await this.prisma.organizationUser.findFirst({
+        where: {
+          organizationId,
+          userId,
+        },
+      });
       if (!userInOrg) {
         throw new ForbiddenException('Access denied to this organization');
       }
@@ -245,18 +191,7 @@ export class OrganizationService {
       throw new BadRequestException('Enrollment key is required for private organizations');
     }
 
-    // Check if enrollment key is unique (if provided and different)
-    if (enrollmentKey) {
-      const existingOrg = await this.prisma.organization.findFirst({
-        where: {
-          enrollmentKey,
-          NOT: { organizationId },
-        },
-      });
-      if (existingOrg) {
-        throw new BadRequestException('Enrollment key already exists');
-      }
-    }
+    // Note: Enrollment keys are no longer unique, multiple organizations can use the same key
 
     // Validate institute exists if provided
     if (instituteId !== undefined) {
@@ -281,25 +216,13 @@ export class OrganizationService {
     return this.prisma.organization.update({
       where: { organizationId },
       data: updateData,
-      include: {
-        institute: {
-          select: {
-            instituteId: true,
-            name: true,
-            imageUrl: true,
-          },
-        },
-        organizationUsers: {
-          include: {
-            user: {
-              select: {
-                userId: true,
-                email: true,
-                name: true,
-              },
-            },
-          },
-        },
+      select: {
+        organizationId: true,
+        name: true,
+        type: true,
+        isPublic: true,
+        instituteId: true,
+        // Exclude: enrollmentKey, createdAt, updatedAt
       },
     });
   }
@@ -424,26 +347,124 @@ export class OrganizationService {
   /**
    * Get organization members
    */
-  async getOrganizationMembers(organizationId: string, userId: string) {
-    // Check if user has access to this organization
-    await this.checkUserAccess(organizationId, userId);
-
-    return this.prisma.organizationUser.findMany({
+  async getOrganizationMembers(organizationId: string, paginationDto: PaginationDto) {
+    // Validate organization exists
+    const organization = await this.prisma.organization.findUnique({
       where: { organizationId },
-      include: {
-        user: {
-          select: {
-            userId: true,
-            email: true,
-            name: true,
+      select: { organizationId: true, isPublic: true },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const where: any = { organizationId };
+
+    // Add search functionality
+    if (paginationDto.search) {
+      where.user = {
+        OR: [
+          {
+            name: {
+              contains: paginationDto.search,
+            },
+          },
+          {
+            email: {
+              contains: paginationDto.search,
+            },
+          },
+        ],
+      };
+    }
+
+    // Build order by
+    const orderBy: any = {};
+    if (paginationDto.sortBy === 'userName') {
+      orderBy.user = { name: paginationDto.sortOrder };
+    } else if (paginationDto.sortBy === 'userEmail') {
+      orderBy.user = { email: paginationDto.sortOrder };
+    } else {
+      orderBy[paginationDto.sortBy || 'role'] = paginationDto.sortOrder;
+    }
+
+    // Get total count
+    const total = await this.prisma.organizationUser.count({ where });
+
+    // Get paginated data
+    const members = await this.prisma.organizationUser.findMany({
+      where,
+      orderBy,
+      skip: paginationDto.skip,
+      take: paginationDto.limitNumber,
+      select: {
+        userId: true,
+        organizationId: true,
+        role: true,
+        isVerified: true,
+        // Exclude: createdAt, updatedAt
+      },
+    });
+
+    return createPaginatedResponse(members, total, paginationDto);
+  }
+
+  /**
+   * Get organization causes with pagination
+   */
+  async getOrganizationCauses(organizationId: string, paginationDto: PaginationDto) {
+    // Validate organization exists
+    const organization = await this.prisma.organization.findUnique({
+      where: { organizationId },
+      select: { organizationId: true, isPublic: true },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const where: any = { organizationId };
+
+    // Add search functionality
+    if (paginationDto.search) {
+      where.OR = [
+        {
+          title: {
+            contains: paginationDto.search,
           },
         },
+        {
+          description: {
+            contains: paginationDto.search,
+          },
+        },
+      ];
+    }
+
+    // Build order by
+    const orderBy: any = {};
+    orderBy[paginationDto.sortBy || 'title'] = paginationDto.sortOrder;
+
+    // Get total count
+    const total = await this.prisma.cause.count({ where });
+
+    // Get paginated data
+    const causes = await this.prisma.cause.findMany({
+      where,
+      orderBy,
+      skip: paginationDto.skip,
+      take: paginationDto.limitNumber,
+      select: {
+        causeId: true,
+        title: true,
+        description: true,
+        isPublic: true,
+        organizationId: true,
+        // Exclude: createdAt, updatedAt
       },
-      orderBy: [
-        { role: 'asc' },
-        { createdAt: 'asc' },
-      ],
     });
+
+    return createPaginatedResponse(causes, total, paginationDto);
   }
 
   /**
