@@ -37,8 +37,8 @@ export class OrganizationAccessGuard implements CanActivate {
     // For POST requests that create organizations, extract from body
     if (request.method === 'POST' && accessConfig.param === 'organizationId' && request.body?.organizationId) {
       const bodyOrgId = request.body.organizationId;
-      const verification = this.organizationAccessService.verifyOrganizationAccess(
-        user.organizationAccess,
+      const verification = this.organizationAccessService.verifyOrganizationAccessCompact(
+        user.orgAccess, // Use compact format
         bodyOrgId,
         accessConfig.requiredRoles || [],
         user.isGlobalAdmin && (accessConfig.allowGlobalAdmin !== false)
@@ -53,9 +53,9 @@ export class OrganizationAccessGuard implements CanActivate {
       return true;
     }
 
-    // Verify user has access to the organization
-    const verification = this.organizationAccessService.verifyOrganizationAccess(
-      user.organizationAccess,
+    // Verify user has access to the organization using compact format
+    const verification = this.organizationAccessService.verifyOrganizationAccessCompact(
+      user.orgAccess, // Use compact format
       organizationId,
       accessConfig.requiredRoles || [],
       user.isGlobalAdmin && (accessConfig.allowGlobalAdmin !== false)

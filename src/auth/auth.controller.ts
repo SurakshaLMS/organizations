@@ -51,8 +51,10 @@ export class AuthController {
       userId: user.sub,
       email: user.email,
       name: user.name,
-      organizationAccess: user.organizationAccess,
+      orgAccess: user.orgAccess, // Compact format
       isGlobalAdmin: user.isGlobalAdmin,
+      tokenFormat: 'compact',
+      accessExample: user.orgAccess[0] || 'Porg-123',
     };
   }
 

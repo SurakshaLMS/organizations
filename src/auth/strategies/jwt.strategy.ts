@@ -24,13 +24,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
     
-    // Return enhanced payload with organization access
+    // Return enhanced payload with compact organization access
     return {
       sub: payload.sub,
       userId: payload.sub,
       email: payload.email,
       name: payload.name,
-      organizationAccess: payload.organizationAccess || [],
+      orgAccess: payload.orgAccess || [], // Compact format
       isGlobalAdmin: payload.isGlobalAdmin || false,
     };
   }

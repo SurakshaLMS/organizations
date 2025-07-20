@@ -13,6 +13,43 @@ export class OrganizationService {
   ) {}
 
   /**
+   * Get organization names by IDs for compact JWT token operations
+   * Used for search functionality when working with compact format
+   */
+  async getOrganizationNamesByIds(organizationIds: string[], searchTerm?: string) {
+    const whereClause: any = {
+      organizationId: {
+        in: organizationIds,
+      },
+    };
+
+    // Add search filter if provided
+    if (searchTerm) {
+      whereClause.OR = [
+        {
+          name: {
+            contains: searchTerm,
+          },
+        },
+        {
+          type: {
+            contains: searchTerm,
+          },
+        },
+      ];
+    }
+
+    return this.prisma.organization.findMany({
+      where: whereClause,
+      select: {
+        organizationId: true,
+        name: true,
+        type: true,
+      },
+    });
+  }
+
+  /**
    * Create a new organization
    */
   async createOrganization(createOrganizationDto: CreateOrganizationDto, creatorUserId: string) {

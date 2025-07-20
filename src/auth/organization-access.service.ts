@@ -14,11 +14,15 @@ export interface UserOrganizationAccess {
   causeCount: number;
 }
 
+// Compact JWT format: ["Porg-123", "Aorg-456", "Morg-789"]
+// P=President, A=Admin, O=mOderator, M=Member
+export type CompactOrganizationAccess = string[];
+
 export interface EnhancedJwtPayload {
   sub: string; // userId
   email: string;
   name: string;
-  organizationAccess: UserOrganizationAccess[];
+  orgAccess: CompactOrganizationAccess; // Compact format ["Porg-123", "Aorg-456"]
   isGlobalAdmin: boolean; // Global organization admin
   iat?: number;
   exp?: number;
@@ -29,7 +33,56 @@ export class OrganizationAccessService {
   constructor(private prisma: PrismaService) {}
 
   /**
+   * Role mapping for compact JWT format
+   */
+  private getRoleCode(role: string): string {
+    const roleMap = {
+      'PRESIDENT': 'P',
+      'ADMIN': 'A',
+      'MODERATOR': 'O', // mOderator
+      'MEMBER': 'M'
+    };
+    return roleMap[role] || 'M';
+  }
+
+  /**
+   * Parse role from compact format
+   */
+  private parseRoleFromCode(code: string): 'PRESIDENT' | 'ADMIN' | 'MODERATOR' | 'MEMBER' {
+    const codeMap = {
+      'P': 'PRESIDENT',
+      'A': 'ADMIN', 
+      'O': 'MODERATOR',
+      'M': 'MEMBER'
+    };
+    return codeMap[code] as 'PRESIDENT' | 'ADMIN' | 'MODERATOR' | 'MEMBER' || 'MEMBER';
+  }
+
+  /**
+   * Get user's organization access in compact format for JWT token
+   * Returns compact array like ["Porg-123", "Aorg-456", "Morg-789"]
+   */
+  async getUserOrganizationAccessCompact(userId: string): Promise<CompactOrganizationAccess> {
+    const organizationUsers = await this.prisma.organizationUser.findMany({
+      where: {
+        userId,
+        isVerified: true, // Only verified memberships
+      },
+      select: {
+        organizationId: true,
+        role: true,
+      },
+    });
+
+    return organizationUsers.map(ou => {
+      const roleCode = this.getRoleCode(ou.role);
+      return `${roleCode}${ou.organizationId}`;
+    });
+  }
+
+  /**
    * Get user's organization access for JWT token with complete organization details
+   * This method is kept for backward compatibility and detailed data when needed
    */
   async getUserOrganizationAccess(userId: string): Promise<UserOrganizationAccess[]> {
     const organizationUsers = await this.prisma.organizationUser.findMany({
@@ -92,10 +145,10 @@ export class OrganizationAccessService {
   }
 
   /**
-   * Verify user has access to organization with required role
+   * Verify user has access to organization with required role using compact format
    */
-  verifyOrganizationAccess(
-    userAccess: UserOrganizationAccess[],
+  verifyOrganizationAccessCompact(
+    compactAccess: CompactOrganizationAccess,
     organizationId: string,
     requiredRoles: string[] = [],
     isGlobalAdmin: boolean = false
@@ -106,36 +159,79 @@ export class OrganizationAccessService {
     }
 
     // Find user's access to the specific organization
-    const orgAccess = userAccess.find(access => access.organizationId === organizationId);
+    const orgAccessEntry = compactAccess.find(entry => entry.endsWith(organizationId));
 
-    if (!orgAccess) {
+    if (!orgAccessEntry) {
       return { 
         hasAccess: false, 
         error: 'Access denied: User is not a member of this organization' 
       };
     }
 
-    if (!orgAccess.isVerified) {
-      return { 
-        hasAccess: false, 
-        error: 'Access denied: User membership is not verified' 
-      };
-    }
+    // Extract role from compact format
+    const roleCode = orgAccessEntry.charAt(0);
+    const userRole = this.parseRoleFromCode(roleCode);
 
     // If no specific roles required, any verified membership is sufficient
     if (requiredRoles.length === 0) {
-      return { hasAccess: true, userRole: orgAccess.role };
+      return { hasAccess: true, userRole };
     }
 
     // Check if user has required role
-    if (!requiredRoles.includes(orgAccess.role)) {
+    if (!requiredRoles.includes(userRole)) {
       return { 
         hasAccess: false, 
-        error: `Access denied: Required role(s): ${requiredRoles.join(', ')}, User role: ${orgAccess.role}` 
+        error: `Access denied: Required role(s): ${requiredRoles.join(', ')}, User role: ${userRole}` 
       };
     }
 
-    return { hasAccess: true, userRole: orgAccess.role };
+    return { hasAccess: true, userRole };
+  }
+
+  /**
+   * Parse organization IDs from compact access format
+   */
+  getOrganizationIdsFromCompact(compactAccess: CompactOrganizationAccess): string[] {
+    return compactAccess.map(entry => entry.substring(1)); // Remove first character (role code)
+  }
+
+  /**
+   * Get user's role for specific organization from compact format
+   */
+  getUserRoleInOrganization(compactAccess: CompactOrganizationAccess, organizationId: string): string | null {
+    const orgAccessEntry = compactAccess.find(entry => entry.endsWith(organizationId));
+    if (!orgAccessEntry) return null;
+    
+    const roleCode = orgAccessEntry.charAt(0);
+    return this.parseRoleFromCode(roleCode);
+  }
+
+  /**
+   * Filter organizations by role from compact access
+   */
+  filterOrganizationsByRole(compactAccess: CompactOrganizationAccess, role: string): string[] {
+    const roleCode = this.getRoleCode(role);
+    return compactAccess
+      .filter(entry => entry.charAt(0) === roleCode)
+      .map(entry => entry.substring(1));
+  }
+
+  /**
+   * Verify user has access to organization with required role (legacy method for backward compatibility)
+   */
+  verifyOrganizationAccess(
+    userAccess: UserOrganizationAccess[],
+    organizationId: string,
+    requiredRoles: string[] = [],
+    isGlobalAdmin: boolean = false
+  ): { hasAccess: boolean; userRole?: string; error?: string } {
+    // Convert to compact format and use new method
+    const compactAccess = userAccess.map(access => {
+      const roleCode = this.getRoleCode(access.role);
+      return `${roleCode}${access.organizationId}`;
+    });
+
+    return this.verifyOrganizationAccessCompact(compactAccess, organizationId, requiredRoles, isGlobalAdmin);
   }
 
   /**
