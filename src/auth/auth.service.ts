@@ -65,27 +65,14 @@ export class AuthService {
 
     const token = this.jwtService.sign(payload);
 
-    // Get detailed organization data for response (optional)
-    const organizationAccess = await this.organizationAccessService.getUserOrganizationAccess(user.userId);
-
+    // Return minimal login response - only essential data
     return {
       access_token: token,
       user: {
-        userId: user.userId,
+        id: user.userId,
         email: user.email,
         name: user.name,
       },
-      orgAccess, // Compact format in response
-      organizationAccess, // Detailed format for initial load
-      isGlobalAdmin,
-      totalOrganizations: organizationAccess.length,
-      totalMembers: organizationAccess.reduce((sum, org) => sum + org.memberCount, 0),
-      totalCauses: organizationAccess.reduce((sum, org) => sum + org.causeCount, 0),
-      tokenOptimization: {
-        compactFormat: true,
-        tokenSizeReduction: '80-90%',
-        accessFormat: orgAccess,
-      }
     };
   }
 
@@ -204,22 +191,14 @@ export class AuthService {
 
     const token = this.jwtService.sign(payload);
 
-    // Get detailed organization data for response
-    const organizationAccess = await this.organizationAccessService.getUserOrganizationAccess(userId);
-
+    // Return minimal refresh response - only essential data
     return {
       access_token: token,
       user: {
-        userId: user.userId,
+        id: user.userId,
         email: user.email,
         name: user.name,
       },
-      orgAccess, // Compact format
-      organizationAccess, // Detailed format
-      isGlobalAdmin,
-      totalOrganizations: organizationAccess.length,
-      totalMembers: organizationAccess.reduce((sum, org) => sum + org.memberCount, 0),
-      totalCauses: organizationAccess.reduce((sum, org) => sum + org.causeCount, 0),
     };
   }
 }

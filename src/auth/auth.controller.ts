@@ -41,20 +41,16 @@ export class AuthController {
   }
 
   /**
-   * Get current user profile with organization access
+   * Get current user profile (minimal data)
    */
   @Post('profile')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async getProfile(@GetUser() user: EnhancedJwtPayload) {
     return {
-      userId: user.sub,
+      id: user.sub,
       email: user.email,
       name: user.name,
-      orgAccess: user.orgAccess, // Compact format
-      isGlobalAdmin: user.isGlobalAdmin,
-      tokenFormat: 'compact',
-      accessExample: user.orgAccess[0] || 'Porg-123',
     };
   }
 
