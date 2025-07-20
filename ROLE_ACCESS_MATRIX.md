@@ -101,6 +101,7 @@ MEMBER (Level 1) - Basic Member
 |----------|--------|---------|-----------|-------|-----------|--------------|
 | `/organizations` | GET | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `/organizations/:id` | GET | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `/organizations/user/enrolled` | GET | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `/organizations` | POST | ❌ | ❌ | ❌ | ❌ | ✅ |
 | `/organizations/:id` | PUT | ❌ | ❌ | ✅ | ✅ | ✅ |
 | `/organizations/:id` | DELETE | ❌ | ❌ | ❌ | ✅ | ✅ |

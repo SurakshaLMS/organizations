@@ -72,8 +72,11 @@ export class AuthService {
         email: user.email,
         name: user.name,
       },
-      organizationAccess, // Include organization access info in response
+      organizationAccess, // Complete organization details in JWT and response
       isGlobalAdmin,
+      totalOrganizations: organizationAccess.length,
+      totalMembers: organizationAccess.reduce((sum, org) => sum + org.memberCount, 0),
+      totalCauses: organizationAccess.reduce((sum, org) => sum + org.causeCount, 0),
     };
   }
 
@@ -201,6 +204,9 @@ export class AuthService {
       },
       organizationAccess,
       isGlobalAdmin,
+      totalOrganizations: organizationAccess.length,
+      totalMembers: organizationAccess.reduce((sum, org) => sum + org.memberCount, 0),
+      totalCauses: organizationAccess.reduce((sum, org) => sum + org.causeCount, 0),
     };
   }
 }

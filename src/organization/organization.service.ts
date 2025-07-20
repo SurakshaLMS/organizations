@@ -145,6 +145,106 @@ export class OrganizationService {
   }
 
   /**
+   * Get organizations that a specific user is enrolled in
+   * Returns only organizations where user is a verified member
+   * Optimized query with minimal data and no sensitive information
+   */
+  async getUserEnrolledOrganizations(userId: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any>> {
+    const pagination = paginationDto || new PaginationDto();
+
+    // Build where clause for user's enrolled organizations only
+    const where: any = {
+      organizationUsers: {
+        some: {
+          userId,
+          isVerified: true, // Only verified memberships
+        },
+      },
+    };
+
+    // Add search functionality
+    if (pagination.search) {
+      where.name = {
+        contains: pagination.search,
+        // Note: MySQL doesn't support mode: 'insensitive', but LIKE is case-insensitive by default
+      };
+    }
+
+    // Build order by
+    const orderBy: any = {};
+    if (pagination.sortBy === 'memberCount') {
+      orderBy.organizationUsers = {
+        _count: pagination.sortOrder,
+      };
+    } else if (pagination.sortBy === 'role') {
+      // Custom sorting by user's role in the organization
+      orderBy.organizationUsers = {
+        _count: pagination.sortOrder,
+      };
+    } else {
+      orderBy[pagination.sortBy || 'createdAt'] = pagination.sortOrder;
+    }
+
+    // Get total count
+    const total = await this.prisma.organization.count({ where });
+
+    // Get paginated data with user's role information
+    const organizations = await this.prisma.organization.findMany({
+      where,
+      orderBy,
+      skip: pagination.skip,
+      take: pagination.limitNumber,
+      select: {
+        organizationId: true,
+        name: true,
+        type: true,
+        isPublic: true,
+        instituteId: true,
+        // Include user's role and status in this organization
+        organizationUsers: {
+          where: {
+            userId,
+            isVerified: true,
+          },
+          select: {
+            role: true,
+            isVerified: true,
+            createdAt: true, // When user joined the organization
+          },
+        },
+        // Include basic stats (optional)
+        _count: {
+          select: {
+            organizationUsers: {
+              where: {
+                isVerified: true,
+              },
+            },
+            causes: true,
+          },
+        },
+        // Exclude: enrollmentKey, createdAt, updatedAt (sensitive/unnecessary data)
+      },
+    });
+
+    // Transform data to flatten user role information
+    const transformedOrganizations = organizations.map(org => ({
+      organizationId: org.organizationId,
+      name: org.name,
+      type: org.type,
+      isPublic: org.isPublic,
+      instituteId: org.instituteId,
+      userRole: org.organizationUsers[0]?.role || 'MEMBER',
+      isVerified: org.organizationUsers[0]?.isVerified || false,
+      joinedAt: org.organizationUsers[0]?.createdAt || null,
+      memberCount: org._count.organizationUsers,
+      causeCount: org._count.causes,
+    }));
+
+    return createPaginatedResponse(transformedOrganizations, total, pagination);
+  }
+
+  /**
    * Get organization by ID
    */
   async getOrganizationById(organizationId: string, userId?: string) {

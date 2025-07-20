@@ -5,6 +5,13 @@ export interface UserOrganizationAccess {
   organizationId: string;
   role: 'PRESIDENT' | 'ADMIN' | 'MODERATOR' | 'MEMBER';
   isVerified: boolean;
+  name: string;
+  type: string;
+  isPublic: boolean;
+  instituteId?: string | null;
+  joinedAt: Date;
+  memberCount: number;
+  causeCount: number;
 }
 
 export interface EnhancedJwtPayload {
@@ -22,7 +29,7 @@ export class OrganizationAccessService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Get user's organization access for JWT token
+   * Get user's organization access for JWT token with complete organization details
    */
   async getUserOrganizationAccess(userId: string): Promise<UserOrganizationAccess[]> {
     const organizationUsers = await this.prisma.organizationUser.findMany({
@@ -30,10 +37,23 @@ export class OrganizationAccessService {
         userId,
         isVerified: true, // Only verified memberships
       },
-      select: {
-        organizationId: true,
-        role: true,
-        isVerified: true,
+      include: {
+        organization: {
+          select: {
+            name: true,
+            type: true,
+            isPublic: true,
+            instituteId: true,
+            _count: {
+              select: {
+                organizationUsers: {
+                  where: { isVerified: true }
+                },
+                causes: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -41,6 +61,13 @@ export class OrganizationAccessService {
       organizationId: ou.organizationId,
       role: ou.role as 'PRESIDENT' | 'ADMIN' | 'MODERATOR' | 'MEMBER',
       isVerified: ou.isVerified,
+      name: ou.organization.name,
+      type: ou.organization.type,
+      isPublic: ou.organization.isPublic,
+      instituteId: ou.organization.instituteId,
+      joinedAt: ou.createdAt, // Using createdAt as joinedAt
+      memberCount: ou.organization._count.organizationUsers,
+      causeCount: ou.organization._count.causes,
     }));
   }
 

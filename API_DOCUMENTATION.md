@@ -186,6 +186,77 @@ Get organization by ID (minimal data).
 }
 ```
 
+### GET /organizations/user/enrolled
+**NEW ENDPOINT** - Get organizations that the authenticated user is enrolled in.
+
+**🔐 Authentication Required:** JWT Bearer Token
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
+
+**Query Parameters:**
+- All common pagination parameters
+- `sortBy`: `name`, `type`, `memberCount`, `causeCount`, `role`, `createdAt`
+
+**🎯 Features:**
+- Returns **only verified memberships** for security
+- Includes **user's role** in each organization 
+- Shows **join date** and **organization stats**
+- **Optimized queries** with minimal data transfer
+- **No sensitive information** (enrollment keys excluded)
+
+**Response Example:**
+```json
+{
+  "data": [
+    {
+      "organizationId": "org-123",
+      "name": "Computer Science Department",
+      "type": "INSTITUTE", 
+      "isPublic": true,
+      "instituteId": "inst-456",
+      "userRole": "PRESIDENT",
+      "isVerified": true,
+      "joinedAt": "2025-07-18T21:45:44.276Z",
+      "memberCount": 15,
+      "causeCount": 8
+    },
+    {
+      "organizationId": "org-789",
+      "name": "Mathematics Department",
+      "type": "INSTITUTE",
+      "isPublic": true, 
+      "instituteId": null,
+      "userRole": "MEMBER",
+      "isVerified": true,
+      "joinedAt": "2025-07-19T18:44:26.333Z",
+      "memberCount": 25,
+      "causeCount": 12
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 2,
+    "totalPages": 1,
+    "hasNext": false,
+    "hasPrev": false
+  },
+  "meta": {
+    "sortBy": "createdAt",
+    "sortOrder": "desc"
+  }
+}
+```
+
+**🔒 Security Features:**
+- Only shows organizations user is **verified member** of
+- Excludes **sensitive data** (enrollment keys, timestamps)
+- **Role information** included for each organization
+- **Membership statistics** for context
+
 ### GET /organizations/:id/members
 Get organization members with enhanced access control.
 
@@ -394,13 +465,24 @@ curl -X POST http://localhost:3000/organization/api/v1/auth/login \
   }'
 ```
 
-### 2. Access Organization with Proper Role
+### 2. Get User's Enrolled Organizations
+```bash
+# Get all organizations user is enrolled in
+curl -X GET "http://localhost:3000/organization/api/v1/organizations/user/enrolled" \
+  -H "Authorization: Bearer <jwt_token>"
+
+# With pagination and search
+curl -X GET "http://localhost:3000/organization/api/v1/organizations/user/enrolled?page=1&limit=5&search=software" \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+### 3. Access Organization with Proper Role
 ```bash
 curl -X GET "http://localhost:3000/organization/api/v1/organizations/org-123/members" \
   -H "Authorization: Bearer <token_with_org_access>"
 ```
 
-### 3. Test Access Control
+### 4. Test Access Control
 ```bash
 # Try accessing organization without membership (should fail)
 curl -X GET "http://localhost:3000/organization/api/v1/organizations/unauthorized-org/members" \
