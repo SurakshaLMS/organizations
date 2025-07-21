@@ -23,6 +23,7 @@ import { OrganizationAccessGuard } from '../auth/guards/organization-access.guar
 import { RateLimitGuard, RateLimit } from '../auth/guards/rate-limit.guard';
 import { SearchValidationGuard } from '../auth/guards/search-validation.guard';
 import { UserVerificationGuard } from '../auth/guards/user-verification.guard';
+import { convertToString } from '../auth/organization-access.service';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
 import { AuditLogInterceptor } from '../common/interceptors/audit-log.interceptor';
 import { 
@@ -132,7 +133,7 @@ export class OrganizationController {
       
       filteredOrgs = organizationData.filter(org => 
         orgDetails.some(detail => 
-          detail.organizationId === org.organizationId &&
+          convertToString(detail.organizationId) === org.organizationId &&
           (detail.name.toLowerCase().includes(search.toLowerCase()) ||
            detail.type.toLowerCase().includes(search.toLowerCase()))
         )

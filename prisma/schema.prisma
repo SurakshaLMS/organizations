@@ -16,29 +16,29 @@ datasource db {
 
 // Main user table managed externally
 model User {
-  userId    String   @id @default(cuid()) @db.VarChar(191)
-  email     String   @unique @db.VarChar(191)
-  password  String   @db.VarChar(255) // Hashed password for main system
-  name      String   @db.VarChar(191)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  userId     BigInt    @id @default(autoincrement()) @db.BigInt
+  email      String    @unique @db.VarChar(191)
+  password   String    @db.VarChar(255) // Hashed password for authentication
+  name       String    @db.VarChar(191)
+  lastSyncAt DateTime? // Last time this record was synced
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   // Relations
   instituteUsers       InstituteUser[]
   organizationUsers    OrganizationUser[]
-  userAuth             UserAuth?
-  assignedInstituteUsers InstituteUser[] @relation("AssignedByUser") // Users assigned to institutes by this user
 
   @@map("user")
 }
 
 // Institute table managed externally
 model Institute {
-  instituteId String   @id @default(cuid()) @db.VarChar(191)
-  name        String   @db.VarChar(191)
-  imageUrl    String?  @db.VarChar(500)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  instituteId BigInt    @id @default(autoincrement()) @db.BigInt
+  name        String    @db.VarChar(191)
+  imageUrl    String?   @db.VarChar(500)
+  lastSyncAt  DateTime? // Last time this record was synced
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
   instituteUsers InstituteUser[]
@@ -58,44 +58,20 @@ enum InstituteRole {
 }
 
 model InstituteUser {
-  instituteId   String        @db.VarChar(191)
-  userId        String        @db.VarChar(191)
+  instituteId   BigInt        @db.BigInt
+  userId        BigInt        @db.BigInt
   role          InstituteRole @default(STUDENT)
   isActive      Boolean       @default(true)
-  assignedBy    String?       @db.VarChar(191) // UserID who assigned this user
-  assignedDate  DateTime      @default(now())
-  activatedDate DateTime?     // When the user was activated/approved
-  deactivatedDate DateTime?   // When the user was deactivated
-  notes         String?       @db.Text // Additional notes about the assignment
+  lastSyncAt    DateTime?     // Last time this record was synced
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   // Relations
   institute    Institute @relation(fields: [instituteId], references: [instituteId], onDelete: Cascade)
   user         User      @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  assignedByUser User?   @relation("AssignedByUser", fields: [assignedBy], references: [userId], onDelete: SetNull)
 
   @@id([instituteId, userId])
   @@map("institute_users")
-}
-
-// ============================================================================
-// AUTHENTICATION SYSTEM (Full CRUD)
-// ============================================================================
-
-// Separate authentication system for this service
-model UserAuth {
-  authId    String    @id @default(cuid()) @db.VarChar(191)
-  userId    String    @unique @db.VarChar(191)
-  password  String    @db.VarChar(255) // Hashed password for this system (bcrypt)
-  lastLogin DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  // Relations
-  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
-
-  @@map("user_auth")
 }
 
 // ============================================================================
@@ -110,12 +86,12 @@ enum OrganizationType {
 
 // Organization table
 model Organization {
-  organizationId String           @id @default(cuid()) @db.VarChar(191)
+  organizationId BigInt           @id @default(autoincrement()) @db.BigInt
   name           String           @db.VarChar(191)
   type           OrganizationType
   isPublic       Boolean          @default(false)
   enrollmentKey  String?          @db.VarChar(191) // Nullable for public organizations (non-unique)
-  instituteId    String?          @db.VarChar(191) // Link to institute (optional)
+  instituteId    BigInt?          @db.BigInt // Link to institute (optional)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -140,8 +116,8 @@ enum OrganizationRole {
 
 // Junction table for organization users
 model OrganizationUser {
-  organizationId String           @db.VarChar(191)
-  userId         String           @db.VarChar(191)
+  organizationId BigInt           @db.BigInt
+  userId         BigInt           @db.BigInt
   role           OrganizationRole @default(MEMBER)
   isVerified     Boolean          @default(false)
   createdAt      DateTime         @default(now())
@@ -163,10 +139,11 @@ model OrganizationUser {
 
 // Cause table linked to organizations
 model Cause {
-  causeId        String   @id @default(cuid()) @db.VarChar(191)
-  organizationId String   @db.VarChar(191)
+  causeId        BigInt   @id @default(autoincrement()) @db.BigInt
+  organizationId BigInt   @db.BigInt
   title          String   @db.VarChar(191)
   description    String?  @db.Text
+  introVideoUrl  String?  @db.VarChar(500) // Introduction video URL
   isPublic       Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -187,10 +164,18 @@ model Cause {
 
 // Lecture table linked to causes
 model Lecture {
-  lectureId      String   @id @default(cuid()) @db.VarChar(191)
-  causeId        String   @db.VarChar(191)
+  lectureId      BigInt   @id @default(autoincrement()) @db.BigInt
+  causeId        BigInt   @db.BigInt
   title          String   @db.VarChar(191)
+  description    String?  @db.Text
   content        String?  @db.Text
+  venue          String?  @db.VarChar(255) // Physical venue or online platform details
+  mode           String?  @db.VarChar(50)  // 'online' or 'physical'
+  timeStart      DateTime?                 // Start time of lecture
+  timeEnd        DateTime?                 // End time of lecture
+  liveLink       String?  @db.VarChar(500) // Live streaming link
+  liveMode       String?  @db.VarChar(50)  // 'youtube', 'meet', 'zoom', etc.
+  recordingUrl   String?  @db.VarChar(500) // Recording URL after lecture
   isPublic       Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -201,6 +186,8 @@ model Lecture {
 
   @@index([causeId])
   @@index([isPublic])
+  @@index([timeStart])
+  @@index([mode])
   @@map("lecture")
 }
 
@@ -210,8 +197,8 @@ model Lecture {
 
 // Assignment table linked to causes
 model Assignment {
-  assignmentId String    @id @default(cuid()) @db.VarChar(191)
-  causeId      String    @db.VarChar(191)
+  assignmentId BigInt    @id @default(autoincrement()) @db.BigInt
+  causeId      BigInt    @db.BigInt
   title        String    @db.VarChar(191)
   description  String?   @db.Text
   dueDate      DateTime?
@@ -232,10 +219,12 @@ model Assignment {
 
 // Documentation table linked to lectures
 model Documentation {
-  documentationId String   @id @default(cuid()) @db.VarChar(191)
-  lectureId       String   @db.VarChar(191)
+  documentationId BigInt   @id @default(autoincrement()) @db.BigInt
+  lectureId       BigInt   @db.BigInt
   title           String   @db.VarChar(191)
+  description     String?  @db.Text         // Description of the document
   content         String?  @db.Text
+  docUrl          String?  @db.VarChar(500) // Document URL (PDF, DOC, etc.)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -14,7 +14,6 @@ export class DebugController {
   async getUserDebug(@Param('email') email: string) {
     const user = await this.prisma.user.findUnique({
       where: { email },
-      include: { userAuth: true },
     });
     
     if (!user) {
@@ -25,8 +24,8 @@ export class DebugController {
       user: {
         email: user.email,
         name: user.name,
-        hasUserAuth: !!user.userAuth,
-        passwordHash: user.userAuth?.password || null,
+        hasPassword: !!user.password,
+        passwordHash: user.password || null,
       },
     };
   }
@@ -49,20 +48,19 @@ export class DebugController {
   async testUserPassword(@Body() body: { email: string; password: string }) {
     const user = await this.prisma.user.findUnique({
       where: { email: body.email },
-      include: { userAuth: true },
     });
 
-    if (!user || !user.userAuth) {
-      return { error: 'User not found or no auth record' };
+    if (!user || !user.password) {
+      return { error: 'User not found or no password set' };
     }
 
-    const directBcrypt = await bcrypt.compare(body.password, user.userAuth.password);
-    const enhanced = await this.enhancedAuthService.validatePassword(body.password, user.userAuth.password);
+    const directBcrypt = await bcrypt.compare(body.password, user.password);
+    const enhanced = await this.enhancedAuthService.validatePassword(body.password, user.password);
 
     return {
       directBcrypt,
       enhanced,
-      passwordLength: user.userAuth.password.length,
+      passwordLength: user.password.length,
     };
   }
 }

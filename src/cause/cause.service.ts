@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
+import { convertToBigInt, convertToString } from '../auth/organization-access.service';
 
 @Injectable()
 export class CauseService {
@@ -12,13 +13,14 @@ export class CauseService {
    */
   async createCause(createCauseDto: CreateCauseDto, userId: string) {
     const { organizationId, title, description, isPublic } = createCauseDto;
+    const orgBigIntId = convertToBigInt(organizationId);
 
     // Check if user has permission to create causes in this organization
     await this.checkUserAccess(organizationId, userId, ['ADMIN', 'PRESIDENT', 'MODERATOR']);
 
     return this.prisma.cause.create({
       data: {
-        organizationId,
+        organizationId: orgBigIntId,
         title,
         description,
         isPublic,
@@ -131,8 +133,9 @@ export class CauseService {
    * Get cause by ID
    */
   async getCauseById(causeId: string, userId?: string) {
+    const causeBigIntId = convertToBigInt(causeId);
     const cause = await this.prisma.cause.findUnique({
-      where: { causeId },
+      where: { causeId: causeBigIntId },
       select: {
         causeId: true,
         title: true,
@@ -149,7 +152,7 @@ export class CauseService {
 
     // Check if user has access to this cause
     if (!cause.isPublic && userId) {
-      const hasAccess = await this.checkUserHasAccess(cause.organizationId, userId);
+      const hasAccess = await this.checkUserHasAccess(convertToString(cause.organizationId), userId);
       if (!hasAccess) {
         throw new ForbiddenException('Access denied to this cause');
       }
@@ -164,8 +167,9 @@ export class CauseService {
    * Update cause
    */
   async updateCause(causeId: string, updateCauseDto: UpdateCauseDto, userId: string) {
+    const causeBigIntId = convertToBigInt(causeId);
     const cause = await this.prisma.cause.findUnique({
-      where: { causeId },
+      where: { causeId: causeBigIntId },
       select: { organizationId: true },
     });
 
@@ -174,10 +178,10 @@ export class CauseService {
     }
 
     // Check if user has permission to update this cause
-    await this.checkUserAccess(cause.organizationId, userId, ['ADMIN', 'PRESIDENT', 'MODERATOR']);
+    await this.checkUserAccess(convertToString(cause.organizationId), userId, ['ADMIN', 'PRESIDENT', 'MODERATOR']);
 
     return this.prisma.cause.update({
-      where: { causeId },
+      where: { causeId: causeBigIntId },
       data: updateCauseDto,
       select: {
         causeId: true,
@@ -194,8 +198,9 @@ export class CauseService {
    * Delete cause
    */
   async deleteCause(causeId: string, userId: string) {
+    const causeBigIntId = convertToBigInt(causeId);
     const cause = await this.prisma.cause.findUnique({
-      where: { causeId },
+      where: { causeId: causeBigIntId },
       select: { organizationId: true },
     });
 
@@ -204,10 +209,10 @@ export class CauseService {
     }
 
     // Check if user has permission to delete this cause
-    await this.checkUserAccess(cause.organizationId, userId, ['ADMIN', 'PRESIDENT']);
+    await this.checkUserAccess(convertToString(cause.organizationId), userId, ['ADMIN', 'PRESIDENT']);
 
     return this.prisma.cause.delete({
-      where: { causeId },
+      where: { causeId: causeBigIntId },
     });
   }
 
@@ -215,6 +220,8 @@ export class CauseService {
    * Get causes by organization
    */
   async getCausesByOrganization(organizationId: string, userId?: string) {
+    const orgBigIntId = convertToBigInt(organizationId);
+    
     // Check if user has access to this organization
     if (userId) {
       const hasAccess = await this.checkUserHasAccess(organizationId, userId);
@@ -223,18 +230,19 @@ export class CauseService {
       }
     }
 
-    const where: any = { organizationId };
+    const where: any = { organizationId: orgBigIntId };
 
     if (!userId) {
       // Only public causes for unauthenticated users
       where.isPublic = true;
     } else {
       // Get all causes for organization members, only public for non-members
+      const userBigIntId = convertToBigInt(userId);
       const userInOrg = await this.prisma.organizationUser.findUnique({
         where: {
           organizationId_userId: {
-            organizationId,
-            userId,
+            organizationId: orgBigIntId,
+            userId: userBigIntId,
           },
         },
       });
@@ -269,11 +277,14 @@ export class CauseService {
    * Helper: Check if user has required role in organization
    */
   private async checkUserAccess(organizationId: string, userId: string, requiredRoles: string[]) {
+    const orgBigIntId = convertToBigInt(organizationId);
+    const userBigIntId = convertToBigInt(userId);
+    
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -295,12 +306,15 @@ export class CauseService {
    * Helper: Check if user has access to organization
    */
   private async checkUserHasAccess(organizationId: string, userId: string): Promise<boolean> {
+    const orgBigIntId = convertToBigInt(organizationId);
+    const userBigIntId = convertToBigInt(userId);
+    
     const organization = await this.prisma.organization.findUnique({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
       include: {
         organizationUsers: {
           where: {
-            userId,
+            userId: userBigIntId,
             isVerified: true,
           },
         },
@@ -311,6 +325,6 @@ export class CauseService {
       return false;
     }
 
-    return organization.isPublic || organization.organizationUsers.length > 0;
+    return organization.isPublic || (organization as any).organizationUsers.length > 0;
   }
 }

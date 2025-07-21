@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLectureDto, UpdateLectureDto } from './dto/lecture.dto';
+import { convertToBigInt, convertToString } from '../auth/organization-access.service';
 
 @Injectable()
 export class LectureService {
@@ -13,13 +14,14 @@ export class LectureService {
     const { causeId, title, content, isPublic } = createLectureDto;
 
     // Check if cause exists and user has access
+    const causeBigIntId = convertToBigInt(causeId);
     const cause = await this.prisma.cause.findUnique({
-      where: { causeId },
+      where: { causeId: causeBigIntId },
       include: {
         organization: {
           include: {
             organizationUsers: {
-              where: { userId },
+              where: { userId: convertToBigInt(userId) },
             },
           },
         },
@@ -31,7 +33,7 @@ export class LectureService {
     }
 
     // Check user permissions
-    const userInOrg = cause.organization.organizationUsers[0];
+    const userInOrg = (cause as any).organization.organizationUsers[0];
     if (!userInOrg || !userInOrg.isVerified) {
       throw new ForbiddenException('Access denied');
     }
@@ -42,7 +44,7 @@ export class LectureService {
 
     return this.prisma.lecture.create({
       data: {
-        causeId,
+        causeId: causeBigIntId,
         title,
         content,
         isPublic,
@@ -118,8 +120,9 @@ export class LectureService {
    * Get lecture by ID
    */
   async getLectureById(lectureId: string, userId?: string) {
+    const lectureBigIntId = convertToBigInt(lectureId);
     const lecture = await this.prisma.lecture.findUnique({
-      where: { lectureId },
+      where: { lectureId: lectureBigIntId },
       include: {
         cause: {
           include: {
@@ -144,7 +147,7 @@ export class LectureService {
 
     // Check access permissions
     if (!lecture.isPublic && userId) {
-      const hasAccess = await this.checkUserAccess(lecture.cause.organization.organizationId, userId);
+      const hasAccess = await this.checkUserAccess(convertToString((lecture as any).cause.organization.organizationId), userId);
       if (!hasAccess) {
         throw new ForbiddenException('Access denied');
       }
@@ -159,8 +162,9 @@ export class LectureService {
    * Update lecture
    */
   async updateLecture(lectureId: string, updateLectureDto: UpdateLectureDto, userId: string) {
+    const lectureBigIntId = convertToBigInt(lectureId);
     const lecture = await this.prisma.lecture.findUnique({
-      where: { lectureId },
+      where: { lectureId: lectureBigIntId },
       include: {
         cause: {
           include: {
@@ -179,10 +183,10 @@ export class LectureService {
     }
 
     // Check user permissions
-    await this.checkUserPermissions(lecture.cause.organization.organizationId, userId, ['ADMIN', 'PRESIDENT', 'MODERATOR']);
+    await this.checkUserPermissions(convertToString((lecture as any).cause.organization.organizationId), userId, ['ADMIN', 'PRESIDENT', 'MODERATOR']);
 
     return this.prisma.lecture.update({
-      where: { lectureId },
+      where: { lectureId: lectureBigIntId },
       data: updateLectureDto,
       include: {
         cause: {
@@ -203,8 +207,9 @@ export class LectureService {
    * Delete lecture
    */
   async deleteLecture(lectureId: string, userId: string) {
+    const lectureBigIntId = convertToBigInt(lectureId);
     const lecture = await this.prisma.lecture.findUnique({
-      where: { lectureId },
+      where: { lectureId: lectureBigIntId },
       include: {
         cause: {
           include: {
@@ -223,10 +228,10 @@ export class LectureService {
     }
 
     // Check user permissions
-    await this.checkUserPermissions(lecture.cause.organization.organizationId, userId, ['ADMIN', 'PRESIDENT']);
+    await this.checkUserPermissions(convertToString((lecture as any).cause.organization.organizationId), userId, ['ADMIN', 'PRESIDENT']);
 
     return this.prisma.lecture.delete({
-      where: { lectureId },
+      where: { lectureId: lectureBigIntId },
     });
   }
 
@@ -234,11 +239,13 @@ export class LectureService {
    * Helper: Check user access to organization
    */
   private async checkUserAccess(organizationId: string, userId: string): Promise<boolean> {
+    const orgBigIntId = convertToBigInt(organizationId);
+    const userBigIntId = convertToBigInt(userId);
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -250,11 +257,13 @@ export class LectureService {
    * Helper: Check user permissions
    */
   private async checkUserPermissions(organizationId: string, userId: string, requiredRoles: string[]) {
+    const orgBigIntId = convertToBigInt(organizationId);
+    const userBigIntId = convertToBigInt(userId);
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       },
     });

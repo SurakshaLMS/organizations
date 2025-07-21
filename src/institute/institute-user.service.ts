@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException, ForbiddenException 
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignUserToInstituteDto, UpdateInstituteUserDto, InstituteUserFilterDto, InstituteRole } from './dto/institute-user.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
+import { convertToBigInt, convertToString } from '../auth/organization-access.service';
 
 @Injectable()
 export class InstituteUserService {
@@ -11,9 +12,13 @@ export class InstituteUserService {
    * Assign user to institute with role
    */
   async assignUserToInstitute(assignDto: AssignUserToInstituteDto, assignedByUserId: string) {
+    const instituteBigIntId = convertToBigInt(assignDto.instituteId);
+    const userBigIntId = convertToBigInt(assignDto.userId);
+    const assignedByBigIntId = convertToBigInt(assignedByUserId);
+    
     // Validate institute exists
     const institute = await this.prisma.institute.findUnique({
-      where: { instituteId: assignDto.instituteId },
+      where: { instituteId: instituteBigIntId },
     });
 
     if (!institute) {
@@ -22,7 +27,7 @@ export class InstituteUserService {
 
     // Validate user exists
     const user = await this.prisma.user.findUnique({
-      where: { userId: assignDto.userId },
+      where: { userId: userBigIntId },
     });
 
     if (!user) {
@@ -33,8 +38,8 @@ export class InstituteUserService {
     const existingAssignment = await this.prisma.instituteUser.findUnique({
       where: {
         instituteId_userId: {
-          instituteId: assignDto.instituteId,
-          userId: assignDto.userId,
+          instituteId: instituteBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -46,21 +51,16 @@ export class InstituteUserService {
     // Create assignment
     const assignment = await this.prisma.instituteUser.create({
       data: {
-        instituteId: assignDto.instituteId,
-        userId: assignDto.userId,
+        instituteId: instituteBigIntId,
+        userId: userBigIntId,
         role: assignDto.role,
         isActive: assignDto.isActive || true,
-        assignedBy: assignedByUserId,
-        notes: assignDto.notes,
-        activatedDate: assignDto.isActive !== false ? new Date() : null,
       },
       select: {
         instituteId: true,
         userId: true,
         role: true,
         isActive: true,
-        assignedBy: true,
-        // Exclude: notes, assignedDate, activatedDate, deactivatedDate, createdAt, updatedAt
       },
     });
 
@@ -79,12 +79,15 @@ export class InstituteUserService {
     updateDto: UpdateInstituteUserDto,
     updatedByUserId: string,
   ) {
+    const instituteBigIntId = convertToBigInt(instituteId);
+    const userBigIntId = convertToBigInt(userId);
+    
     // Check if assignment exists
     const existingAssignment = await this.prisma.instituteUser.findUnique({
       where: {
         instituteId_userId: {
-          instituteId,
-          userId,
+          instituteId: instituteBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -112,8 +115,8 @@ export class InstituteUserService {
     const updatedAssignment = await this.prisma.instituteUser.update({
       where: {
         instituteId_userId: {
-          instituteId,
-          userId,
+          instituteId: instituteBigIntId,
+          userId: userBigIntId,
         },
       },
       data: updateData,
@@ -126,13 +129,6 @@ export class InstituteUserService {
           },
         },
         user: {
-          select: {
-            userId: true,
-            email: true,
-            name: true,
-          },
-        },
-        assignedByUser: {
           select: {
             userId: true,
             email: true,
@@ -152,12 +148,15 @@ export class InstituteUserService {
    * Remove user from institute
    */
   async removeUserFromInstitute(instituteId: string, userId: string, removedByUserId: string) {
+    const instituteBigIntId = convertToBigInt(instituteId);
+    const userBigIntId = convertToBigInt(userId);
+    
     // Check if assignment exists
     const existingAssignment = await this.prisma.instituteUser.findUnique({
       where: {
         instituteId_userId: {
-          instituteId,
-          userId,
+          instituteId: instituteBigIntId,
+          userId: userBigIntId,
         },
       },
       include: {
@@ -185,8 +184,8 @@ export class InstituteUserService {
     await this.prisma.instituteUser.delete({
       where: {
         instituteId_userId: {
-          instituteId,
-          userId,
+          instituteId: instituteBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -221,10 +220,6 @@ export class InstituteUserService {
 
     if (filterDto.isActive !== undefined) {
       where.isActive = filterDto.isActive;
-    }
-
-    if (filterDto.assignedBy) {
-      where.assignedBy = filterDto.assignedBy;
     }
 
     // Add search functionality
@@ -278,8 +273,6 @@ export class InstituteUserService {
         userId: true,
         role: true,
         isActive: true,
-        assignedBy: true,
-        // Exclude: notes, assignedDate, activatedDate, deactivatedDate, createdAt, updatedAt
       },
     });
 
@@ -293,9 +286,11 @@ export class InstituteUserService {
     instituteId: string,
     paginationDto: PaginationDto,
   ): Promise<PaginatedResponse<any>> {
+    const instituteBigIntId = convertToBigInt(instituteId);
+    
     // Validate institute exists
     const institute = await this.prisma.institute.findUnique({
-      where: { instituteId },
+      where: { instituteId: instituteBigIntId },
     });
 
     if (!institute) {
@@ -313,9 +308,11 @@ export class InstituteUserService {
     userId: string,
     paginationDto: PaginationDto,
   ): Promise<PaginatedResponse<any>> {
+    const userBigIntId = convertToBigInt(userId);
+    
     // Validate user exists
     const user = await this.prisma.user.findUnique({
-      where: { userId },
+      where: { userId: userBigIntId },
     });
 
     if (!user) {

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl } from 'class-validator';
 
 export class CreateCauseDto {
   @IsString()
@@ -13,6 +13,10 @@ export class CreateCauseDto {
   @IsOptional()
   description?: string;
 
+  @IsUrl()
+  @IsOptional()
+  introVideoUrl?: string;
+
   @IsBoolean()
   @IsOptional()
   isPublic?: boolean = false;
@@ -26,6 +30,10 @@ export class UpdateCauseDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsUrl()
+  @IsOptional()
+  introVideoUrl?: string;
 
   @IsBoolean()
   @IsOptional()

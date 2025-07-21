@@ -19,7 +19,7 @@ export interface UserOrganizationAccess {
 export type CompactOrganizationAccess = string[];
 
 export interface EnhancedJwtPayload {
-  sub: string; // userId
+  sub: string; // userId as string for JWT compatibility
   email: string;
   name: string;
   orgAccess: CompactOrganizationAccess; // Compact format ["Porg-123", "Aorg-456"]
@@ -27,6 +27,15 @@ export interface EnhancedJwtPayload {
   iat?: number;
   exp?: number;
 }
+
+// Utility functions for ID conversion
+export const convertToString = (id: bigint | string | number): string => {
+  return typeof id === 'bigint' ? id.toString() : String(id);
+};
+
+export const convertToBigInt = (id: string | bigint | number): bigint => {
+  return typeof id === 'bigint' ? id : BigInt(id);
+};
 
 @Injectable()
 export class OrganizationAccessService {
@@ -62,10 +71,11 @@ export class OrganizationAccessService {
    * Get user's organization access in compact format for JWT token
    * Returns compact array like ["Porg-123", "Aorg-456", "Morg-789"]
    */
-  async getUserOrganizationAccessCompact(userId: string): Promise<CompactOrganizationAccess> {
+  async getUserOrganizationAccessCompact(userId: string | bigint): Promise<CompactOrganizationAccess> {
+    const userBigIntId = convertToBigInt(userId);
     const organizationUsers = await this.prisma.organizationUser.findMany({
       where: {
-        userId,
+        userId: userBigIntId,
         isVerified: true, // Only verified memberships
       },
       select: {
@@ -76,7 +86,7 @@ export class OrganizationAccessService {
 
     return organizationUsers.map(ou => {
       const roleCode = this.getRoleCode(ou.role);
-      return `${roleCode}${ou.organizationId}`;
+      return `${roleCode}${convertToString(ou.organizationId)}`;
     });
   }
 
@@ -84,10 +94,11 @@ export class OrganizationAccessService {
    * Get user's organization access for JWT token with complete organization details
    * This method is kept for backward compatibility and detailed data when needed
    */
-  async getUserOrganizationAccess(userId: string): Promise<UserOrganizationAccess[]> {
+  async getUserOrganizationAccess(userId: string | bigint): Promise<UserOrganizationAccess[]> {
+    const userBigIntId = convertToBigInt(userId);
     const organizationUsers = await this.prisma.organizationUser.findMany({
       where: {
-        userId,
+        userId: userBigIntId,
         isVerified: true, // Only verified memberships
       },
       include: {
@@ -111,28 +122,29 @@ export class OrganizationAccessService {
     });
 
     return organizationUsers.map(ou => ({
-      organizationId: ou.organizationId,
+      organizationId: convertToString(ou.organizationId),
       role: ou.role as 'PRESIDENT' | 'ADMIN' | 'MODERATOR' | 'MEMBER',
       isVerified: ou.isVerified,
-      name: ou.organization.name,
-      type: ou.organization.type,
-      isPublic: ou.organization.isPublic,
-      instituteId: ou.organization.instituteId,
+      name: (ou as any).organization.name,
+      type: (ou as any).organization.type,
+      isPublic: (ou as any).organization.isPublic,
+      instituteId: convertToString((ou as any).organization.instituteId),
       joinedAt: ou.createdAt, // Using createdAt as joinedAt
-      memberCount: ou.organization._count.organizationUsers,
-      causeCount: ou.organization._count.causes,
+      memberCount: (ou as any).organization._count.organizationUsers,
+      causeCount: (ou as any).organization._count.causes,
     }));
   }
 
   /**
    * Check if user is a global organization admin
    */
-  async isGlobalOrganizationAdmin(userId: string): Promise<boolean> {
+  async isGlobalOrganizationAdmin(userId: string | bigint): Promise<boolean> {
     // Check if user has admin role in the system
     // This could be based on a specific organization type or user role
+    const userBigIntId = convertToBigInt(userId);
     const globalAdminOrgs = await this.prisma.organizationUser.findMany({
       where: {
-        userId,
+        userId: userBigIntId,
         role: 'ADMIN',
         isVerified: true,
         organization: {

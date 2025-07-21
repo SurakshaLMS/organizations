@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
+import { convertToBigInt, convertToString } from '../auth/organization-access.service';
 
 @Injectable()
 export class OrganizationService {
@@ -17,9 +18,11 @@ export class OrganizationService {
    * Used for search functionality when working with compact format
    */
   async getOrganizationNamesByIds(organizationIds: string[], searchTerm?: string) {
+    const orgBigIntIds = organizationIds.map(id => convertToBigInt(id));
+    
     const whereClause: any = {
       organizationId: {
-        in: organizationIds,
+        in: orgBigIntIds,
       },
     };
 
@@ -64,8 +67,9 @@ export class OrganizationService {
 
     // Validate institute exists if provided
     if (instituteId) {
+      const instituteBigIntId = convertToBigInt(instituteId);
       const institute = await this.prisma.institute.findUnique({
-        where: { instituteId },
+        where: { instituteId: instituteBigIntId },
       });
       if (!institute) {
         throw new BadRequestException('Institute not found');
@@ -73,16 +77,19 @@ export class OrganizationService {
     }
 
     // Create organization
+    const creatorUserBigIntId = convertToBigInt(creatorUserId);
+    const instituteBigIntId = instituteId ? convertToBigInt(instituteId) : null;
+    
     const organization = await this.prisma.organization.create({
       data: {
         name,
         type,
         isPublic,
         enrollmentKey: isPublic ? null : enrollmentKey,
-        instituteId,
+        instituteId: instituteBigIntId,
         organizationUsers: {
           create: {
-            userId: creatorUserId,
+            userId: creatorUserBigIntId,
             role: 'PRESIDENT',
             isVerified: true,
           },
@@ -240,7 +247,7 @@ export class OrganizationService {
         // Include user's role and status in this organization
         organizationUsers: {
           where: {
-            userId,
+            userId: convertToBigInt(userId),
             isVerified: true,
           },
           select: {
@@ -271,11 +278,11 @@ export class OrganizationService {
       type: org.type,
       isPublic: org.isPublic,
       instituteId: org.instituteId,
-      userRole: org.organizationUsers[0]?.role || 'MEMBER',
-      isVerified: org.organizationUsers[0]?.isVerified || false,
-      joinedAt: org.organizationUsers[0]?.createdAt || null,
-      memberCount: org._count.organizationUsers,
-      causeCount: org._count.causes,
+      userRole: (org as any).organizationUsers[0]?.role || 'MEMBER',
+      isVerified: (org as any).organizationUsers[0]?.isVerified || false,
+      joinedAt: (org as any).organizationUsers[0]?.createdAt || null,
+      memberCount: (org as any)._count.organizationUsers,
+      causeCount: (org as any)._count.causes,
     }));
 
     return createPaginatedResponse(transformedOrganizations, total, pagination);
@@ -285,8 +292,9 @@ export class OrganizationService {
    * Get organization by ID
    */
   async getOrganizationById(organizationId: string, userId?: string) {
+    const orgBigIntId = convertToBigInt(organizationId);
     const organization = await this.prisma.organization.findUnique({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
       select: {
         organizationId: true,
         name: true,
@@ -303,10 +311,11 @@ export class OrganizationService {
 
     // Check if user has access to this organization (if it's private)
     if (!organization.isPublic && userId) {
+      const userBigIntId = convertToBigInt(userId);
       const userInOrg = await this.prisma.organizationUser.findFirst({
         where: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       });
       if (!userInOrg) {
@@ -338,8 +347,9 @@ export class OrganizationService {
     // Validate institute exists if provided
     if (instituteId !== undefined) {
       if (instituteId) {
+        const instituteBigIntId = convertToBigInt(instituteId);
         const institute = await this.prisma.institute.findUnique({
-          where: { instituteId },
+          where: { instituteId: instituteBigIntId },
         });
         if (!institute) {
           throw new BadRequestException('Institute not found');
@@ -347,16 +357,17 @@ export class OrganizationService {
       }
     }
 
+    const orgBigIntId = convertToBigInt(organizationId);
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (isPublic !== undefined) {
       updateData.isPublic = isPublic;
       updateData.enrollmentKey = isPublic ? null : enrollmentKey;
     }
-    if (instituteId !== undefined) updateData.instituteId = instituteId;
+    if (instituteId !== undefined) updateData.instituteId = instituteId ? convertToBigInt(instituteId) : null;
 
     return this.prisma.organization.update({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
       data: updateData,
       select: {
         organizationId: true,
@@ -376,8 +387,9 @@ export class OrganizationService {
     // Check if user has president role
     await this.checkUserRole(organizationId, userId, ['PRESIDENT']);
 
+    const orgBigIntId = convertToBigInt(organizationId);
     return this.prisma.organization.delete({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
     });
   }
 
@@ -400,8 +412,9 @@ export class OrganizationService {
   async enrollUser(enrollUserDto: EnrollUserDto, userId: string) {
     const { organizationId, enrollmentKey } = enrollUserDto;
 
+    const orgBigIntId = convertToBigInt(organizationId);
     const organization = await this.prisma.organization.findUnique({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
     });
 
     if (!organization) {
@@ -409,11 +422,12 @@ export class OrganizationService {
     }
 
     // Check if user is already enrolled
+    const userBigIntId = convertToBigInt(userId);
     const existingEnrollment = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -432,8 +446,8 @@ export class OrganizationService {
     // Enroll user
     const enrollment = await this.prisma.organizationUser.create({
       data: {
-        organizationId,
-        userId,
+        organizationId: orgBigIntId,
+        userId: userBigIntId,
         role: 'MEMBER',
         isVerified: organization.isPublic, // Auto-verify for public organizations
       },
@@ -471,11 +485,13 @@ export class OrganizationService {
     await this.checkUserRole(organizationId, verifierUserId, ['ADMIN', 'PRESIDENT']);
 
     // Check if user exists in organization
+    const orgBigIntId = convertToBigInt(organizationId);
+    const userBigIntId = convertToBigInt(userId);
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -487,8 +503,8 @@ export class OrganizationService {
     return this.prisma.organizationUser.update({
       where: {
         organizationId_userId: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       },
       data: { isVerified },
@@ -509,8 +525,9 @@ export class OrganizationService {
    */
   async getOrganizationMembers(organizationId: string, paginationDto: PaginationDto) {
     // Validate organization exists
+    const orgBigIntId = convertToBigInt(organizationId);
     const organization = await this.prisma.organization.findUnique({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
       select: { organizationId: true, isPublic: true },
     });
 
@@ -518,7 +535,7 @@ export class OrganizationService {
       throw new NotFoundException('Organization not found');
     }
 
-    const where: any = { organizationId };
+    const where: any = { organizationId: orgBigIntId };
 
     // Add search functionality
     if (paginationDto.search) {
@@ -573,9 +590,11 @@ export class OrganizationService {
    * Get organization causes with pagination
    */
   async getOrganizationCauses(organizationId: string, paginationDto: PaginationDto) {
+    const orgBigIntId = convertToBigInt(organizationId);
+    
     // Validate organization exists
     const organization = await this.prisma.organization.findUnique({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
       select: { organizationId: true, isPublic: true },
     });
 
@@ -583,7 +602,7 @@ export class OrganizationService {
       throw new NotFoundException('Organization not found');
     }
 
-    const where: any = { organizationId };
+    const where: any = { organizationId: orgBigIntId };
 
     // Add search functionality
     if (paginationDto.search) {
@@ -631,11 +650,14 @@ export class OrganizationService {
    * Leave organization
    */
   async leaveOrganization(organizationId: string, userId: string) {
+    const orgBigIntId = convertToBigInt(organizationId);
+    const userBigIntId = convertToBigInt(userId);
+    
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -651,8 +673,8 @@ export class OrganizationService {
     return this.prisma.organizationUser.delete({
       where: {
         organizationId_userId: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -662,11 +684,14 @@ export class OrganizationService {
    * Helper: Check if user has required role in organization
    */
   private async checkUserRole(organizationId: string, userId: string, requiredRoles: string[]) {
+    const orgBigIntId = convertToBigInt(organizationId);
+    const userBigIntId = convertToBigInt(userId);
+    
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
-          organizationId,
-          userId,
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
         },
       },
     });
@@ -688,11 +713,14 @@ export class OrganizationService {
    * Helper: Check if user has access to organization
    */
   private async checkUserAccess(organizationId: string, userId: string) {
+    const orgBigIntId = convertToBigInt(organizationId);
+    const userBigIntId = convertToBigInt(userId);
+    
     const organization = await this.prisma.organization.findUnique({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
       include: {
         organizationUsers: {
-          where: { userId },
+          where: { userId: userBigIntId },
         },
       },
     });
@@ -701,7 +729,7 @@ export class OrganizationService {
       throw new NotFoundException('Organization not found');
     }
 
-    if (!organization.isPublic && organization.organizationUsers.length === 0) {
+    if (!organization.isPublic && (organization as any).organizationUsers.length === 0) {
       throw new ForbiddenException('Access denied to this organization');
     }
   }
@@ -714,10 +742,12 @@ export class OrganizationService {
     await this.checkUserRole(organizationId, userId, ['ADMIN', 'PRESIDENT']);
 
     const { instituteId } = assignInstituteDto;
+    const instituteBigIntId = convertToBigInt(instituteId);
+    const orgBigIntId = convertToBigInt(organizationId);
 
     // Validate institute exists
     const institute = await this.prisma.institute.findUnique({
-      where: { instituteId },
+      where: { instituteId: instituteBigIntId },
     });
 
     if (!institute) {
@@ -726,8 +756,8 @@ export class OrganizationService {
 
     // Update organization with institute assignment
     const updatedOrganization = await this.prisma.organization.update({
-      where: { organizationId },
-      data: { instituteId },
+      where: { organizationId: orgBigIntId },
+      data: { instituteId: instituteBigIntId },
       include: {
         institute: {
           select: {
@@ -763,9 +793,11 @@ export class OrganizationService {
     // Check if user has permission (Admin or President)
     await this.checkUserRole(organizationId, userId, ['ADMIN', 'PRESIDENT']);
 
+    const orgBigIntId = convertToBigInt(organizationId);
+
     // Check if organization is currently assigned to an institute
     const organization = await this.prisma.organization.findUnique({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
       include: { institute: true },
     });
 
@@ -779,7 +811,7 @@ export class OrganizationService {
 
     // Remove institute assignment
     const updatedOrganization = await this.prisma.organization.update({
-      where: { organizationId },
+      where: { organizationId: orgBigIntId },
       data: { instituteId: null },
       include: {
         organizationUsers: {
@@ -807,17 +839,18 @@ export class OrganizationService {
    */
   async getOrganizationsByInstitute(instituteId: string, userId?: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any> & { institute: any }> {
     const pagination = paginationDto || new PaginationDto();
+    const instituteBigIntId = convertToBigInt(instituteId);
     
     // Validate institute exists
     const institute = await this.prisma.institute.findUnique({
-      where: { instituteId },
+      where: { instituteId: instituteBigIntId },
     });
 
     if (!institute) {
       throw new NotFoundException('Institute not found');
     }
 
-    const where: any = { instituteId };
+    const where: any = { instituteId: instituteBigIntId };
 
     if (userId) {
       // Get organizations where user has access (member or public)

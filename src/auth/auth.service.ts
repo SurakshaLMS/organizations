@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnhancedAuthService } from './enhanced-auth.service';
-import { OrganizationAccessService, EnhancedJwtPayload } from './organization-access.service';
+import { OrganizationAccessService, EnhancedJwtPayload, convertToString, convertToBigInt } from './organization-access.service';
 import { LoginDto, SetupPasswordDto, ChangePasswordDto } from './dto/auth.dto';
 
 @Injectable()
@@ -26,29 +26,22 @@ export class AuthService {
     // Find user by email
     const user = await this.prisma.user.findUnique({
       where: { email },
-      include: { userAuth: true },
     });
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Check if user has set up password for this system
-    if (!user.userAuth) {
+    // Check if user has password
+    if (!user.password) {
       throw new BadRequestException('Password not set up. Please set up your password first.');
     }
 
     // Verify password using enhanced authentication
-    const isPasswordValid = await this.enhancedAuthService.validatePassword(password, user.userAuth.password);
+    const isPasswordValid = await this.enhancedAuthService.validatePassword(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
-
-    // Update last login
-    await this.prisma.userAuth.update({
-      where: { userId: user.userId },
-      data: { lastLogin: new Date() },
-    });
 
     // Get user's organization access for JWT token in compact format
     const orgAccess = await this.organizationAccessService.getUserOrganizationAccessCompact(user.userId);
@@ -56,7 +49,7 @@ export class AuthService {
 
     // Generate enhanced JWT token with compact organization access
     const payload: EnhancedJwtPayload = { 
-      sub: user.userId, 
+      sub: convertToString(user.userId), 
       email: user.email, 
       name: user.name,
       orgAccess, // Compact format: ["Porg-123", "Aorg-456"]
@@ -85,7 +78,6 @@ export class AuthService {
     // Find user by email
     const user = await this.prisma.user.findUnique({
       where: { email },
-      include: { userAuth: true },
     });
 
     if (!user) {
@@ -93,17 +85,17 @@ export class AuthService {
     }
 
     // Check if password is already set up
-    if (user.userAuth) {
+    if (user.password) {
       throw new ConflictException('Password already set up. Use change password instead.');
     }
 
     // Hash the new password using enhanced encryption
     const hashedPassword = await this.enhancedAuthService.hashPassword(newPassword);
 
-    // Create user auth record
-    await this.prisma.userAuth.create({
+    // Update user with new password
+    await this.prisma.user.update({
+      where: { userId: user.userId },
       data: {
-        userId: user.userId,
         password: hashedPassword,
       },
     });
@@ -119,17 +111,18 @@ export class AuthService {
   async changePassword(userId: string, changePasswordDto: ChangePasswordDto) {
     const { currentPassword, newPassword } = changePasswordDto;
 
-    // Find user auth record
-    const userAuth = await this.prisma.userAuth.findUnique({
-      where: { userId },
+    // Find user
+    const userBigIntId = convertToBigInt(userId);
+    const user = await this.prisma.user.findUnique({
+      where: { userId: userBigIntId },
     });
 
-    if (!userAuth) {
+    if (!user || !user.password) {
       throw new BadRequestException('Password not set up. Please set up your password first.');
     }
 
     // Verify current password using enhanced authentication
-    const isCurrentPasswordValid = await this.enhancedAuthService.validatePassword(currentPassword, userAuth.password);
+    const isCurrentPasswordValid = await this.enhancedAuthService.validatePassword(currentPassword, user.password);
     if (!isCurrentPasswordValid) {
       throw new UnauthorizedException('Current password is incorrect');
     }
@@ -138,8 +131,8 @@ export class AuthService {
     const hashedPassword = await this.enhancedAuthService.hashPassword(newPassword);
 
     // Update password
-    await this.prisma.userAuth.update({
-      where: { userId },
+    await this.prisma.user.update({
+      where: { userId: userBigIntId },
       data: { password: hashedPassword },
     });
 
@@ -168,8 +161,9 @@ export class AuthService {
    * Call this after user joins/leaves organizations or role changes
    */
   async refreshUserToken(userId: string) {
+    const userBigIntId = convertToBigInt(userId);
     const user = await this.prisma.user.findUnique({
-      where: { userId },
+      where: { userId: userBigIntId },
     });
 
     if (!user) {
@@ -182,7 +176,7 @@ export class AuthService {
 
     // Generate new JWT token with updated compact access
     const payload: EnhancedJwtPayload = { 
-      sub: user.userId, 
+      sub: convertToString(user.userId), 
       email: user.email, 
       name: user.name,
       orgAccess, // Compact format
