@@ -100,15 +100,18 @@ export class LectureService {
     const where: any = {};
 
     if (userId) {
+      const userBigIntId = convertToBigInt(userId);
       where.OR = [
         { isPublic: true },
         {
           cause: {
-            organization: {
-              organizationUsers: {
-                some: {
-                  userId,
-                  isVerified: true,
+            is: {
+              organization: {
+                organizationUsers: {
+                  some: {
+                    userId: userBigIntId,
+                    isVerified: true,
+                  },
                 },
               },
             },
