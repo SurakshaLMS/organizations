@@ -1,11 +1,13 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query, UseInterceptors } from '@nestjs/common';
 import { CauseService } from './cause.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
+import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
 
 @Controller('causes')
+@UseInterceptors(SecurityHeadersInterceptor)
 export class CauseController {
   constructor(private causeService: CauseService) {}
 

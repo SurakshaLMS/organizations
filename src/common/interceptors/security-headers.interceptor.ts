@@ -41,9 +41,12 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
         }
       });
 
-      // Recursively sanitize nested objects
+      // Convert BigInt values to strings and recursively sanitize nested objects
       Object.keys(sanitized).forEach(key => {
-        if (sanitized[key] && typeof sanitized[key] === 'object') {
+        if (typeof sanitized[key] === 'bigint') {
+          // Convert BigInt to string for JSON serialization (auto-increment IDs)
+          sanitized[key] = sanitized[key].toString();
+        } else if (sanitized[key] && typeof sanitized[key] === 'object') {
           sanitized[key] = this.sanitizeResponse(sanitized[key]);
         }
       });

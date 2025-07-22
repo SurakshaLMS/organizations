@@ -1,8 +1,10 @@
-﻿import { Controller, Post, Body, Get, HttpCode } from '@nestjs/common';
+﻿import { Controller, Post, Body, Get, HttpCode, UseInterceptors } from '@nestjs/common';
 import { AuthService, LoginResponse } from './auth.service';
 import { LoginDto } from './dto/auth.dto';
+import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
 
 @Controller('auth')
+@UseInterceptors(SecurityHeadersInterceptor)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

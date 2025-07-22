@@ -7,7 +7,8 @@ import {
   Body, 
   Param, 
   Query, 
-  UseGuards 
+  UseGuards,
+  UseInterceptors
 } from '@nestjs/common';
 import { InstituteUserService } from './institute-user.service';
 import { 
@@ -18,9 +19,11 @@ import {
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
+import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
 
 @Controller('institute-users')
 @UseGuards(JwtAuthGuard)
+@UseInterceptors(SecurityHeadersInterceptor)
 export class InstituteUserController {
   constructor(private instituteUserService: InstituteUserService) {}
 
