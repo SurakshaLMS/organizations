@@ -29,8 +29,8 @@ export interface LoginResponse {
 }
 
 @Injectable()
-export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
+export class UpgradedAuthService {
+  private readonly logger = new Logger(UpgradedAuthService.name);
   private readonly pepper: string;
 
   constructor(
@@ -194,6 +194,9 @@ export class AuthService {
         this.logger.debug('✅ Password validated using peppered format');
         return true;
       }
+
+      // Method 4: Try with different salt rounds or formats if needed
+      // Add more fallback methods here as needed
 
       this.logger.debug('❌ All password validation methods failed');
       return false;
@@ -448,65 +451,6 @@ export class AuthService {
       name: user.name,
       hasPassword: !!user.password,
       institutes: user.instituteUsers
-    };
-  }
-
-  /**
-   * Validate JWT token payload and return user information
-   */
-  async validateJwtUser(payload: any) {
-    const userBigIntId = convertToBigInt(payload.sub);
-    const user = await this.prisma.user.findUnique({
-      where: { userId: userBigIntId },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid token');
-    }
-
-    return user;
-  }
-
-  /**
-   * Refresh organization access in JWT token
-   */
-  async refreshUserToken(userId: string) {
-    const userBigIntId = convertToBigInt(userId);
-    const user = await this.prisma.user.findUnique({
-      where: { userId: userBigIntId },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    // Get updated organization access and institute roles
-    const [orgAccess, isGlobalAdmin, instituteRoles] = await Promise.all([
-      this.organizationAccessService.getUserOrganizationAccessCompact(userBigIntId),
-      this.organizationAccessService.isGlobalOrganizationAdmin(userBigIntId),
-      this.getUserInstituteRoles(userBigIntId)
-    ]);
-
-    // Generate new JWT token with updated access
-    const payload: EnhancedJwtPayload = { 
-      sub: convertToString(user.userId), 
-      email: user.email, 
-      name: user.name,
-      orgAccess,
-      isGlobalAdmin,
-      institutes: instituteRoles,
-      iat: Math.floor(Date.now() / 1000),
-    };
-
-    const token = this.jwtService.sign(payload);
-
-    return {
-      access_token: token,
-      user: {
-        id: user.userId,
-        email: user.email,
-        name: user.name,
-      },
     };
   }
 }

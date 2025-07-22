@@ -1,10 +1,9 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { DebugController } from './debug.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { EnhancedAuthService } from './enhanced-auth.service';
 import { OrganizationAccessService } from './organization-access.service';
@@ -26,7 +25,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     }),
     PrismaModule,
   ],
-  controllers: [AuthController, DebugController],
+  controllers: [AuthController],
   providers: [
     AuthService, 
     JwtStrategy, 
