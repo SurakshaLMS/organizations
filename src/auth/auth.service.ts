@@ -83,7 +83,7 @@ export class AuthService {
         return {
           access_token: '',
           user: {
-            id: user.userId,
+            id: convertToString(user.userId),
             email: user.email,
             name: user.name,
           },
