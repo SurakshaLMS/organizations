@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLectureDto, UpdateLectureDto } from './dto/lecture.dto';
 import { convertToBigInt, convertToString } from '../auth/organization-access.service';
 
 @Injectable()
 export class LectureService {
+  private readonly logger = new Logger(LectureService.name);
+  
   constructor(private prisma: PrismaService) {}
 
   /**
@@ -15,25 +17,47 @@ export class LectureService {
 
     // Check if cause exists and user has access
     const causeBigIntId = convertToBigInt(causeId);
-    const cause = await this.prisma.cause.findUnique({
-      where: { causeId: causeBigIntId },
-      include: {
-        organization: {
-          include: {
-            organizationUsers: {
-              where: { userId: convertToBigInt(userId) },
+    
+    let cause;
+    try {
+      cause = await this.prisma.cause.findUnique({
+        where: { causeId: causeBigIntId },
+        select: {
+          causeId: true,
+          organizationId: true,
+          title: true,
+          description: true,
+          isPublic: true,
+          organization: {
+            select: {
+              organizationId: true,
+              name: true,
+              organizationUsers: {
+                where: { userId: convertToBigInt(userId) },
+                select: {
+                  role: true,
+                  isVerified: true,
+                },
+              },
             },
           },
         },
-      },
-    });
+      });
+    } catch (error) {
+      // Handle database datetime corruption errors
+      if (error.code === 'P2020' && error.message.includes('invalid datetime value')) {
+        this.logger.error(`Database datetime corruption detected for cause ${causeId}:`, error);
+        throw new BadRequestException('The requested cause has corrupted data. Please contact support.');
+      }
+      throw error;
+    }
 
     if (!cause) {
       throw new NotFoundException('Cause not found');
     }
 
     // Check user permissions
-    const userInOrg = (cause as any).organization.organizationUsers[0];
+    const userInOrg = cause.organization.organizationUsers[0];
     if (!userInOrg || !userInOrg.isVerified) {
       throw new ForbiddenException('Access denied');
     }

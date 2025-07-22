@@ -45,6 +45,7 @@ export class CauseService {
     const where: any = {};
 
     if (userId) {
+      const userBigIntId = convertToBigInt(userId);
       // Get causes from user's organizations and public causes
       where.OR = [
         { isPublic: true },
@@ -52,7 +53,7 @@ export class CauseService {
           organization: {
             organizationUsers: {
               some: {
-                userId,
+                userId: userBigIntId,
                 isVerified: true,
               },
             },

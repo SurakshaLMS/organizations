@@ -117,13 +117,14 @@ export class OrganizationService {
     const where: any = {};
 
     if (userId) {
+      const userBigIntId = convertToBigInt(userId);
       // Get user's organizations and public organizations
       where.OR = [
         { isPublic: true },
         {
           organizationUsers: {
             some: {
-              userId,
+              userId: userBigIntId,
             },
           },
         },
