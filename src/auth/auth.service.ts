@@ -12,7 +12,7 @@ export interface LoginResponse {
   access_token: string;
   refresh_token?: string;
   user: {
-    id: bigint;
+    id: string;
     email: string;
     name: string;
     userType?: string;
@@ -136,13 +136,13 @@ export class AuthService {
         access_token: accessToken,
         refresh_token: refreshToken,
         user: {
-          id: user.userId,
+          id: convertToString(user.userId),
           email: user.email,
           name: user.name,
           isFirstLogin: !user.updatedAt || user.createdAt === user.updatedAt,
           lastLoginAt: new Date(),
           institutes: user.instituteUsers.map(iu => ({
-            instituteId: iu.institute.instituteId,
+            instituteId: convertToString(iu.institute.instituteId),
             name: iu.institute.name,
             role: iu.role,
             isActive: iu.isActive,
