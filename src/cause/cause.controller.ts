@@ -3,8 +3,10 @@ import { CauseService } from './cause.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
+import { EnhancedJwtPayload } from '../auth/organization-access.service';
 
 @Controller('causes')
 @UseInterceptors(SecurityHeadersInterceptor)
@@ -25,10 +27,12 @@ export class CauseController {
 
   /**
    * Get all causes with pagination
+   * Enhanced with optional authentication
    */
   @Get()
+  @UseGuards(OptionalJwtAuthGuard)
   async getCauses(
-    @Query('userId') userId?: string,
+    @GetUser() user?: EnhancedJwtPayload,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sortBy') sortBy?: string,
@@ -42,17 +46,23 @@ export class CauseController {
     paginationDto.sortOrder = sortOrder;
     paginationDto.search = search;
 
+    // Extract userId from JWT token if authenticated, otherwise undefined for public access
+    const userId = user?.sub;
     return this.causeService.getCauses(userId, paginationDto);
   }
 
   /**
    * Get cause by ID
+   * Enhanced with optional authentication
    */
   @Get(':id')
+  @UseGuards(OptionalJwtAuthGuard)
   async getCauseById(
     @Param('id') causeId: string,
-    @Query('userId') userId?: string,
+    @GetUser() user?: EnhancedJwtPayload,
   ) {
+    // Extract userId from JWT token if authenticated, otherwise undefined for public access
+    const userId = user?.sub;
     return this.causeService.getCauseById(causeId, userId);
   }
 
@@ -83,12 +93,16 @@ export class CauseController {
 
   /**
    * Get causes by organization
+   * Enhanced with optional authentication
    */
   @Get('organization/:organizationId')
+  @UseGuards(OptionalJwtAuthGuard)
   async getCausesByOrganization(
     @Param('organizationId') organizationId: string,
-    @Query('userId') userId?: string,
+    @GetUser() user?: EnhancedJwtPayload,
   ) {
+    // Extract userId from JWT token if authenticated, otherwise undefined for public access
+    const userId = user?.sub;
     return this.causeService.getCausesByOrganization(organizationId, userId);
   }
 }

@@ -2,8 +2,10 @@ import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query, UseI
 import { LectureService } from './lecture.service';
 import { CreateLectureDto, UpdateLectureDto } from './dto/lecture.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
+import { EnhancedJwtPayload } from '../auth/organization-access.service';
 
 @Controller('lectures')
 @UseInterceptors(SecurityHeadersInterceptor)
@@ -24,20 +26,28 @@ export class LectureController {
 
   /**
    * Get all lectures
+   * Enhanced with optional authentication
    */
   @Get()
-  async getLectures(@Query('userId') userId?: string) {
+  @UseGuards(OptionalJwtAuthGuard)
+  async getLectures(@GetUser() user?: EnhancedJwtPayload) {
+    // Extract userId from JWT token if authenticated, otherwise undefined for public access
+    const userId = user?.sub;
     return this.lectureService.getLectures(userId);
   }
 
   /**
    * Get lecture by ID
+   * Enhanced with optional authentication
    */
   @Get(':id')
+  @UseGuards(OptionalJwtAuthGuard)
   async getLectureById(
     @Param('id') lectureId: string,
-    @Query('userId') userId?: string,
+    @GetUser() user?: EnhancedJwtPayload,
   ) {
+    // Extract userId from JWT token if authenticated, otherwise undefined for public access
+    const userId = user?.sub;
     return this.lectureService.getLectureById(lectureId, userId);
   }
 

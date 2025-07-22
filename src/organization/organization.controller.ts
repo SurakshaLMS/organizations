@@ -19,6 +19,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { ParseUUIDPipe } from '../common/pipes/parse-uuid.pipe';
 import { PaginationValidationPipe } from '../common/pipes/pagination-validation.pipe';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { OrganizationAccessGuard } from '../auth/guards/organization-access.guard';
 import { RateLimitGuard, RateLimit } from '../auth/guards/rate-limit.guard';
 import { SearchValidationGuard } from '../auth/guards/search-validation.guard';
@@ -63,16 +64,20 @@ export class OrganizationController {
 
   /**
    * Get all organizations with pagination (public or user's organizations)
-   * Enhanced with search validation and pagination pipes
+   * Enhanced with optional authentication and pagination validation
+   * If authenticated: Returns user's organizations + public organizations
+   * If not authenticated: Returns only public organizations
    */
   @Get()
-  @UseGuards(SearchValidationGuard, RateLimitGuard)
+  @UseGuards(OptionalJwtAuthGuard, SearchValidationGuard, RateLimitGuard)
   @RateLimit(50, 60000) // 50 requests per minute for public endpoint
   async getOrganizations(
-    @Query('userId', new ParseUUIDPipe()) userId?: string,
+    @GetUser() user?: EnhancedJwtPayload,
     @Query(new PaginationValidationPipe()) paginationQuery?: any,
   ) {
     const paginationDto = paginationQuery || new PaginationDto();
+    // Extract userId from JWT token if authenticated, otherwise undefined for public access
+    const userId = user?.sub;
     return this.organizationService.getOrganizations(userId, paginationDto);
   }
 
@@ -179,15 +184,19 @@ export class OrganizationController {
 
   /**
    * Get organization by ID
-   * Enhanced with UUID validation and rate limiting
+   * Enhanced with optional JWT authentication for private organizations
+   * Public organizations: No authentication required
+   * Private organizations: JWT authentication required
    */
   @Get(':id')
-  @UseGuards(RateLimitGuard)
+  @UseGuards(OptionalJwtAuthGuard, RateLimitGuard)
   @RateLimit(100, 60000) // 100 requests per minute
   async getOrganizationById(
     @Param('id', ParseUUIDPipe) organizationId: string,
-    @Query('userId', ParseUUIDPipe) userId?: string,
+    @GetUser() user?: EnhancedJwtPayload,
   ) {
+    // Extract userId from JWT token if authenticated, otherwise undefined for public access
+    const userId = user?.sub;
     return this.organizationService.getOrganizationById(organizationId, userId);
   }
 
@@ -316,11 +325,14 @@ export class OrganizationController {
 
   /**
    * Get organizations by institute
+   * Enhanced with optional authentication and pagination validation
    */
   @Get('institute/:instituteId')
+  @UseGuards(OptionalJwtAuthGuard, RateLimitGuard)
+  @RateLimit(50, 60000) // 50 requests per minute
   async getOrganizationsByInstitute(
     @Param('instituteId') instituteId: string,
-    @Query('userId') userId?: string,
+    @GetUser() user?: EnhancedJwtPayload,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sortBy') sortBy?: string,
@@ -334,6 +346,8 @@ export class OrganizationController {
     paginationDto.sortOrder = sortOrder;
     paginationDto.search = search;
 
+    // Extract userId from JWT token if authenticated, otherwise undefined for public access
+    const userId = user?.sub;
     return this.organizationService.getOrganizationsByInstitute(instituteId, userId, paginationDto);
   }
 
