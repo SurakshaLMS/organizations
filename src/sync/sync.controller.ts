@@ -1,6 +1,8 @@
-import { Controller, Post, Get, HttpCode, HttpStatus, UseGuards, Body } from '@nestjs/common';
+import { Controller, Post, Get, HttpCode, HttpStatus, UseGuards, Body, UseInterceptors } from '@nestjs/common';
 import { SyncService } from './sync.service';
+import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
 
+@UseInterceptors(SecurityHeadersInterceptor)
 @Controller('sync')
 export class SyncController {
   constructor(private readonly syncService: SyncService) {}

@@ -149,7 +149,7 @@ export class OrganizationController {
         MODERATOR: filteredOrgs.filter(org => org.role === 'MODERATOR').length,
         MEMBER: filteredOrgs.filter(org => org.role === 'MEMBER').length,
       },
-      compactTokenSize: JSON.stringify(compactOrgs).length,
+      compactTokenSize: this.safeStringify(compactOrgs).length,
       tokenSizeReduction: '80-90%',
     };
 
@@ -378,5 +378,11 @@ export class OrganizationController {
     paginationDto.search = search;
 
     return this.organizationService.getOrganizationCauses(organizationId, paginationDto);
+  }
+
+  private safeStringify(obj: any): string {
+    return JSON.stringify(obj, (key, value) => {
+      return typeof value === 'bigint' ? value.toString() : value;
+    });
   }
 }

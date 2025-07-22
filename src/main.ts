@@ -6,6 +6,11 @@ import { PrismaService } from './prisma/prisma.service';
 import helmet from 'helmet';
 
 async function bootstrap() {
+  // Global BigInt serialization fix
+  (BigInt.prototype as any).toJSON = function() {
+    return this.toString();
+  };
+
   const app = await NestFactory.create(AppModule);
   
   // Get configuration service
@@ -45,6 +50,37 @@ async function bootstrap() {
       },
     }),
   );
+
+  // Global BigInt serialization interceptor
+  app.useGlobalInterceptors(new (class {
+    intercept(context: any, next: any) {
+      return next.handle().pipe(
+        require('rxjs/operators').map((data: any) => {
+          return this.sanitizeBigInt(data);
+        })
+      );
+    }
+    
+    private sanitizeBigInt(data: any): any {
+      if (Array.isArray(data)) {
+        return data.map(item => this.sanitizeBigInt(item));
+      }
+      
+      if (data && typeof data === 'object') {
+        const sanitized = { ...data };
+        Object.keys(sanitized).forEach(key => {
+          if (typeof sanitized[key] === 'bigint') {
+            sanitized[key] = sanitized[key].toString();
+          } else if (sanitized[key] && typeof sanitized[key] === 'object') {
+            sanitized[key] = this.sanitizeBigInt(sanitized[key]);
+          }
+        });
+        return sanitized;
+      }
+      
+      return data;
+    }
+  })());
 
   // Global prefix
   app.setGlobalPrefix('organization/api/v1');

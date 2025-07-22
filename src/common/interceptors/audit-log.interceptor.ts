@@ -34,7 +34,7 @@ export class AuditLogInterceptor implements NestInterceptor {
             userAgent,
             duration,
             timestamp: new Date().toISOString(),
-            responseSize: JSON.stringify(response).length,
+            responseSize: this.safeStringify(response).length,
           });
         },
         error: (error) => {
@@ -81,5 +81,11 @@ export class AuditLogInterceptor implements NestInterceptor {
   private logAuditEvent(status: 'SUCCESS' | 'ERROR', details: any): void {
     const logLevel = status === 'ERROR' ? 'error' : 'log';
     this.logger[logLevel](`[AUDIT] ${status}`, details);
+  }
+
+  private safeStringify(obj: any): string {
+    return JSON.stringify(obj, (key, value) => {
+      return typeof value === 'bigint' ? value.toString() : value;
+    });
   }
 }
