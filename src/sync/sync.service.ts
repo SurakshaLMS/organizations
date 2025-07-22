@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import { convertToBigInt } from '../auth/organization-access.service';
 import * as mysql from 'mysql2/promise';
 import * as bcrypt from 'bcrypt';
 
@@ -153,7 +154,7 @@ export class SyncService {
       // Use upsert for efficient sync (insert or update) - preserve local timestamps
       for (const institute of institutes) {
         await this.prisma.institute.upsert({
-          where: { instituteId: BigInt(institute.id) },
+          where: { instituteId: convertToBigInt(institute.id) },
           update: {
             name: institute.name,
             imageUrl: institute.imageUrl,
@@ -161,7 +162,7 @@ export class SyncService {
             // Don't update timestamps - keep local timestamps
           },
           create: {
-            instituteId: BigInt(institute.id),
+            instituteId: convertToBigInt(institute.id),
             name: institute.name,
             imageUrl: institute.imageUrl,
             lastSyncAt: syncTime,
@@ -236,7 +237,7 @@ export class SyncService {
           }
           
           await this.prisma.user.upsert({
-            where: { userId: BigInt(user.id) },
+            where: { userId: convertToBigInt(user.id) },
             update: {
               email: user.email,
               password: user.password, // Keep original hashed password
@@ -245,7 +246,7 @@ export class SyncService {
               // Don't update timestamps - keep local timestamps
             },
             create: {
-              userId: BigInt(user.id),
+              userId: convertToBigInt(user.id),
               email: user.email,
               password: user.password,
               name: fullName,
@@ -325,8 +326,8 @@ export class SyncService {
           await this.prisma.instituteUser.upsert({
             where: {
               instituteId_userId: {
-                instituteId: BigInt(iu.instituteId),
-                userId: BigInt(iu.userId),
+                instituteId: convertToBigInt(iu.instituteId),
+                userId: convertToBigInt(iu.userId),
               },
             },
             update: {
@@ -336,8 +337,8 @@ export class SyncService {
               // Don't update timestamps - keep local timestamps
             },
             create: {
-              instituteId: BigInt(iu.instituteId),
-              userId: BigInt(iu.userId),
+              instituteId: convertToBigInt(iu.instituteId),
+              userId: convertToBigInt(iu.userId),
               role: mapUserTypeToRole(iu.userType),
               isActive: mapStatus(iu.status),
               lastSyncAt: syncTime,
