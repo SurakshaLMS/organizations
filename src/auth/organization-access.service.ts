@@ -24,7 +24,6 @@ export interface EnhancedJwtPayload {
   name: string;
   orgAccess: CompactOrganizationAccess; // Compact format ["Porg-123", "Aorg-456"]
   isGlobalAdmin: boolean; // Global organization admin
-  institutes?: any[]; // Institute roles for the user
   iat?: number;
   exp?: number;
 }

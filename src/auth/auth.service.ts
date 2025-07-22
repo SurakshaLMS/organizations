@@ -10,7 +10,6 @@ import { LoginDto, SetupPasswordDto, ChangePasswordDto } from './dto/auth.dto';
 
 export interface LoginResponse {
   access_token: string;
-  refresh_token?: string;
   user: {
     id: string;
     email: string;
@@ -18,12 +17,10 @@ export interface LoginResponse {
     userType?: string;
     isFirstLogin?: boolean;
     lastLoginAt?: Date;
-    institutes?: any[];
   };
   permissions: {
     organizations: string[];
     isGlobalAdmin: boolean;
-    instituteRoles?: any[];
   };
   needsPasswordSetup?: boolean;
 }
@@ -56,20 +53,7 @@ export class AuthService {
     try {
       // Find user by email
       const user = await this.prisma.user.findUnique({
-        where: { email },
-        include: {
-          instituteUsers: {
-            include: {
-              institute: {
-                select: {
-                  instituteId: true,
-                  name: true,
-                  imageUrl: true
-                }
-              }
-            }
-          }
-        }
+        where: { email }
       });
 
       if (!user) {
@@ -105,11 +89,10 @@ export class AuthService {
       // Update last login timestamp
       await this.updateLastLogin(user.userId);
 
-      // Get user's organization access and institute roles
-      const [orgAccess, isGlobalAdmin, instituteRoles] = await Promise.all([
+      // Get user's organization access
+      const [orgAccess, isGlobalAdmin] = await Promise.all([
         this.organizationAccessService.getUserOrganizationAccessCompact(user.userId),
-        this.organizationAccessService.isGlobalOrganizationAdmin(user.userId),
-        this.getUserInstituteRoles(user.userId)
+        this.organizationAccessService.isGlobalOrganizationAdmin(user.userId)
       ]);
 
       // Generate enhanced JWT token
@@ -119,7 +102,6 @@ export class AuthService {
         name: user.name,
         orgAccess,
         isGlobalAdmin,
-        institutes: instituteRoles,
         iat: Math.floor(Date.now() / 1000),
       };
 
@@ -127,32 +109,20 @@ export class AuthService {
         expiresIn: this.configService.get('JWT_EXPIRES_IN', '24h')
       });
 
-      // Generate refresh token (optional)
-      const refreshToken = this.generateRefreshToken(user.userId);
-
       this.logger.log(`✅ Login successful for: ${email}`);
 
       return {
         access_token: accessToken,
-        refresh_token: refreshToken,
         user: {
           id: convertToString(user.userId),
           email: user.email,
           name: user.name,
           isFirstLogin: !user.updatedAt || user.createdAt === user.updatedAt,
-          lastLoginAt: new Date(),
-          institutes: user.instituteUsers.map(iu => ({
-            instituteId: convertToString(iu.institute.instituteId),
-            name: iu.institute.name,
-            role: iu.role,
-            isActive: iu.isActive,
-            imageUrl: iu.institute.imageUrl
-          }))
+          lastLoginAt: new Date()
         },
         permissions: {
           organizations: orgAccess,
-          isGlobalAdmin,
-          instituteRoles
+          isGlobalAdmin
         }
       };
 
@@ -268,7 +238,7 @@ export class AuthService {
     return {
       message: 'Password set up successfully',
       user: {
-        id: user.userId,
+        id: convertToString(user.userId),
         email: user.email,
         name: user.name
       }
@@ -350,40 +320,25 @@ export class AuthService {
     }
 
     return {
-      id: user.userId,
+      id: convertToString(user.userId),
       email: user.email,
       name: user.name,
       lastSyncAt: user.lastSyncAt,
       institutes: user.instituteUsers.map(iu => ({
-        instituteId: iu.institute.instituteId,
+        instituteId: convertToString(iu.institute.instituteId),
         name: iu.institute.name,
         role: iu.role,
         isActive: iu.isActive,
         imageUrl: iu.institute.imageUrl
       })),
       organizations: user.organizationUsers.map(ou => ({
-        organizationId: ou.organization.organizationId,
+        organizationId: convertToString(ou.organization.organizationId),
         name: ou.organization.name,
         type: ou.organization.type,
         role: ou.role,
         isVerified: ou.isVerified
       }))
     };
-  }
-
-  /**
-   * Generate refresh token
-   */
-  private generateRefreshToken(userId: bigint): string {
-    const payload = { 
-      sub: convertToString(userId), 
-      type: 'refresh',
-      iat: Math.floor(Date.now() / 1000)
-    };
-    
-    return this.jwtService.sign(payload, { 
-      expiresIn: '7d' // Refresh tokens last longer
-    });
   }
 
   /**
@@ -401,42 +356,11 @@ export class AuthService {
   }
 
   /**
-   * Get user's institute roles
-   */
-  private async getUserInstituteRoles(userId: bigint) {
-    const instituteUsers = await this.prisma.instituteUser.findMany({
-      where: { userId },
-      include: {
-        institute: {
-          select: {
-            instituteId: true,
-            name: true
-          }
-        }
-      }
-    });
-
-    return instituteUsers.map(iu => ({
-      instituteId: convertToString(iu.institute.instituteId),
-      instituteName: iu.institute.name,
-      role: iu.role,
-      isActive: iu.isActive
-    }));
-  }
-
-  /**
    * Validate if user exists and is active
    */
   async validateUser(email: string): Promise<any> {
     const user = await this.prisma.user.findUnique({
-      where: { email },
-      include: {
-        instituteUsers: {
-          include: {
-            institute: true
-          }
-        }
-      }
+      where: { email }
     });
 
     if (!user) {
@@ -444,11 +368,10 @@ export class AuthService {
     }
 
     return {
-      id: user.userId,
+      id: convertToString(user.userId),
       email: user.email,
       name: user.name,
-      hasPassword: !!user.password,
-      institutes: user.instituteUsers
+      hasPassword: !!user.password
     };
   }
 
@@ -481,11 +404,10 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Get updated organization access and institute roles
-    const [orgAccess, isGlobalAdmin, instituteRoles] = await Promise.all([
+    // Get updated organization access
+    const [orgAccess, isGlobalAdmin] = await Promise.all([
       this.organizationAccessService.getUserOrganizationAccessCompact(userBigIntId),
-      this.organizationAccessService.isGlobalOrganizationAdmin(userBigIntId),
-      this.getUserInstituteRoles(userBigIntId)
+      this.organizationAccessService.isGlobalOrganizationAdmin(userBigIntId)
     ]);
 
     // Generate new JWT token with updated access
@@ -495,7 +417,6 @@ export class AuthService {
       name: user.name,
       orgAccess,
       isGlobalAdmin,
-      institutes: instituteRoles,
       iat: Math.floor(Date.now() / 1000),
     };
 
@@ -504,7 +425,7 @@ export class AuthService {
     return {
       access_token: token,
       user: {
-        id: user.userId,
+        id: convertToString(user.userId),
         email: user.email,
         name: user.name,
       },
