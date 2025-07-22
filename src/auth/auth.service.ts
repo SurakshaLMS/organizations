@@ -50,6 +50,7 @@ export class AuthService {
   async login(loginDto: LoginDto): Promise<LoginResponse> {
     const { email, password } = loginDto;
     
+    console.log('🔐 AuthService.login called with email:', email);
     this.logger.log(`🔐 Login attempt for: ${email}`);
 
     try {
