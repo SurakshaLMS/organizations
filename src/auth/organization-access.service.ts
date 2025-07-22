@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface UserOrganizationAccess {
@@ -34,7 +34,17 @@ export const convertToString = (id: bigint | string | number): string => {
 };
 
 export const convertToBigInt = (id: string | bigint | number): bigint => {
-  return typeof id === 'bigint' ? id : BigInt(id);
+  if (typeof id === 'bigint') {
+    return id;
+  }
+  
+  // Validate that the ID is numeric
+  const numericString = String(id);
+  if (!/^\d+$/.test(numericString)) {
+    throw new BadRequestException(`Invalid ID format: "${id}". Expected a numeric value (e.g., "1", "123"), but received: "${numericString}"`);
+  }
+  
+  return BigInt(id);
 };
 
 @Injectable()

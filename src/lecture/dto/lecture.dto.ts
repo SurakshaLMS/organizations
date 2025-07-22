@@ -1,8 +1,9 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, Matches } from 'class-validator';
 
 export class CreateLectureDto {
   @IsString()
   @IsNotEmpty()
+  @Matches(/^\d+$/, { message: 'causeId must be a numeric string (e.g., "1", "123")' })
   causeId: string;
 
   @IsString()
