@@ -54,11 +54,25 @@ Content-Type: application/json
 **Purpose**: Trigger manual data synchronization
 **Body**: `{ "table": "users" | "organizations" | "all" }`
 
-### 5. Performance Testing
+### 6. Login Performance Testing
+```http
+POST /test/fast-login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "testpassword"
+}
+```
+**Purpose**: Test the optimized login performance (should be under 500ms)
+**Body**: Email and password for testing
+**Response**: Performance metrics and timing data
+
+### 7. System Performance Testing
 ```http
 GET /test/performance
 ```
-**Purpose**: Test the optimized system performance (115x faster)
+**Purpose**: Test the optimized system performance (115x faster BigInt conversion)
 **Response**: Performance metrics and benchmarks
 
 ## 🔄 Existing Sync APIs

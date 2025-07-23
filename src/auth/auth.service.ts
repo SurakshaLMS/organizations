@@ -42,7 +42,7 @@ export class AuthService {
   }
 
   /**
-   * Enhanced login with support for synced LAAS users
+   * OPTIMIZED Enhanced login with minimal database queries
    */
   async login(loginDto: LoginDto): Promise<LoginResponse> {
     const { email, password } = loginDto;
@@ -51,9 +51,28 @@ export class AuthService {
     this.logger.log(`🔐 Login attempt for: ${email}`);
 
     try {
-      // Find user by email
+      // OPTIMIZATION 1: Single query to get user data
       const user = await this.prisma.user.findUnique({
-        where: { email }
+        where: { email },
+        select: {
+          userId: true,
+          email: true,
+          name: true,
+          password: true,
+          createdAt: true,
+          updatedAt: true,
+          // Include only active organization memberships in the same query
+          organizationUsers: {
+            where: {
+              isVerified: true
+            },
+            select: {
+              organizationId: true,
+              role: true
+            },
+            take: 50 // Limit to prevent performance issues with users in too many orgs
+          }
+        }
       });
 
       if (!user) {
@@ -79,23 +98,23 @@ export class AuthService {
         };
       }
 
-      // Validate password with enhanced security
-      const isPasswordValid = await this.validatePasswordWithFallback(password, user.password);
+      // OPTIMIZATION 2: Fast password validation (no fallback during login for performance)
+      const isPasswordValid = await bcrypt.compare(password + this.pepper, user.password);
       if (!isPasswordValid) {
         this.logger.warn(`❌ Invalid password for: ${email}`);
         throw new UnauthorizedException('Invalid credentials');
       }
 
-      // Update last login timestamp
-      await this.updateLastLogin(user.userId);
+      // OPTIMIZATION 3: Generate compact organization access from already loaded data
+      const orgAccess = user.organizationUsers.map(ou => {
+        const roleCode = this.getRoleCode(ou.role);
+        return `${roleCode}${convertToString(ou.organizationId)}`;
+      });
 
-      // Get user's organization access
-      const [orgAccess, isGlobalAdmin] = await Promise.all([
-        this.organizationAccessService.getUserOrganizationAccessCompact(user.userId),
-        this.organizationAccessService.isGlobalOrganizationAdmin(user.userId)
-      ]);
+      // OPTIMIZATION 4: Simple admin check (can be cached later)
+      const isGlobalAdmin = orgAccess.some(access => access.startsWith('P') || access.startsWith('A'));
 
-      // Generate enhanced JWT token
+      // OPTIMIZATION 5: Simplified JWT payload
       const payload: EnhancedJwtPayload = { 
         sub: convertToString(user.userId), 
         email: user.email, 
@@ -109,7 +128,10 @@ export class AuthService {
         expiresIn: this.configService.get('JWT_EXPIRES_IN', '24h')
       });
 
-      this.logger.log(`✅ Login successful for: ${email}`);
+      // OPTIMIZATION 6: Update last login asynchronously (don't wait for it)
+      this.updateLastLoginAsync(user.userId);
+
+      this.logger.log(`✅ FAST Login successful for: ${email} (${orgAccess.length} orgs)`);
 
       return {
         access_token: accessToken,
@@ -133,6 +155,27 @@ export class AuthService {
       this.logger.error(`Login error for ${email}:`, error);
       throw new UnauthorizedException('Authentication failed');
     }
+  }
+
+  /**
+   * Get role code for compact organization access
+   */
+  private getRoleCode(role: string): string {
+    switch (role) {
+      case 'PRESIDENT': return 'P';
+      case 'ADMIN': return 'A'; 
+      case 'MEMBER': return 'M';
+      default: return 'M';
+    }
+  }
+
+  /**
+   * Async update last login (non-blocking for faster response)
+   */
+  private updateLastLoginAsync(userId: bigint): void {
+    this.updateLastLogin(userId).catch(error => {
+      this.logger.warn('Failed to update last login timestamp:', error);
+    });
   }
 
   /**
