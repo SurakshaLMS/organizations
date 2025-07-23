@@ -34,33 +34,21 @@ export const convertToString = (id: bigint | string | number): string => {
 };
 
 /**
- * Safe conversion for user IDs that might come from external systems
- * Handles both MySQL auto-increment IDs and external CUID user IDs
+ * Safe conversion for MySQL auto-increment IDs
+ * Production-optimized for numeric IDs only
  * @param id - The ID to convert
  * @param fieldName - Field name for error messages
- * @param allowExternalId - Whether to allow non-numeric IDs (for user IDs from external systems)
  * @returns BigInt for database operations or throws descriptive error
  */
 export const convertToBigInt = (
   id: string | bigint | number, 
-  fieldName: string = 'ID',
-  allowExternalId: boolean = false
+  fieldName: string = 'ID'
 ): bigint => {
   if (typeof id === 'bigint') {
     return id;
   }
   
   const idString = String(id).trim();
-  
-  // For user IDs from external systems (JWT tokens), handle CUID gracefully
-  if (allowExternalId && fieldName.toLowerCase().includes('user')) {
-    // Check if it's a CUID from external user management system
-    if (/^c[a-z0-9]{24,}$/i.test(idString)) {
-      throw new BadRequestException(
-        `External user ID detected: "${id}". This user ID is from an external system and cannot be used directly in this organization service. Please ensure user synchronization is complete.`
-      );
-    }
-  }
   
   // Validate numeric format for MySQL auto-increment IDs
   if (!/^\d+$/.test(idString)) {
