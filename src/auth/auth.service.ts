@@ -98,8 +98,8 @@ export class AuthService {
         };
       }
 
-      // OPTIMIZATION 2: Fast password validation (no fallback during login for performance)
-      const isPasswordValid = await bcrypt.compare(password + this.pepper, user.password);
+      // OPTIMIZATION 2: Enhanced password validation with fallback methods
+      const isPasswordValid = await this.enhancedAuthService.validatePassword(password, user.password);
       if (!isPasswordValid) {
         this.logger.warn(`❌ Invalid password for: ${email}`);
         throw new UnauthorizedException('Invalid credentials');
