@@ -127,10 +127,7 @@ export class AuthService {
         expiresIn: this.configService.get('JWT_EXPIRES_IN', '24h')
       });
 
-      // OPTIMIZATION 6: Update last login asynchronously (don't wait for it)
-      this.updateLastLoginAsync(user.userId);
-
-      this.logger.log(`✅ FAST Login successful for: ${email} (${orgAccess.length} orgs)`);
+      this.logger.log(`✅ ULTRA-FAST Login successful for: ${email} (${orgAccess.length} orgs)`);
 
       return {
         access_token: accessToken,
@@ -138,8 +135,7 @@ export class AuthService {
           id: convertToString(user.userId),
           email: user.email,
           name: user.name,
-          isFirstLogin: !user.updatedAt || user.createdAt === user.updatedAt,
-          lastLoginAt: new Date()
+          isFirstLogin: !user.updatedAt || user.createdAt === user.updatedAt
         },
         permissions: {
           organizations: orgAccess,
@@ -166,15 +162,6 @@ export class AuthService {
       case 'MEMBER': return 'M';
       default: return 'M';
     }
-  }
-
-  /**
-   * Async update last login (non-blocking for faster response)
-   */
-  private updateLastLoginAsync(userId: bigint): void {
-    this.updateLastLogin(userId).catch(error => {
-      this.logger.warn('Failed to update last login timestamp:', error);
-    });
   }
 
   /**
@@ -373,20 +360,6 @@ export class AuthService {
         isVerified: ou.isVerified
       }))
     };
-  }
-
-  /**
-   * Update last login timestamp
-   */
-  private async updateLastLogin(userId: bigint): Promise<void> {
-    try {
-      await this.prisma.user.update({
-        where: { userId },
-        data: { updatedAt: new Date() }
-      });
-    } catch (error) {
-      this.logger.warn('Failed to update last login:', error);
-    }
   }
 
   /**
