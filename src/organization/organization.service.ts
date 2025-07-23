@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
+import { UserIdResolutionService } from '../auth/user-id-resolution.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString } from '../auth/organization-access.service';
@@ -11,6 +12,7 @@ export class OrganizationService {
     private prisma: PrismaService,
     @Inject(forwardRef(() => AuthService))
     private authService: AuthService,
+    private userIdResolutionService: UserIdResolutionService,
   ) {}
 
   /**
@@ -652,7 +654,10 @@ export class OrganizationService {
    */
   async leaveOrganization(organizationId: string, userId: string) {
     const orgBigIntId = convertToBigInt(organizationId);
-    const userBigIntId = convertToBigInt(userId);
+    
+    // Resolve user ID from JWT token to internal MySQL user ID
+    const resolvedUserId = await this.userIdResolutionService.resolveUserIdFromToken(userId);
+    const userBigIntId = BigInt(resolvedUserId);
     
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
