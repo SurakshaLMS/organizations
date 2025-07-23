@@ -34,69 +34,38 @@ export const convertToString = (id: bigint | string | number): string => {
 };
 
 /**
- * Enhanced BigInt conversion with CUID detection and graceful handling
- * @param id - The ID to convert (numeric string, BigInt, number, or CUID)
- * @param fieldName - Optional field name for better error messages
- * @returns BigInt for database operations or throws descriptive error
+ * Optimized BigInt conversion for MySQL auto-increment IDs
+ * @param id - The ID to convert (numeric string, BigInt, number)
+ * @param fieldName - Optional field name for error messages
+ * @returns BigInt for database operations
  */
-export const convertToBigInt = (id: string | bigint | number, fieldName: string = 'ID'): bigint => {
+export const convertToBigInt = (
+  id: string | bigint | number, 
+  fieldName: string = 'ID'
+): bigint => {
   if (typeof id === 'bigint') {
     return id;
   }
   
-  const idString = String(id);
+  const idString = String(id).trim();
   
-  // Check if it's a CUID (starts with 'c' and has alphanumeric characters)
-  if (/^c[a-z0-9]{24,}$/i.test(idString)) {
+  // Validate numeric format for MySQL auto-increment IDs
+  if (!/^\d+$/.test(idString)) {
     throw new BadRequestException(
-      `Invalid ${fieldName} format: "${id}". ` +
-      `This endpoint expects numeric IDs (BigInt) but received a CUID. ` +
-      `Please check your database schema - all IDs should be BigInt auto-increment values, not CUIDs. ` +
-      `Expected format: "1", "123", "456789". Received: "${idString}"`
+      `Invalid ${fieldName} format: "${id}". Expected numeric value (MySQL auto-increment ID).`
     );
   }
   
-  // Check if it's a UUID (contains hyphens and has specific pattern)
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idString)) {
+  const bigIntValue = BigInt(idString);
+  
+  // Validate positive value (MySQL auto-increment starts from 1)
+  if (bigIntValue <= 0) {
     throw new BadRequestException(
-      `Invalid ${fieldName} format: "${id}". ` +
-      `This endpoint expects numeric IDs (BigInt) but received a UUID. ` +
-      `Please check your database schema - all IDs should be BigInt auto-increment values, not UUIDs. ` +
-      `Expected format: "1", "123", "456789". Received: "${idString}"`
+      `Invalid ${fieldName} value: "${id}". Must be positive integer (MySQL auto-increment ID).`
     );
   }
   
-  // Check if it contains non-numeric characters (excluding leading/trailing whitespace)
-  const trimmedId = idString.trim();
-  if (!/^\d+$/.test(trimmedId)) {
-    throw new BadRequestException(
-      `Invalid ${fieldName} format: "${id}". ` +
-      `Expected a numeric value (e.g., "1", "123", "456789") but received: "${idString}". ` +
-      `Please ensure the ${fieldName} is a valid BigInt numeric string.`
-    );
-  }
-  
-  // Convert to BigInt with additional validation
-  try {
-    const bigIntValue = BigInt(trimmedId);
-    
-    // Validate positive value (most IDs should be positive)
-    if (bigIntValue <= 0) {
-      throw new BadRequestException(
-        `Invalid ${fieldName} value: "${id}". ` +
-        `${fieldName} must be a positive integer greater than 0. Received: ${bigIntValue}`
-      );
-    }
-    
-    return bigIntValue;
-  } catch (error) {
-    if (error instanceof BadRequestException) {
-      throw error;
-    }
-    throw new BadRequestException(
-      `Failed to convert ${fieldName} "${id}" to BigInt: ${error.message}`
-    );
-  }
+  return bigIntValue;
 };
 
 @Injectable()

@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import helmet from 'helmet';
 
 async function bootstrap() {
@@ -39,6 +40,9 @@ async function bootstrap() {
     credentials: configService.get<boolean>('app.corsCredentials'),
   });
 
+  // Global exception filter for enhanced error handling
+  app.useGlobalFilters(new GlobalExceptionFilter());
+
   // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
@@ -61,6 +65,7 @@ async function bootstrap() {
       );
     }
     
+    // Optimized BigInt serialization for production
     private sanitizeBigInt(data: any): any {
       if (Array.isArray(data)) {
         return data.map(item => this.sanitizeBigInt(item));
