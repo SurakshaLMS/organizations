@@ -7,7 +7,6 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { EnhancedAuthService } from './enhanced-auth.service';
 import { OrganizationAccessService } from './organization-access.service';
-import { UserIdResolutionService } from './user-id-resolution.service';
 import { OrganizationAccessGuard } from './guards/organization-access.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 
@@ -32,7 +31,6 @@ import { PrismaModule } from '../prisma/prisma.module';
     JwtStrategy, 
     EnhancedAuthService, 
     OrganizationAccessService,
-    UserIdResolutionService,
     OrganizationAccessGuard,
   ],
   exports: [
@@ -40,7 +38,6 @@ import { PrismaModule } from '../prisma/prisma.module';
     JwtStrategy, 
     EnhancedAuthService, 
     OrganizationAccessService,
-    UserIdResolutionService,
     OrganizationAccessGuard,
   ],
 })

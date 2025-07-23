@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
-import { UserIdResolutionService } from '../auth/user-id-resolution.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString } from '../auth/organization-access.service';
@@ -12,8 +11,16 @@ export class OrganizationService {
     private prisma: PrismaService,
     @Inject(forwardRef(() => AuthService))
     private authService: AuthService,
-    private userIdResolutionService: UserIdResolutionService,
   ) {}
+
+  /**
+   * Simple conversion from string to BigInt for MySQL auto-increment IDs
+   * @param id - Numeric string ID
+   * @returns BigInt for database operations
+   */
+  private toBigInt(id: string): bigint {
+    return BigInt(id);
+  }
 
   /**
    * Get organization names by IDs for compact JWT token operations
@@ -79,7 +86,7 @@ export class OrganizationService {
     }
 
     // Create organization
-    const creatorUserBigIntId = convertToBigInt(creatorUserId);
+    const creatorUserBigIntId = this.toBigInt(creatorUserId);
     const instituteBigIntId = instituteId ? convertToBigInt(instituteId) : null;
     
     const organization = await this.prisma.organization.create({
@@ -119,7 +126,7 @@ export class OrganizationService {
     const where: any = {};
 
     if (userId) {
-      const userBigIntId = convertToBigInt(userId, 'userId');
+      const userBigIntId = this.toBigInt(userId);
       // Get user's organizations and public organizations
       where.OR = [
         { isPublic: true },
@@ -250,7 +257,7 @@ export class OrganizationService {
         // Include user's role and status in this organization
         organizationUsers: {
           where: {
-            userId: convertToBigInt(userId),
+            userId: this.toBigInt(userId),
             isVerified: true,
           },
           select: {
@@ -314,7 +321,7 @@ export class OrganizationService {
 
     // Check if user has access to this organization (if it's private)
     if (!organization.isPublic && userId) {
-      const userBigIntId = convertToBigInt(userId);
+      const userBigIntId = this.toBigInt(userId);
       const userInOrg = await this.prisma.organizationUser.findFirst({
         where: {
           organizationId: orgBigIntId,
@@ -425,7 +432,7 @@ export class OrganizationService {
     }
 
     // Check if user is already enrolled
-    const userBigIntId = convertToBigInt(userId);
+    const userBigIntId = this.toBigInt(userId);
     const existingEnrollment = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
@@ -489,7 +496,7 @@ export class OrganizationService {
 
     // Check if user exists in organization
     const orgBigIntId = convertToBigInt(organizationId);
-    const userBigIntId = convertToBigInt(userId);
+    const userBigIntId = this.toBigInt(userId);
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
@@ -653,11 +660,8 @@ export class OrganizationService {
    * Leave organization
    */
   async leaveOrganization(organizationId: string, userId: string) {
-    const orgBigIntId = convertToBigInt(organizationId);
-    
-    // Resolve user ID from JWT token to internal MySQL user ID
-    const resolvedUserId = await this.userIdResolutionService.resolveUserIdFromToken(userId);
-    const userBigIntId = BigInt(resolvedUserId);
+    const orgBigIntId = this.toBigInt(organizationId);
+    const userBigIntId = this.toBigInt(userId);
     
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
@@ -691,7 +695,7 @@ export class OrganizationService {
    */
   private async checkUserRole(organizationId: string, userId: string, requiredRoles: string[]) {
     const orgBigIntId = convertToBigInt(organizationId);
-    const userBigIntId = convertToBigInt(userId);
+    const userBigIntId = this.toBigInt(userId);
     
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
@@ -720,7 +724,7 @@ export class OrganizationService {
    */
   private async checkUserAccess(organizationId: string, userId: string) {
     const orgBigIntId = convertToBigInt(organizationId);
-    const userBigIntId = convertToBigInt(userId);
+    const userBigIntId = this.toBigInt(userId);
     
     const organization = await this.prisma.organization.findUnique({
       where: { organizationId: orgBigIntId },
