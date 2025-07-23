@@ -207,11 +207,11 @@ export class InstituteUserService {
     const where: any = {};
 
     if (filterDto.instituteId) {
-      where.instituteId = filterDto.instituteId;
+      where.instituteId = convertToBigInt(filterDto.instituteId);
     }
 
     if (filterDto.userId) {
-      where.userId = filterDto.userId;
+      where.userId = convertToBigInt(filterDto.userId);
     }
 
     if (filterDto.role) {

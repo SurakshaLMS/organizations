@@ -286,14 +286,14 @@ export class OrganizationService {
 
     // Transform data to flatten user role information
     const transformedOrganizations = organizations.map(org => ({
-      organizationId: org.organizationId,
+      organizationId: org.organizationId.toString(),
       name: org.name,
       type: org.type,
       isPublic: org.isPublic,
-      instituteId: org.instituteId,
+      instituteId: org.instituteId ? org.instituteId.toString() : null,
       userRole: (org as any).organizationUsers[0]?.role || 'MEMBER',
       isVerified: (org as any).organizationUsers[0]?.isVerified || false,
-      joinedAt: (org as any).organizationUsers[0]?.createdAt || null,
+      joinedAt: (org as any).organizationUsers[0]?.createdAt ? new Date((org as any).organizationUsers[0].createdAt).toISOString() : null,
       memberCount: (org as any)._count.organizationUsers,
       causeCount: (org as any)._count.causes,
     }));

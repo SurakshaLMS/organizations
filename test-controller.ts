@@ -69,6 +69,74 @@ export class TestController {
   }
 
   /**
+   * Test the fixed joinedAt date serialization
+   */
+  @Get('joined-at-fix')
+  async testJoinedAtFix(@Query('userId') userId: string = '40') {
+    try {
+      console.log(`🧪 Testing joinedAt date serialization with userId: ${userId}`);
+      
+      // Test direct organization user query
+      const userBigIntId = BigInt(userId);
+      
+      const orgUsers = await this.prisma.organizationUser.findMany({
+        where: {
+          userId: userBigIntId,
+          isVerified: true
+        },
+        select: {
+          userId: true,
+          organizationId: true,
+          role: true,
+          isVerified: true,
+          createdAt: true,
+          organization: {
+            select: {
+              organizationId: true,
+              name: true,
+              type: true
+            }
+          }
+        },
+        take: 3
+      });
+      
+      // Transform to match API response format
+      const transformedData = orgUsers.map(ou => ({
+        organizationId: ou.organizationId.toString(),
+        name: ou.organization.name,
+        type: ou.organization.type,
+        userRole: ou.role,
+        isVerified: ou.isVerified,
+        joinedAt: ou.createdAt ? new Date(ou.createdAt).toISOString() : null,
+        rawCreatedAt: ou.createdAt,
+        createdAtType: typeof ou.createdAt
+      }));
+      
+      return {
+        success: true,
+        message: 'JoinedAt date serialization test completed',
+        userId,
+        userBigIntId: userBigIntId.toString(),
+        transformedData,
+        testResults: {
+          totalRecords: transformedData.length,
+          allHaveJoinedAt: transformedData.every(item => item.joinedAt !== null && item.joinedAt !== '{}'),
+          sampleJoinedAt: transformedData[0]?.joinedAt || 'No data'
+        },
+        timestamp: new Date().toISOString()
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
+        userId,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
    * Test the fixed getUserEnrolledOrganizations endpoint
    */
   @Get('user-enrolled-orgs')
