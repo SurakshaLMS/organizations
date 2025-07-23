@@ -206,11 +206,14 @@ export class OrganizationService {
   async getUserEnrolledOrganizations(userId: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any>> {
     const pagination = paginationDto || new PaginationDto();
 
+    // Convert user ID to BigInt for database operations
+    const userBigIntId = this.toBigInt(userId);
+
     // Build where clause for user's enrolled organizations only
     const where: any = {
       organizationUsers: {
         some: {
-          userId,
+          userId: userBigIntId,
           isVerified: true, // Only verified memberships
         },
       },
@@ -257,7 +260,7 @@ export class OrganizationService {
         // Include user's role and status in this organization
         organizationUsers: {
           where: {
-            userId: this.toBigInt(userId),
+            userId: userBigIntId,
             isVerified: true,
           },
           select: {
