@@ -47,7 +47,6 @@ export class AuthService {
   async login(loginDto: LoginDto): Promise<LoginResponse> {
     const { email, password } = loginDto;
     
-    console.log('🔐 AuthService.login called with email:', email);
     this.logger.log(`🔐 Login attempt for: ${email}`);
 
     try {
@@ -98,8 +97,8 @@ export class AuthService {
         };
       }
 
-      // OPTIMIZATION 2: Enhanced password validation with fallback methods
-      const isPasswordValid = await this.enhancedAuthService.validatePassword(password, user.password);
+      // OPTIMIZATION 2: Fast password validation with multiple fallback methods
+      const isPasswordValid = await this.validatePasswordWithFallback(password, user.password);
       if (!isPasswordValid) {
         this.logger.warn(`❌ Invalid password for: ${email}`);
         throw new UnauthorizedException('Invalid credentials');
@@ -183,21 +182,15 @@ export class AuthService {
    */
   private async validatePasswordWithFallback(plainPassword: string, hashedPassword: string): Promise<boolean> {
     try {
-      // Method 1: Try enhanced auth service (current system)
-      const enhancedMatch = await this.enhancedAuthService.validatePassword(plainPassword, hashedPassword);
-      if (enhancedMatch) {
-        this.logger.debug('✅ Password validated using enhanced method');
+      // Method 1: Try direct bcrypt comparison first (fastest, most common)
+      const directMatch = await bcrypt.compare(plainPassword, hashedPassword);
+      if (directMatch) {
         return true;
       }
 
-      // Method 2: Try direct bcrypt comparison (LAAS legacy)
-      const directMatch = await bcrypt.compare(plainPassword, hashedPassword);
-      if (directMatch) {
-        this.logger.debug('✅ Password validated using direct bcrypt (LAAS legacy)');
-        // Auto-migrate to enhanced format in background
-        this.autoMigratePassword(plainPassword, hashedPassword).catch(err => 
-          this.logger.warn('Password auto-migration failed:', err)
-        );
+      // Method 2: Try enhanced auth service (encrypted passwords)
+      const enhancedMatch = await this.enhancedAuthService.validatePassword(plainPassword, hashedPassword);
+      if (enhancedMatch) {
         return true;
       }
 
@@ -205,11 +198,9 @@ export class AuthService {
       const pepperedPassword = this.createPepperedPassword(plainPassword);
       const pepperedMatch = await bcrypt.compare(pepperedPassword, hashedPassword);
       if (pepperedMatch) {
-        this.logger.debug('✅ Password validated using peppered format');
         return true;
       }
 
-      this.logger.debug('❌ All password validation methods failed');
       return false;
 
     } catch (error) {

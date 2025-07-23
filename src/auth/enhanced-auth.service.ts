@@ -18,33 +18,21 @@ export class EnhancedAuthService {
    */
   async validatePassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
     try {
-      console.log('🔐 Enhanced Auth: Validating password...');
-      console.log('Plain password length:', plainPassword.length);
-      console.log('Hashed password length:', hashedPassword.length);
-      console.log('Hash starts with $2b$:', hashedPassword.startsWith('$2b$'));
-      
       // Method 1: Check if it's a direct bcrypt hash (legacy support)
       const directBcryptMatch = await bcrypt.compare(plainPassword, hashedPassword);
-      console.log('Direct bcrypt match:', directBcryptMatch);
       if (directBcryptMatch) {
-        console.log('✅ Password validated using direct bcrypt');
         return true;
       }
 
       // Method 2: Check if it's encrypted + bcrypt (new enhanced method)
       const encryptedPassword = this.encrypt(plainPassword);
-      console.log('Encrypted password length:', encryptedPassword.length);
       const enhancedMatch = await bcrypt.compare(encryptedPassword, hashedPassword);
-      console.log('Enhanced bcrypt match:', enhancedMatch);
       if (enhancedMatch) {
-        console.log('✅ Password validated using enhanced method');
         return true;
       }
 
-      console.log('❌ Password validation failed');
       return false;
     } catch (error) {
-      console.error('Password validation error:', error);
       return false;
     }
   }
