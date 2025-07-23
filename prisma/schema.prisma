@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,95 +7,61 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================================
-// EXTERNAL TABLES (Read-only, no CRUD operations)
-// ============================================================================
-
-// Main user table managed externally
 model User {
-  userId     BigInt    @id @default(autoincrement()) @db.BigInt
-  email      String    @unique @db.VarChar(191)
-  password   String    @db.VarChar(255) // Hashed password for authentication
-  name       String    @db.VarChar(191)
-  lastSyncAt DateTime? // Last time this record was synced
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  // Relations
-  instituteUsers       InstituteUser[]
-  organizationUsers    OrganizationUser[]
+  userId            BigInt             @id @default(autoincrement())
+  email             String             @unique
+  password          String             @db.VarChar(255)
+  name              String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  lastSyncAt        DateTime?
+  instituteUsers    InstituteUser[]
+  organizationUsers OrganizationUser[]
 
   @@map("user")
 }
 
-// Institute table managed externally
 model Institute {
-  instituteId BigInt    @id @default(autoincrement()) @db.BigInt
-  name        String    @db.VarChar(191)
-  imageUrl    String?   @db.VarChar(500)
-  lastSyncAt  DateTime? // Last time this record was synced
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  // Relations
+  instituteId    BigInt          @id @default(autoincrement())
+  name           String
+  imageUrl       String?         @db.VarChar(500)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  lastSyncAt     DateTime?
   instituteUsers InstituteUser[]
-  organizations  Organization[] // Organizations assigned to this institute
+  organizations  Organization[]
 
   @@map("institute")
 }
 
-// Junction table for institute users (managed externally)
-// Enum for institute user roles
-enum InstituteRole {
-  STUDENT
-  FACULTY
-  STAFF
-  ADMIN
-  DIRECTOR
-}
-
 model InstituteUser {
-  instituteId   BigInt        @db.BigInt
-  userId        BigInt        @db.BigInt
-  role          InstituteRole @default(STUDENT)
-  isActive      Boolean       @default(true)
-  lastSyncAt    DateTime?     // Last time this record was synced
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  // Relations
-  institute    Institute @relation(fields: [instituteId], references: [instituteId], onDelete: Cascade)
-  user         User      @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  instituteId BigInt
+  userId      BigInt
+  role        InstituteRole @default(STUDENT)
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  lastSyncAt  DateTime?
+  institute   Institute     @relation(fields: [instituteId], references: [instituteId], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@id([instituteId, userId])
+  @@index([userId], map: "institute_users_userId_fkey")
   @@map("institute_users")
 }
 
-// ============================================================================
-// ORGANIZATION SYSTEM (Full CRUD)
-// ============================================================================
-
-// Enum for organization types
-enum OrganizationType {
-  INSTITUTE
-  GLOBAL
-}
-
-// Organization table
 model Organization {
-  organizationId BigInt           @id @default(autoincrement()) @db.BigInt
-  name           String           @db.VarChar(191)
-  type           OrganizationType
-  isPublic       Boolean          @default(false)
-  enrollmentKey  String?          @db.VarChar(191) // Nullable for public organizations (non-unique)
-  instituteId    BigInt?          @db.BigInt // Link to institute (optional)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-
-  // Relations
-  institute         Institute?         @relation(fields: [instituteId], references: [instituteId], onDelete: SetNull)
-  organizationUsers OrganizationUser[]
+  organizationId    BigInt             @id @default(autoincrement())
+  name              String
+  type              OrganizationType
+  isPublic          Boolean            @default(false)
+  enrollmentKey     String?
+  instituteId       BigInt?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   causes            Cause[]
+  institute         Institute?         @relation(fields: [instituteId], references: [instituteId])
+  organizationUsers OrganizationUser[]
 
   @@index([type])
   @@index([isPublic])
@@ -106,83 +69,59 @@ model Organization {
   @@map("organization")
 }
 
-// Enum for user roles in organizations
-enum OrganizationRole {
-  MEMBER
-  MODERATOR
-  ADMIN
-  PRESIDENT
-}
-
-// Junction table for organization users
 model OrganizationUser {
-  organizationId BigInt           @db.BigInt
-  userId         BigInt           @db.BigInt
+  organizationId BigInt
+  userId         BigInt
   role           OrganizationRole @default(MEMBER)
   isVerified     Boolean          @default(false)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
-
-  // Relations
-  organization Organization @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@id([organizationId, userId])
   @@index([role])
   @@index([isVerified])
+  @@index([userId], map: "organization_users_userId_fkey")
   @@map("organization_users")
 }
 
-// ============================================================================
-// CAUSE SYSTEM (Full CRUD)
-// ============================================================================
-
-// Cause table linked to organizations
 model Cause {
-  causeId        BigInt   @id @default(autoincrement()) @db.BigInt
-  organizationId BigInt   @db.BigInt
-  title          String   @db.VarChar(191)
-  description    String?  @db.Text
-  introVideoUrl  String?  @db.VarChar(500) // Introduction video URL
-  isPublic       Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relations
-  organization Organization @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
-  lectures     Lecture[]
-  assignments  Assignment[]
+  causeId        BigInt       @id @default(autoincrement())
+  organizationId BigInt
+  title          String
+  description    String?      @db.Text
+  isPublic       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  introVideoUrl  String?      @db.VarChar(500)
+  assignments    Assignment[]
+  organization   Organization @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
+  lectures       Lecture[]
 
   @@index([organizationId])
   @@index([isPublic])
   @@map("cause")
 }
 
-// ============================================================================
-// LECTURE SYSTEM (Full CRUD)
-// ============================================================================
-
-// Lecture table linked to causes
 model Lecture {
-  lectureId      BigInt   @id @default(autoincrement()) @db.BigInt
-  causeId        BigInt   @db.BigInt
-  title          String   @db.VarChar(191)
-  description    String?  @db.Text
-  content        String?  @db.Text
-  venue          String?  @db.VarChar(255) // Physical venue or online platform details
-  mode           String?  @db.VarChar(50)  // 'online' or 'physical'
-  timeStart      DateTime?                 // Start time of lecture
-  timeEnd        DateTime?                 // End time of lecture
-  liveLink       String?  @db.VarChar(500) // Live streaming link
-  liveMode       String?  @db.VarChar(50)  // 'youtube', 'meet', 'zoom', etc.
-  recordingUrl   String?  @db.VarChar(500) // Recording URL after lecture
-  isPublic       Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relations
-  cause           Cause           @relation(fields: [causeId], references: [causeId], onDelete: Cascade)
-  documentations  Documentation[]
+  lectureId      BigInt          @id @default(autoincrement())
+  causeId        BigInt
+  title          String
+  content        String?         @db.Text
+  isPublic       Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  description    String?         @db.Text
+  liveLink       String?         @db.VarChar(500)
+  liveMode       String?         @db.VarChar(50)
+  mode           String?         @db.VarChar(50)
+  recordingUrl   String?         @db.VarChar(500)
+  timeEnd        DateTime?
+  timeStart      DateTime?
+  venue          String?         @db.VarChar(255)
+  documentations Documentation[]
+  cause          Cause           @relation(fields: [causeId], references: [causeId], onDelete: Cascade)
 
   @@index([causeId])
   @@index([isPublic])
@@ -191,46 +130,52 @@ model Lecture {
   @@map("lecture")
 }
 
-// ============================================================================
-// ASSIGNMENT SYSTEM (Full CRUD)
-// ============================================================================
-
-// Assignment table linked to causes
 model Assignment {
-  assignmentId BigInt    @id @default(autoincrement()) @db.BigInt
-  causeId      BigInt    @db.BigInt
-  title        String    @db.VarChar(191)
+  assignmentId BigInt    @id @default(autoincrement())
+  causeId      BigInt
+  title        String
   description  String?   @db.Text
   dueDate      DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-
-  // Relations
-  cause Cause @relation(fields: [causeId], references: [causeId], onDelete: Cascade)
+  cause        Cause     @relation(fields: [causeId], references: [causeId], onDelete: Cascade)
 
   @@index([causeId])
   @@index([dueDate])
   @@map("assignment")
 }
 
-// ============================================================================
-// DOCUMENTATION SYSTEM (Full CRUD)
-// ============================================================================
-
-// Documentation table linked to lectures
 model Documentation {
-  documentationId BigInt   @id @default(autoincrement()) @db.BigInt
-  lectureId       BigInt   @db.BigInt
-  title           String   @db.VarChar(191)
-  description     String?  @db.Text         // Description of the document
+  documentationId BigInt   @id @default(autoincrement())
+  lectureId       BigInt
+  title           String
   content         String?  @db.Text
-  docUrl          String?  @db.VarChar(500) // Document URL (PDF, DOC, etc.)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
-  // Relations
-  lecture Lecture @relation(fields: [lectureId], references: [lectureId], onDelete: Cascade)
+  description     String?  @db.Text
+  docUrl          String?  @db.VarChar(500)
+  lecture         Lecture  @relation(fields: [lectureId], references: [lectureId], onDelete: Cascade)
 
   @@index([lectureId])
   @@map("documentation")
+}
+
+enum InstituteRole {
+  STUDENT
+  FACULTY
+  STAFF
+  ADMIN
+  DIRECTOR
+}
+
+enum OrganizationType {
+  INSTITUTE
+  GLOBAL
+}
+
+enum OrganizationRole {
+  MEMBER
+  MODERATOR
+  ADMIN
+  PRESIDENT
 }
