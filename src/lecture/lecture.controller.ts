@@ -44,19 +44,35 @@ export class LectureController {
    * 
    * Features:
    * - Optional JWT authentication for enhanced access
+   * - Complete document details included (not just count)
    * - Optimized cause ID filtering (main feature)
    * - JWT-based access control with zero auth queries
    * - Production-ready pagination and search
    * 
-   * Query Parameters:
-   * - causeIds: "1,2,3" - Filter by multiple cause IDs
+   * Query Parameters (ALL PAGINATION FILTERS SUPPORTED):
+   * 
+   * FILTERING:
+   * - causeIds: "1,2,3" - Filter by multiple cause IDs (MAIN FEATURE)
    * - causeId: "1" - Filter by single cause ID
    * - organizationIds: "1,2" - Filter by organization IDs (authenticated users only)
+   * - organizationId: "1" - Filter by single organization ID
    * - search: "machine learning" - Search in title/description
-   * - page, limit, sortBy, sortOrder - Pagination and sorting
-   * - mode: "online|offline|hybrid" - Filter by lecture mode
-   * - status: "upcoming|live|completed" - Filter by lecture status
+   * - mode: "online|physical" - Filter by lecture mode
+   * - status: "upcoming|live|completed|all" - Filter by lecture status
    * - isPublic: "true|false|all" - Filter by visibility
+   * - fromDate: "2025-07-30" - Filter lectures from date
+   * - toDate: "2025-08-30" - Filter lectures to date
+   * 
+   * PAGINATION & SORTING:
+   * - page: "1" - Page number (default: 1)
+   * - limit: "10" - Items per page (default: 10, max: 100)
+   * - sortBy: "createdAt|updatedAt|timeStart|timeEnd|title" - Sort field (default: createdAt)
+   * - sortOrder: "asc|desc" - Sort direction (default: desc)
+   * 
+   * EXAMPLES:
+   * /lectures?causeIds=1,2,3&page=1&limit=10&sortBy=title&sortOrder=asc
+   * /lectures?search=machine&status=upcoming&page=2&limit=5
+   * /lectures?fromDate=2025-07-30&toDate=2025-08-30&mode=online
    */
   @Get()
   @UseGuards(OptionalJwtAuthGuard)
@@ -64,7 +80,7 @@ export class LectureController {
     @Query() queryDto: LectureQueryDto,
     @GetUser() user?: EnhancedJwtPayload,
   ) {
-    this.logger.log(`📚 Fetching lectures with query: ${JSON.stringify(queryDto)} for user ${user?.sub || 'anonymous'}`);
+    this.logger.log(`📚 Fetching lectures with filters: ${JSON.stringify(queryDto)} for user ${user?.sub || 'anonymous'}`);
     return this.lectureService.getLectures(user, queryDto);
   }
 

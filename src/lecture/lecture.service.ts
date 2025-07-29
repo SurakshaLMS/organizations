@@ -168,10 +168,18 @@ export class LectureService {
             updatedAt: true,
             causeId: true, // Only ID, no cause details
             // NO cause relation - saves unnecessary join
-            // Documents count for performance
-            _count: {
+            // Include document details (not just count)
+            documentations: {
               select: {
-                documentations: true,
+                documentationId: true,
+                title: true,
+                description: true,
+                docUrl: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+              orderBy: {
+                createdAt: 'desc',
               },
             },
           },
@@ -200,7 +208,16 @@ export class LectureService {
         createdAt: lecture.createdAt.toISOString(),
         updatedAt: lecture.updatedAt.toISOString(),
         causeId: convertToString(lecture.causeId),
-        documentCount: lecture._count.documentations,
+        // Include full document details with proper date formatting
+        documents: lecture.documentations.map(doc => ({
+          documentationId: convertToString(doc.documentationId),
+          title: doc.title,
+          description: doc.description,
+          docUrl: doc.docUrl,
+          createdAt: doc.createdAt.toISOString(),
+          updatedAt: doc.updatedAt.toISOString(),
+        })),
+        documentCount: lecture.documentations.length,
       }));
 
       const paginationDto = new PaginationDto();
@@ -660,9 +677,11 @@ export class LectureService {
       where.isPublic = queryDto.isPublic === 'true';
     }
 
-    // Step 6: DATE FILTERING (INDEXED FIELDS)
+    // Step 6: DATE FILTERING (INDEXED FIELDS) - ENHANCED
     if (queryDto.fromDate || queryDto.toDate) {
-      where.timeStart = {};
+      if (!where.timeStart) {
+        where.timeStart = {};
+      }
       if (queryDto.fromDate) {
         where.timeStart.gte = new Date(queryDto.fromDate);
       }
@@ -671,18 +690,25 @@ export class LectureService {
       }
     }
 
-    // Step 7: STATUS FILTERING (OPTIMIZED DATE QUERIES)
+    // Step 7: STATUS FILTERING (OPTIMIZED DATE QUERIES) - ENHANCED
     if (queryDto.status && queryDto.status !== 'all') {
       const now = new Date();
       switch (queryDto.status) {
         case 'upcoming':
-          where.timeStart = { ...where.timeStart, gt: now };
+          // Override previous timeStart filters for status
+          where.timeStart = { gt: now };
           break;
         case 'live':
+          // Currently happening lectures
           where.AND = [
             ...(where.AND || []),
             { timeStart: { lte: now } },
-            { timeEnd: { gte: now } },
+            { 
+              OR: [
+                { timeEnd: { gte: now } },
+                { timeEnd: null }, // No end time means ongoing
+              ]
+            },
           ];
           break;
         case 'completed':
