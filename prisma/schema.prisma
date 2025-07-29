@@ -52,19 +52,21 @@ model InstituteUser {
 
 model Organization {
   organizationId    BigInt             @id @default(autoincrement())
-  name              String
-  type              OrganizationType
-  isPublic          Boolean            @default(false)
-  enrollmentKey     String?
-  instituteId       BigInt?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  causes            Cause[]
-  institute         Institute?         @relation(fields: [instituteId], references: [instituteId])
-  organizationUsers OrganizationUser[]
+  name                    String
+  type                    OrganizationType
+  isPublic                Boolean            @default(false)
+  shouldVerifyEnrollment  Boolean            @default(true)
+  enrollmentKey           String?
+  instituteId             BigInt?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  causes                  Cause[]
+  institute               Institute?         @relation(fields: [instituteId], references: [instituteId])
+  organizationUsers       OrganizationUser[]
 
   @@index([type])
   @@index([isPublic])
+  @@index([shouldVerifyEnrollment])
   @@index([instituteId])
   @@map("organization")
 }
