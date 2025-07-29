@@ -113,4 +113,20 @@ export class LectureController {
     this.logger.warn(`🗑️ Deleting lecture ${lectureId} by user ${user.sub}`);
     return this.lectureService.deleteLecture(lectureId, user);
   }
+
+  /**
+   * GET LECTURE DOCUMENTS (ENTERPRISE OPTIMIZED)
+   * 
+   * Separate endpoint for documents to avoid loading them when not needed
+   * Supports optional authentication for enhanced access
+   */
+  @Get(':id/documents')
+  @UseGuards(OptionalJwtAuthGuard)
+  async getLectureDocuments(
+    @Param('id') lectureId: string,
+    @GetUser() user?: EnhancedJwtPayload,
+  ) {
+    this.logger.log(`📄 Fetching documents for lecture ${lectureId} by user ${user?.sub || 'anonymous'}`);
+    return this.lectureService.getLectureDocuments(lectureId, user);
+  }
 }
