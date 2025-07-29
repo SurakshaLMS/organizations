@@ -1,16 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
+import { JwtAccessValidationService } from '../auth/jwt-access-validation.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
-import { convertToBigInt, convertToString } from '../auth/organization-access.service';
+import { convertToBigInt, convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
 
 @Injectable()
 export class OrganizationService {
+  private readonly logger = new Logger(OrganizationService.name);
+
   constructor(
     private prisma: PrismaService,
     @Inject(forwardRef(() => AuthService))
     private authService: AuthService,
+    private jwtAccessValidation: JwtAccessValidationService,
   ) {}
 
   /**
@@ -342,20 +346,22 @@ export class OrganizationService {
   }
 
   /**
-   * Update organization
+   * Update organization (ENHANCED with JWT-based validation)
    */
-  async updateOrganization(organizationId: string, updateOrganizationDto: UpdateOrganizationDto, userId: string) {
+  async updateOrganization(
+    organizationId: string, 
+    updateOrganizationDto: UpdateOrganizationDto, 
+    user: EnhancedJwtPayload
+  ) {
     const { name, isPublic, enrollmentKey, instituteId } = updateOrganizationDto;
 
-    // Check if user has admin/president role
-    await this.checkUserRole(organizationId, userId, ['ADMIN', 'PRESIDENT']);
+    // ENTERPRISE JWT-BASED ACCESS VALIDATION (zero database queries)
+    this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
 
     // Validate enrollment key requirement
     if (isPublic === false && !enrollmentKey) {
       throw new BadRequestException('Enrollment key is required for private organizations');
     }
-
-    // Note: Enrollment keys are no longer unique, multiple organizations can use the same key
 
     // Validate institute exists if provided
     if (instituteId !== undefined) {
@@ -379,6 +385,8 @@ export class OrganizationService {
     }
     if (instituteId !== undefined) updateData.instituteId = instituteId ? convertToBigInt(instituteId) : null;
 
+    this.logger.log(`📝 Organization ${organizationId} updated by user ${user.sub} (${this.jwtAccessValidation.getUserRoleInOrganization(user, organizationId)})`);
+
     return this.prisma.organization.update({
       where: { organizationId: orgBigIntId },
       data: updateData,
@@ -394,13 +402,16 @@ export class OrganizationService {
   }
 
   /**
-   * Delete organization
+   * Delete organization (ENHANCED with JWT-based validation)
    */
-  async deleteOrganization(organizationId: string, userId: string) {
-    // Check if user has president role
-    await this.checkUserRole(organizationId, userId, ['PRESIDENT']);
+  async deleteOrganization(organizationId: string, user: EnhancedJwtPayload) {
+    // ENTERPRISE JWT-BASED ACCESS VALIDATION (zero database queries)
+    this.validateJwtAccess(user, organizationId, ['PRESIDENT']);
 
     const orgBigIntId = convertToBigInt(organizationId);
+
+    this.logger.warn(`🗑️ Organization ${organizationId} deleted by user ${user.sub} (PRESIDENT)`);
+
     return this.prisma.organization.delete({
       where: { organizationId: orgBigIntId },
     });
@@ -489,13 +500,13 @@ export class OrganizationService {
   }
 
   /**
-   * Verify user in organization
+   * Verify user in organization (ENHANCED with JWT-based validation)
    */
-  async verifyUser(organizationId: string, verifyUserDto: VerifyUserDto, verifierUserId: string) {
+  async verifyUser(organizationId: string, verifyUserDto: VerifyUserDto, verifierUser: EnhancedJwtPayload) {
     const { userId, isVerified } = verifyUserDto;
 
-    // Check if verifier has admin/president role
-    await this.checkUserRole(organizationId, verifierUserId, ['ADMIN', 'PRESIDENT']);
+    // ENTERPRISE JWT-BASED ACCESS VALIDATION (zero database queries)
+    this.validateJwtAccess(verifierUser, organizationId, ['ADMIN', 'PRESIDENT']);
 
     // Check if user exists in organization
     const orgBigIntId = convertToBigInt(organizationId);
@@ -513,7 +524,9 @@ export class OrganizationService {
       throw new NotFoundException('User not found in organization');
     }
 
-    return this.prisma.organizationUser.update({
+    this.logger.log(`👤 User ${userId} ${isVerified ? 'verified' : 'unverified'} in organization ${organizationId} by ${verifierUser.sub} (${this.jwtAccessValidation.getUserRoleInOrganization(verifierUser, organizationId)})`);
+
+    const result = await this.prisma.organizationUser.update({
       where: {
         organizationId_userId: {
           organizationId: orgBigIntId,
@@ -531,6 +544,11 @@ export class OrganizationService {
         },
       },
     });
+
+    // Trigger token refresh for the verified user to update their organization access
+    await this.triggerTokenRefresh(userId);
+
+    return result;
   }
 
   /**
@@ -694,9 +712,43 @@ export class OrganizationService {
   }
 
   /**
-   * Helper: Check if user has required role in organization
+   * ENTERPRISE JWT-BASED ACCESS VALIDATION
+   * 
+   * Validates organization access exclusively through JWT tokens.
+   * Zero database queries for maximum performance and security.
+   */
+  private validateJwtAccess(
+    user: EnhancedJwtPayload, 
+    organizationId: string, 
+    requiredRoles: string[] = []
+  ): { userRole: string; accessLevel: string } {
+    const validation = this.jwtAccessValidation.validateOrganizationAccess(
+      user, 
+      organizationId, 
+      requiredRoles
+    );
+
+    if (!validation.hasAccess) {
+      this.logger.warn(`🚨 Access denied for user ${user.sub} to organization ${organizationId}: ${validation.error}`);
+      throw new ForbiddenException(validation.error);
+    }
+
+    this.logger.log(`✅ Access granted: User ${user.sub} (${validation.userRole}) to organization ${organizationId}`);
+    return {
+      userRole: validation.userRole!,
+      accessLevel: validation.accessLevel!
+    };
+  }
+
+  /**
+   * DEPRECATED: Helper: Check if user has required role in organization
+   * 
+   * @deprecated Use validateJwtAccess instead for JWT-based validation
+   * This method performs database queries and should be avoided in production
    */
   private async checkUserRole(organizationId: string, userId: string, requiredRoles: string[]) {
+    this.logger.warn(`⚠️ DEPRECATED: checkUserRole used for organization ${organizationId}. Use JWT-based validation instead.`);
+    
     const orgBigIntId = convertToBigInt(organizationId);
     const userBigIntId = this.toBigInt(userId);
     
@@ -723,7 +775,10 @@ export class OrganizationService {
   }
 
   /**
-   * Helper: Check if user has access to organization
+   * DEPRECATED: Helper: Check if user has access to organization
+   * 
+   * @deprecated Use validateJwtAccess instead for JWT-based validation
+   * This method performs database queries and should be avoided in production
    */
   private async checkUserAccess(organizationId: string, userId: string) {
     const orgBigIntId = convertToBigInt(organizationId);
@@ -748,11 +803,11 @@ export class OrganizationService {
   }
 
   /**
-   * Assign organization to institute
+   * Assign organization to institute (ENHANCED with JWT-based validation)
    */
-  async assignToInstitute(organizationId: string, assignInstituteDto: AssignInstituteDto, userId: string) {
-    // Check if user has permission (Admin or President)
-    await this.checkUserRole(organizationId, userId, ['ADMIN', 'PRESIDENT']);
+  async assignToInstitute(organizationId: string, assignInstituteDto: AssignInstituteDto, user: EnhancedJwtPayload) {
+    // ENTERPRISE JWT-BASED ACCESS VALIDATION (zero database queries)
+    this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
 
     const { instituteId } = assignInstituteDto;
     const instituteBigIntId = convertToBigInt(instituteId);
@@ -800,11 +855,11 @@ export class OrganizationService {
   }
 
   /**
-   * Remove organization from institute
+   * Remove organization from institute (ENHANCED with JWT-based validation)
    */
-  async removeFromInstitute(organizationId: string, userId: string) {
-    // Check if user has permission (Admin or President)
-    await this.checkUserRole(organizationId, userId, ['ADMIN', 'PRESIDENT']);
+  async removeFromInstitute(organizationId: string, user: EnhancedJwtPayload) {
+    // ENTERPRISE JWT-BASED ACCESS VALIDATION (zero database queries)
+    this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
 
     const orgBigIntId = convertToBigInt(organizationId);
 
@@ -821,6 +876,8 @@ export class OrganizationService {
     if (!organization.instituteId) {
       throw new BadRequestException('Organization is not assigned to any institute');
     }
+
+    this.logger.log(`🏢 Organization ${organizationId} removed from institute by user ${user.sub} (${this.jwtAccessValidation.getUserRoleInOrganization(user, organizationId)})`);
 
     // Remove institute assignment
     const updatedOrganization = await this.prisma.organization.update({

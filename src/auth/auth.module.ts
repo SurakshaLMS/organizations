@@ -7,7 +7,9 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { EnhancedAuthService } from './enhanced-auth.service';
 import { OrganizationAccessService } from './organization-access.service';
+import { JwtAccessValidationService } from './jwt-access-validation.service';
 import { OrganizationAccessGuard } from './guards/organization-access.guard';
+import { EnhancedOrganizationSecurityGuard } from './guards/enhanced-organization-security.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
@@ -31,14 +33,18 @@ import { PrismaModule } from '../prisma/prisma.module';
     JwtStrategy, 
     EnhancedAuthService, 
     OrganizationAccessService,
+    JwtAccessValidationService,
     OrganizationAccessGuard,
+    EnhancedOrganizationSecurityGuard,
   ],
   exports: [
     AuthService, 
     JwtStrategy, 
     EnhancedAuthService, 
     OrganizationAccessService,
+    JwtAccessValidationService,
     OrganizationAccessGuard,
+    EnhancedOrganizationSecurityGuard,
   ],
 })
 export class AuthModule {}

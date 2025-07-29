@@ -20,7 +20,7 @@ import { ParseUUIDPipe } from '../common/pipes/parse-uuid.pipe';
 import { PaginationValidationPipe } from '../common/pipes/pagination-validation.pipe';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
-import { OrganizationAccessGuard } from '../auth/guards/organization-access.guard';
+import { EnhancedOrganizationSecurityGuard } from '../auth/guards/enhanced-organization-security.guard';
 import { RateLimitGuard, RateLimit } from '../auth/guards/rate-limit.guard';
 import { SearchValidationGuard } from '../auth/guards/search-validation.guard';
 import { UserVerificationGuard } from '../auth/guards/user-verification.guard';
@@ -205,7 +205,7 @@ export class OrganizationController {
    * Enhanced with comprehensive security guards and rate limiting
    */
   @Put(':id')
-  @UseGuards(JwtAuthGuard, UserVerificationGuard, OrganizationAccessGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, UserVerificationGuard, EnhancedOrganizationSecurityGuard, RateLimitGuard)
   @RequireOrganizationAdmin('id')
   @RateLimit(10, 60000) // 10 updates per minute
   async updateOrganization(
@@ -213,7 +213,7 @@ export class OrganizationController {
     @Body() updateOrganizationDto: UpdateOrganizationDto,
     @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.updateOrganization(organizationId, updateOrganizationDto, user.sub);
+    return this.organizationService.updateOrganization(organizationId, updateOrganizationDto, user);
   }
 
   /**
@@ -221,14 +221,14 @@ export class OrganizationController {
    * Enhanced with strict rate limiting for destructive operations
    */
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, UserVerificationGuard, OrganizationAccessGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, UserVerificationGuard, EnhancedOrganizationSecurityGuard, RateLimitGuard)
   @RequireOrganizationPresident('id')
   @RateLimit(2, 300000) // 2 deletions per 5 minutes - very restrictive
   async deleteOrganization(
     @Param('id', ParseUUIDPipe) organizationId: string,
     @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.deleteOrganization(organizationId, user.sub);
+    return this.organizationService.deleteOrganization(organizationId, user);
   }
 
   /**
@@ -249,21 +249,21 @@ export class OrganizationController {
    * Verify user in organization
    */
   @Put(':id/verify')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
   @RequireOrganizationAdmin('id')
   async verifyUser(
     @Param('id') organizationId: string,
     @Body() verifyUserDto: VerifyUserDto,
     @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.verifyUser(organizationId, verifyUserDto, user.sub);
+    return this.organizationService.verifyUser(organizationId, verifyUserDto, user);
   }
 
   /**
    * Get organization members with pagination
    */
   @Get(':id/members')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
   @RequireOrganizationMember('id')
   async getOrganizationMembers(
     @Param('id') organizationId: string,
@@ -287,7 +287,7 @@ export class OrganizationController {
    * Leave organization
    */
   @Delete(':id/leave')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
   @RequireOrganizationMember('id')
   async leaveOrganization(
     @Param('id') organizationId: string,
@@ -300,27 +300,27 @@ export class OrganizationController {
    * Assign organization to institute
    */
   @Put(':id/assign-institute')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
   @RequireOrganizationAdmin('id')
   async assignToInstitute(
     @Param('id') organizationId: string,
     @Body() assignInstituteDto: AssignInstituteDto,
     @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.assignToInstitute(organizationId, assignInstituteDto, user.sub);
+    return this.organizationService.assignToInstitute(organizationId, assignInstituteDto, user);
   }
 
   /**
    * Remove organization from institute
    */
   @Delete(':id/remove-institute')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
   @RequireOrganizationAdmin('id')
   async removeFromInstitute(
     @Param('id') organizationId: string,
     @GetUser() user: EnhancedJwtPayload,
   ) {
-    return this.organizationService.removeFromInstitute(organizationId, user.sub);
+    return this.organizationService.removeFromInstitute(organizationId, user);
   }
 
   /**
