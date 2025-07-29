@@ -68,23 +68,16 @@ async function main() {
     // Create Organizations
     console.log('🏢 Creating organizations...');
     const organizations: any[] = [];
-    const orgData = [
-      { name: 'Computer Science Club', type: 'INSTITUTE', isPublic: true, shouldVerifyEnrollment: false, enrollmentKey: 'CS2024' },
-      { name: 'Math Society', type: 'INSTITUTE', isPublic: true, shouldVerifyEnrollment: true, enrollmentKey: 'MATH2024' },
-      { name: 'Physics Lab', type: 'INSTITUTE', isPublic: false, shouldVerifyEnrollment: true, enrollmentKey: 'PHYSICS2024' },
-      { name: 'Chemistry Group', type: 'GLOBAL', isPublic: true, shouldVerifyEnrollment: false, enrollmentKey: 'CHEM2024' },
-      { name: 'Biology Club', type: 'GLOBAL', isPublic: false, shouldVerifyEnrollment: true, enrollmentKey: 'BIO2024' },
-    ];
+    const orgNames = ['Computer Science Club', 'Math Society', 'Physics Lab', 'Chemistry Group', 'Biology Club'];
     
-    for (let i = 0; i < orgData.length; i++) {
+    for (let i = 0; i < orgNames.length; i++) {
       const organization = await prisma.organization.create({
         data: {
-          name: orgData[i].name,
-          type: orgData[i].type as 'INSTITUTE' | 'GLOBAL',
-          isPublic: orgData[i].isPublic,
-          shouldVerifyEnrollment: orgData[i].shouldVerifyEnrollment,
-          enrollmentKey: orgData[i].enrollmentKey,
-          instituteId: orgData[i].type === 'INSTITUTE' ? institutes[i % institutes.length].instituteId : null,
+          name: orgNames[i],
+          type: i % 2 === 0 ? 'INSTITUTE' : 'GLOBAL',
+          isPublic: Math.random() > 0.5,
+          enrollmentKey: `KEY${i + 1}`,
+          instituteId: institutes[i % institutes.length].instituteId,
         },
       });
       organizations.push(organization);

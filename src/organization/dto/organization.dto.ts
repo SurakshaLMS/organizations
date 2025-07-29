@@ -17,10 +17,6 @@ export class CreateOrganizationDto {
   @IsOptional()
   isPublic?: boolean = false;
 
-  @IsBoolean()
-  @IsOptional()
-  shouldVerifyEnrollment?: boolean = true;
-
   @IsString()
   @IsOptional()
   enrollmentKey?: string;
@@ -39,10 +35,6 @@ export class UpdateOrganizationDto {
   @IsBoolean()
   @IsOptional()
   isPublic?: boolean;
-
-  @IsBoolean()
-  @IsOptional()
-  shouldVerifyEnrollment?: boolean;
 
   @IsString()
   @IsOptional()

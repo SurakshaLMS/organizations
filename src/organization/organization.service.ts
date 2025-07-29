@@ -65,40 +65,42 @@ export class OrganizationService {
    * Create a new organization
    */
   async createOrganization(createOrganizationDto: CreateOrganizationDto, creatorUserId: string) {
-    const { name, type, isPublic, shouldVerifyEnrollment, enrollmentKey, instituteId } = createOrganizationDto;
+    const { name, type, isPublic, enrollmentKey, instituteId } = createOrganizationDto;
 
     // Validate enrollment key requirement
     if (!isPublic && !enrollmentKey) {
       throw new BadRequestException('Enrollment key is required for private organizations');
     }
 
-    // Validate institute exists if provided (using try-catch to reduce unnecessary queries)
-    let instituteBigIntId: bigint | null = null;
+    // Note: Enrollment keys are no longer unique, multiple organizations can use the same key
+
+    // Validate institute exists if provided
     if (instituteId) {
-      try {
-        instituteBigIntId = convertToBigInt(instituteId);
-        // Will throw if institute doesn't exist due to foreign key constraint
-      } catch (error) {
-        throw new BadRequestException('Invalid institute ID format');
+      const instituteBigIntId = convertToBigInt(instituteId);
+      const institute = await this.prisma.institute.findUnique({
+        where: { instituteId: instituteBigIntId },
+      });
+      if (!institute) {
+        throw new BadRequestException('Institute not found');
       }
     }
 
-    // Create organization with proper verification settings
+    // Create organization
     const creatorUserBigIntId = this.toBigInt(creatorUserId);
+    const instituteBigIntId = instituteId ? convertToBigInt(instituteId) : null;
     
     const organization = await this.prisma.organization.create({
       data: {
         name,
         type,
         isPublic,
-        shouldVerifyEnrollment: shouldVerifyEnrollment ?? true,
         enrollmentKey: isPublic ? null : enrollmentKey,
         instituteId: instituteBigIntId,
         organizationUsers: {
           create: {
             userId: creatorUserBigIntId,
             role: 'PRESIDENT',
-            isVerified: true, // Creator is always verified
+            isVerified: true,
           },
         },
       },
@@ -107,7 +109,6 @@ export class OrganizationService {
         name: true,
         type: true,
         isPublic: true,
-        shouldVerifyEnrollment: true,
         instituteId: true,
         // Exclude: enrollmentKey, createdAt, updatedAt
       },
@@ -301,19 +302,19 @@ export class OrganizationService {
   }
 
   /**
-   * Get organization by ID with optimized access control
+   * Get organization by ID
    */
   async getOrganizationById(organizationId: string, userId?: string) {
     const orgBigIntId = convertToBigInt(organizationId);
-    
-    // Single query to get organization with user membership (if applicable)
     const organization = await this.prisma.organization.findUnique({
       where: { organizationId: orgBigIntId },
-      include: {
-        organizationUsers: userId ? {
-          where: { userId: this.toBigInt(userId) },
-          select: { userId: true, role: true, isVerified: true },
-        } : false,
+      select: {
+        organizationId: true,
+        name: true,
+        type: true,
+        isPublic: true,
+        instituteId: true,
+        // Exclude: enrollmentKey, createdAt, updatedAt, and related data
       },
     });
 
@@ -321,34 +322,30 @@ export class OrganizationService {
       throw new NotFoundException('Organization not found');
     }
 
-    // Check access for private organizations
-    if (!organization.isPublic) {
-      if (!userId) {
+    // Check if user has access to this organization (if it's private)
+    if (!organization.isPublic && userId) {
+      const userBigIntId = this.toBigInt(userId);
+      const userInOrg = await this.prisma.organizationUser.findFirst({
+        where: {
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
+        },
+      });
+      if (!userInOrg) {
         throw new ForbiddenException('Access denied to this organization');
       }
-      
-      const userMembership = (organization as any).organizationUsers?.[0];
-      if (!userMembership) {
-        throw new ForbiddenException('Access denied to this organization');
-      }
+    } else if (!organization.isPublic && !userId) {
+      throw new ForbiddenException('Access denied to this organization');
     }
 
-    // Return clean organization data
-    return {
-      organizationId: organization.organizationId,
-      name: organization.name,
-      type: organization.type,
-      isPublic: organization.isPublic,
-      shouldVerifyEnrollment: organization.shouldVerifyEnrollment,
-      instituteId: organization.instituteId,
-    };
+    return organization;
   }
 
   /**
    * Update organization
    */
   async updateOrganization(organizationId: string, updateOrganizationDto: UpdateOrganizationDto, userId: string) {
-    const { name, isPublic, shouldVerifyEnrollment, enrollmentKey, instituteId } = updateOrganizationDto;
+    const { name, isPublic, enrollmentKey, instituteId } = updateOrganizationDto;
 
     // Check if user has admin/president role
     await this.checkUserRole(organizationId, userId, ['ADMIN', 'PRESIDENT']);
@@ -358,28 +355,29 @@ export class OrganizationService {
       throw new BadRequestException('Enrollment key is required for private organizations');
     }
 
-    // Validate institute exists if provided (use foreign key constraint instead of extra query)
-    let instituteBigIntId: bigint | null = null;
+    // Note: Enrollment keys are no longer unique, multiple organizations can use the same key
+
+    // Validate institute exists if provided
     if (instituteId !== undefined) {
       if (instituteId) {
-        try {
-          instituteBigIntId = convertToBigInt(instituteId);
-        } catch (error) {
-          throw new BadRequestException('Invalid institute ID format');
+        const instituteBigIntId = convertToBigInt(instituteId);
+        const institute = await this.prisma.institute.findUnique({
+          where: { instituteId: instituteBigIntId },
+        });
+        if (!institute) {
+          throw new BadRequestException('Institute not found');
         }
       }
     }
 
     const orgBigIntId = convertToBigInt(organizationId);
     const updateData: any = {};
-    
     if (name !== undefined) updateData.name = name;
     if (isPublic !== undefined) {
       updateData.isPublic = isPublic;
       updateData.enrollmentKey = isPublic ? null : enrollmentKey;
     }
-    if (shouldVerifyEnrollment !== undefined) updateData.shouldVerifyEnrollment = shouldVerifyEnrollment;
-    if (instituteId !== undefined) updateData.instituteId = instituteBigIntId;
+    if (instituteId !== undefined) updateData.instituteId = instituteId ? convertToBigInt(instituteId) : null;
 
     return this.prisma.organization.update({
       where: { organizationId: orgBigIntId },
@@ -389,7 +387,6 @@ export class OrganizationService {
         name: true,
         type: true,
         isPublic: true,
-        shouldVerifyEnrollment: true,
         instituteId: true,
         // Exclude: enrollmentKey, createdAt, updatedAt
       },
@@ -423,28 +420,14 @@ export class OrganizationService {
   }
 
   /**
-   * Enroll user in organization with enhanced access control
+   * Enroll user in organization
    */
   async enrollUser(enrollUserDto: EnrollUserDto, userId: string) {
     const { organizationId, enrollmentKey } = enrollUserDto;
-    const orgBigIntId = convertToBigInt(organizationId);
-    const userBigIntId = this.toBigInt(userId);
 
-    // Get organization with institute information (single query)
+    const orgBigIntId = convertToBigInt(organizationId);
     const organization = await this.prisma.organization.findUnique({
       where: { organizationId: orgBigIntId },
-      include: {
-        institute: {
-          select: {
-            instituteId: true,
-            name: true,
-          },
-        },
-        organizationUsers: {
-          where: { userId: userBigIntId },
-          select: { userId: true },
-        },
-      },
     });
 
     if (!organization) {
@@ -452,85 +435,34 @@ export class OrganizationService {
     }
 
     // Check if user is already enrolled
-    if (organization.organizationUsers.length > 0) {
+    const userBigIntId = this.toBigInt(userId);
+    const existingEnrollment = await this.prisma.organizationUser.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
+        },
+      },
+    });
+
+    if (existingEnrollment) {
       throw new BadRequestException('User is already enrolled in this organization');
     }
 
-    // ACCESS CONTROL LOGIC
-    
-    // 1. PUBLIC ORGANIZATIONS - Anyone can enroll
-    if (organization.isPublic) {
-      const shouldAutoVerify = !organization.shouldVerifyEnrollment;
-      
-      const enrollment = await this.prisma.organizationUser.create({
-        data: {
-          organizationId: orgBigIntId,
-          userId: userBigIntId,
-          role: 'MEMBER',
-          isVerified: shouldAutoVerify,
-        },
-        include: {
-          user: {
-            select: {
-              userId: true,
-              email: true,
-              name: true,
-            },
-          },
-          organization: {
-            select: {
-              organizationId: true,
-              name: true,
-              type: true,
-              shouldVerifyEnrollment: true,
-            },
-          },
-        },
-      });
-
-      // Trigger token refresh for the user
-      await this.triggerTokenRefresh(userId);
-
-      return {
-        ...enrollment,
-        message: shouldAutoVerify 
-          ? 'Successfully enrolled and verified in public organization'
-          : 'Successfully enrolled in public organization. Awaiting admin verification.',
-      };
-    }
-
-    // 2. PRIVATE INSTITUTE ORGANIZATIONS - Must be enrolled in institute first
-    if (organization.type === 'INSTITUTE' && organization.instituteId) {
-      // Check if user is enrolled in the institute
-      const instituteEnrollment = await this.prisma.instituteUser.findFirst({
-        where: {
-          instituteId: organization.instituteId,
-          userId: userBigIntId,
-          isActive: true,
-        },
-      });
-
-      if (!instituteEnrollment) {
-        throw new ForbiddenException(
-          `You must be enrolled in ${organization.institute?.name || 'the institute'} before joining this organization`
-        );
+    // Validate enrollment key for private organizations
+    if (!organization.isPublic) {
+      if (!enrollmentKey || enrollmentKey !== organization.enrollmentKey) {
+        throw new BadRequestException('Invalid enrollment key');
       }
     }
 
-    // 3. PRIVATE ORGANIZATIONS - Validate enrollment key
-    if (!enrollmentKey || enrollmentKey !== organization.enrollmentKey) {
-      throw new BadRequestException('Invalid enrollment key');
-    }
-
-    // Create enrollment for private organization
-    const shouldAutoVerify = !organization.shouldVerifyEnrollment;
-    
+    // Enroll user
     const enrollment = await this.prisma.organizationUser.create({
       data: {
         organizationId: orgBigIntId,
         userId: userBigIntId,
         role: 'MEMBER',
-        isVerified: shouldAutoVerify,
+        isVerified: organization.isPublic, // Auto-verify for public organizations
       },
       include: {
         user: {
@@ -545,21 +477,15 @@ export class OrganizationService {
             organizationId: true,
             name: true,
             type: true,
-            shouldVerifyEnrollment: true,
           },
         },
       },
     });
 
-    // Trigger token refresh for the user
+    // Trigger token refresh for the user to update organization access
     await this.triggerTokenRefresh(userId);
 
-    return {
-      ...enrollment,
-      message: shouldAutoVerify 
-        ? 'Successfully enrolled and verified in organization'
-        : 'Successfully enrolled in organization. Awaiting admin verification.',
-    };
+    return enrollment;
   }
 
   /**
