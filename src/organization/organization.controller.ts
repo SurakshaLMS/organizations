@@ -16,7 +16,7 @@ import {
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { ParseUUIDPipe } from '../common/pipes/parse-uuid.pipe';
+import { ParseOrganizationIdPipe, ParseInstituteIdPipe } from '../common/pipes/parse-numeric-id.pipe';
 import { PaginationValidationPipe } from '../common/pipes/pagination-validation.pipe';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
@@ -192,7 +192,7 @@ export class OrganizationController {
   @UseGuards(OptionalJwtAuthGuard, RateLimitGuard)
   @RateLimit(100, 60000) // 100 requests per minute
   async getOrganizationById(
-    @Param('id', ParseUUIDPipe) organizationId: string,
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @GetUser() user?: EnhancedJwtPayload,
   ) {
     // Extract userId from JWT token if authenticated, otherwise undefined for public access
@@ -209,7 +209,7 @@ export class OrganizationController {
   @RequireOrganizationAdmin('id')
   @RateLimit(10, 60000) // 10 updates per minute
   async updateOrganization(
-    @Param('id', ParseUUIDPipe) organizationId: string,
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Body() updateOrganizationDto: UpdateOrganizationDto,
     @GetUser() user: EnhancedJwtPayload,
   ) {
@@ -225,7 +225,7 @@ export class OrganizationController {
   @RequireOrganizationPresident('id')
   @RateLimit(2, 300000) // 2 deletions per 5 minutes - very restrictive
   async deleteOrganization(
-    @Param('id', ParseUUIDPipe) organizationId: string,
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @GetUser() user: EnhancedJwtPayload,
   ) {
     return this.organizationService.deleteOrganization(organizationId, user);
@@ -252,7 +252,7 @@ export class OrganizationController {
   @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
   @RequireOrganizationAdmin('id')
   async verifyUser(
-    @Param('id') organizationId: string,
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Body() verifyUserDto: VerifyUserDto,
     @GetUser() user: EnhancedJwtPayload,
   ) {
@@ -266,7 +266,7 @@ export class OrganizationController {
   @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
   @RequireOrganizationMember('id')
   async getOrganizationMembers(
-    @Param('id') organizationId: string,
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sortBy') sortBy?: string,
@@ -290,35 +290,37 @@ export class OrganizationController {
   @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
   @RequireOrganizationMember('id')
   async leaveOrganization(
-    @Param('id') organizationId: string,
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @GetUser() user: EnhancedJwtPayload,
   ) {
     return this.organizationService.leaveOrganization(organizationId, user.sub);
   }
 
   /**
-   * ULTRA-SECURE INSTITUTE ASSIGNMENT ENDPOINT
+   * ULTRA-SECURE INSTITUTE ASSIGNMENT ENDPOINT (ADMIN ACCESS ONLY)
    * 
    * Enhanced Security Features:
-   * - Strict role validation (ADMIN/PRESIDENT only)
+   * - STRICT ACCESS: Only organization ADMIN role can assign institutes
    * - Rate limiting (5 assignments per minute to prevent abuse)
-   * - Enhanced input validation with custom pipe
+   * - Enhanced input validation for numeric BigInt IDs
    * - JWT-based access control (zero DB queries for access check)
    * - Comprehensive audit logging
    * - Minimal response data (performance optimized)
    * 
    * Access Requirements:
    * - Must be authenticated with valid JWT
-   * - Must be ADMIN or PRESIDENT of the organization
+   * - Must be ADMIN of the organization (MANAGER ROLE ONLY)
    * - Must have verified account status
    * - Rate limited to prevent abuse
+   * 
+   * Note: Only organization managers (ADMIN role) can assign institutes
    */
   @Put(':id/assign-institute')
   @UseGuards(JwtAuthGuard, UserVerificationGuard, EnhancedOrganizationSecurityGuard, RateLimitGuard)
-  @RequireOrganizationAdmin('id') // Only ADMIN or PRESIDENT can assign institutes
+  @RequireOrganizationAdmin('id') // STRICT: Only ADMIN role (organization managers)
   @RateLimit(5, 60000) // 5 assignments per minute to prevent abuse
   async assignToInstitute(
-    @Param('id', ParseUUIDPipe) organizationId: string,
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Body() assignInstituteDto: AssignInstituteDto,
     @GetUser() user: EnhancedJwtPayload,
   ) {
@@ -332,7 +334,7 @@ export class OrganizationController {
   @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
   @RequireOrganizationAdmin('id')
   async removeFromInstitute(
-    @Param('id') organizationId: string,
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @GetUser() user: EnhancedJwtPayload,
   ) {
     return this.organizationService.removeFromInstitute(organizationId, user);
@@ -346,7 +348,7 @@ export class OrganizationController {
   @UseGuards(OptionalJwtAuthGuard, RateLimitGuard)
   @RateLimit(50, 60000) // 50 requests per minute
   async getOrganizationsByInstitute(
-    @Param('instituteId') instituteId: string,
+    @Param('instituteId', ParseInstituteIdPipe()) instituteId: string,
     @GetUser() user?: EnhancedJwtPayload,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -392,7 +394,7 @@ export class OrganizationController {
    */
   @Get(':id/causes')
   async getOrganizationCauses(
-    @Param('id') organizationId: string,
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sortBy') sortBy?: string,

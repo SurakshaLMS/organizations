@@ -803,12 +803,12 @@ export class OrganizationService {
   }
 
   /**
-   * ULTRA-OPTIMIZED INSTITUTE ASSIGNMENT (ENTERPRISE SECURITY)
+   * ULTRA-OPTIMIZED INSTITUTE ASSIGNMENT (ADMIN ACCESS ONLY)
    * 
    * Features:
    * - Single atomic transaction (minimal DB queries)
    * - JWT-based security validation (zero DB access checks)
-   * - Enhanced role validation (ADMIN/PRESIDENT only)
+   * - Enhanced role validation (ADMIN ONLY - organization managers)
    * - Audit logging for security compliance
    * - Input sanitization and validation
    * - No unnecessary data return (performance optimized)
@@ -816,8 +816,8 @@ export class OrganizationService {
   async assignToInstitute(organizationId: string, assignInstituteDto: AssignInstituteDto, user: EnhancedJwtPayload) {
     try {
       // STEP 1: ENTERPRISE JWT-BASED ACCESS VALIDATION (zero database queries)
-      // Only ADMIN or PRESIDENT can assign institutes
-      this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
+      // Only ADMIN can assign institutes (organization managers only)
+      this.validateJwtAccess(user, organizationId, ['ADMIN']);
       const userRole = this.jwtAccessValidation.getUserRoleInOrganization(user, organizationId);
 
       // STEP 2: INPUT VALIDATION AND SANITIZATION
