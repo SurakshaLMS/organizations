@@ -803,55 +803,110 @@ export class OrganizationService {
   }
 
   /**
-   * Assign organization to institute (ENHANCED with JWT-based validation)
+   * ULTRA-OPTIMIZED INSTITUTE ASSIGNMENT (ENTERPRISE SECURITY)
+   * 
+   * Features:
+   * - Single atomic transaction (minimal DB queries)
+   * - JWT-based security validation (zero DB access checks)
+   * - Enhanced role validation (ADMIN/PRESIDENT only)
+   * - Audit logging for security compliance
+   * - Input sanitization and validation
+   * - No unnecessary data return (performance optimized)
    */
   async assignToInstitute(organizationId: string, assignInstituteDto: AssignInstituteDto, user: EnhancedJwtPayload) {
-    // ENTERPRISE JWT-BASED ACCESS VALIDATION (zero database queries)
-    this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
+    try {
+      // STEP 1: ENTERPRISE JWT-BASED ACCESS VALIDATION (zero database queries)
+      // Only ADMIN or PRESIDENT can assign institutes
+      this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
+      const userRole = this.jwtAccessValidation.getUserRoleInOrganization(user, organizationId);
 
-    const { instituteId } = assignInstituteDto;
-    const instituteBigIntId = convertToBigInt(instituteId);
-    const orgBigIntId = convertToBigInt(organizationId);
+      // STEP 2: INPUT VALIDATION AND SANITIZATION
+      const { instituteId } = assignInstituteDto;
+      const instituteBigIntId = convertToBigInt(instituteId);
+      const orgBigIntId = convertToBigInt(organizationId);
 
-    // Validate institute exists
-    const institute = await this.prisma.institute.findUnique({
-      where: { instituteId: instituteBigIntId },
-    });
+      // STEP 3: SINGLE ATOMIC TRANSACTION (ultra-optimized)
+      // Validate institute exists and update organization in one transaction
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Check if institute exists (minimal select)
+        const institute = await tx.institute.findUnique({
+          where: { instituteId: instituteBigIntId },
+          select: { instituteId: true }, // Only ID needed for validation
+        });
 
-    if (!institute) {
-      throw new NotFoundException('Institute not found');
-    }
+        if (!institute) {
+          throw new NotFoundException(`Institute with ID ${instituteId} not found`);
+        }
 
-    // Update organization with institute assignment
-    const updatedOrganization = await this.prisma.organization.update({
-      where: { organizationId: orgBigIntId },
-      data: { instituteId: instituteBigIntId },
-      include: {
-        institute: {
-          select: {
+        // Check if organization exists and is not already assigned
+        const organization = await tx.organization.findUnique({
+          where: { organizationId: orgBigIntId },
+          select: { 
+            organizationId: true, 
             instituteId: true,
-            name: true,
-            imageUrl: true,
+            name: true, // For audit logging only
           },
-        },
-        organizationUsers: {
-          include: {
-            user: {
-              select: {
-                userId: true,
-                email: true,
-                name: true,
-              },
-            },
-          },
-        },
-      },
-    });
+        });
 
-    return {
-      message: 'Organization successfully assigned to institute',
-      organization: updatedOrganization,
-    };
+        if (!organization) {
+          throw new NotFoundException(`Organization with ID ${organizationId} not found`);
+        }
+
+        // Prevent duplicate assignment
+        if (organization.instituteId && convertToString(organization.instituteId) === instituteId) {
+          throw new BadRequestException(`Organization "${organization.name}" is already assigned to this institute`);
+        }
+
+        // Update organization with institute assignment (minimal operation)
+        await tx.organization.update({
+          where: { organizationId: orgBigIntId },
+          data: { 
+            instituteId: instituteBigIntId,
+            updatedAt: new Date(), // Explicit timestamp for audit
+          },
+        });
+
+        return { organizationName: organization.name };
+      });
+
+      // STEP 4: SECURITY AUDIT LOGGING
+      this.logger.log(
+        `🏢 INSTITUTE ASSIGNMENT: Organization "${result.organizationName}" (ID: ${organizationId}) ` +
+        `assigned to institute ${instituteId} by user ${user.sub} (${userRole}) ` +
+        `| Action: ASSIGN_INSTITUTE | Security: JWT_VALIDATED | Timestamp: ${new Date().toISOString()}`
+      );
+
+      // STEP 5: MINIMAL SUCCESS RESPONSE (performance optimized)
+      return {
+        success: true,
+        message: 'Organization successfully assigned to institute',
+        timestamp: new Date().toISOString(),
+        operation: 'ASSIGN_INSTITUTE',
+        organizationId,
+        instituteId,
+        performedBy: {
+          userId: user.sub,
+          role: userRole,
+        },
+      };
+
+    } catch (error) {
+      // Enhanced error handling with security audit
+      this.logger.error(
+        `❌ INSTITUTE ASSIGNMENT FAILED: Organization ${organizationId} to institute ${assignInstituteDto.instituteId} ` +
+        `by user ${user.sub} | Error: ${error.message} | Security: JWT_VALIDATED`
+      );
+
+      // Re-throw known exceptions
+      if (error instanceof NotFoundException || 
+          error instanceof BadRequestException || 
+          error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      // Generic error for unknown issues
+      throw new BadRequestException('Failed to assign organization to institute. Please try again.');
+    }
   }
 
   /**

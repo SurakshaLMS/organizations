@@ -297,13 +297,28 @@ export class OrganizationController {
   }
 
   /**
-   * Assign organization to institute
+   * ULTRA-SECURE INSTITUTE ASSIGNMENT ENDPOINT
+   * 
+   * Enhanced Security Features:
+   * - Strict role validation (ADMIN/PRESIDENT only)
+   * - Rate limiting (5 assignments per minute to prevent abuse)
+   * - Enhanced input validation with custom pipe
+   * - JWT-based access control (zero DB queries for access check)
+   * - Comprehensive audit logging
+   * - Minimal response data (performance optimized)
+   * 
+   * Access Requirements:
+   * - Must be authenticated with valid JWT
+   * - Must be ADMIN or PRESIDENT of the organization
+   * - Must have verified account status
+   * - Rate limited to prevent abuse
    */
   @Put(':id/assign-institute')
-  @UseGuards(JwtAuthGuard, EnhancedOrganizationSecurityGuard)
-  @RequireOrganizationAdmin('id')
+  @UseGuards(JwtAuthGuard, UserVerificationGuard, EnhancedOrganizationSecurityGuard, RateLimitGuard)
+  @RequireOrganizationAdmin('id') // Only ADMIN or PRESIDENT can assign institutes
+  @RateLimit(5, 60000) // 5 assignments per minute to prevent abuse
   async assignToInstitute(
-    @Param('id') organizationId: string,
+    @Param('id', ParseUUIDPipe) organizationId: string,
     @Body() assignInstituteDto: AssignInstituteDto,
     @GetUser() user: EnhancedJwtPayload,
   ) {

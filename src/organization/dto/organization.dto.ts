@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsEnum, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsEnum, Matches, Length } from 'class-validator';
 
 export enum OrganizationType {
   INSTITUTE = 'INSTITUTE',
@@ -67,10 +67,25 @@ export class VerifyUserDto {
   isVerified: boolean;
 }
 
+/**
+ * ULTRA-SECURE INSTITUTE ASSIGNMENT DTO
+ * 
+ * Enhanced Validation Features:
+ * - Strict numeric string validation
+ * - Input sanitization to prevent injection
+ * - Size limits to prevent overflow attacks
+ * - Required field validation
+ * - Type safety for BigInt database operations
+ */
 export class AssignInstituteDto {
   @IsString()
-  @IsNotEmpty()
-  @Matches(/^\d+$/, { message: 'instituteId must be a numeric string (e.g., "1", "123")' })
+  @IsNotEmpty({ message: 'Institute ID is required' })
+  @Matches(/^\d+$/, { 
+    message: 'Institute ID must be a valid numeric string (e.g., "1", "123", "456")' 
+  })
+  @Length(1, 15, { 
+    message: 'Institute ID must be between 1 and 15 digits long' 
+  })
   instituteId: string;
 }
 
