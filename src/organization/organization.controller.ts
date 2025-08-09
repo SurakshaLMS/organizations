@@ -13,8 +13,10 @@ import {
   UseInterceptors,
   ParseUUIDPipe as NestParseUUIDPipe
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
+import { OrganizationDto } from './dto/organization.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ParseOrganizationIdPipe, ParseInstituteIdPipe } from '../common/pipes/parse-numeric-id.pipe';
 import { PaginationValidationPipe } from '../common/pipes/pagination-validation.pipe';
@@ -36,6 +38,7 @@ import { GetUser } from '../auth/decorators/get-user.decorator';
 import { GetUserOrganizations, GetUserOrganizationIds } from '../auth/decorators/get-user-organizations.decorator';
 import { EnhancedJwtPayload, CompactOrganizationAccess } from '../auth/organization-access.service';
 
+@ApiTags('Organizations')
 @Controller('organizations')
 @UseInterceptors(SecurityHeadersInterceptor, AuditLogInterceptor)
 @UsePipes(new ValidationPipe({ 
@@ -53,6 +56,25 @@ export class OrganizationController {
    * Enhanced with rate limiting and user verification
    */
   @Post()
+  @ApiOperation({ summary: 'Create a new organization' })
+  @ApiBody({ type: CreateOrganizationDto })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Organization created successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        organizationId: { type: 'string' },
+        name: { type: 'string' },
+        type: { type: 'string' },
+        isPublic: { type: 'boolean' },
+        createdAt: { type: 'string' }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, UserVerificationGuard, RateLimitGuard)
   @RateLimit(5, 60000) // 5 requests per minute
   async createOrganization(
@@ -174,7 +196,7 @@ export class OrganizationController {
         dataFreshness: 'token_based',
         tokenOptimization: {
           compactFormat: true,
-          sizeReduction: '80-90%',
+          sizeReduction: '80-90',
           format: 'RoleCodeOrganizationId',
           example: compactOrgs[0] || 'Porg-123'
         }
@@ -183,12 +205,15 @@ export class OrganizationController {
   }
 
   /**
-   * Get organization by ID
-   * Enhanced with optional JWT authentication for private organizations
-   * Public organizations: No authentication required
-   * Private organizations: JWT authentication required
+   * Retrieve an organization by its ID.
+   * Public access is allowed, but additional details are available for authenticated users.
    */
   @Get(':id')
+  @ApiOperation({ summary: 'Get organization by ID', description: 'Retrieve an organization by its ID. Public access is allowed, but additional details are available for authenticated users.' })
+  @ApiParam({ name: 'id', description: 'The ID of the organization to retrieve', required: true, type: String })
+  @ApiResponse({ status: 200, description: 'The organization details', type: OrganizationDto })
+  @ApiResponse({ status: 404, description: 'Organization not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized access' })
   @UseGuards(OptionalJwtAuthGuard, RateLimitGuard)
   @RateLimit(100, 60000) // 100 requests per minute
   async getOrganizationById(
@@ -204,6 +229,46 @@ export class OrganizationController {
    * Update organization
    * Enhanced with comprehensive security guards and rate limiting
    */
+  @ApiOperation({ 
+    summary: 'Update organization details', 
+    description: 'Update organization information. Requires ADMIN or PRESIDENT role in the organization.' 
+  })
+  @ApiParam({ 
+    name: 'id', 
+    description: 'Organization ID to update', 
+    required: true, 
+    type: String,
+    example: '123' 
+  })
+  @ApiBody({ 
+    type: UpdateOrganizationDto,
+    description: 'Organization update data'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Organization updated successfully',
+    type: OrganizationDto
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Invalid input data or business rule violation'
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Authentication required'
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: 'Insufficient permissions - ADMIN or PRESIDENT role required'
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Organization not found'
+  })
+  @ApiResponse({ 
+    status: 429, 
+    description: 'Rate limit exceeded - maximum 10 updates per minute'
+  })
   @Put(':id')
   @UseGuards(JwtAuthGuard, UserVerificationGuard, EnhancedOrganizationSecurityGuard, RateLimitGuard)
   @RequireOrganizationAdmin('id')
@@ -267,6 +332,7 @@ export class OrganizationController {
   @RequireOrganizationMember('id')
   async getOrganizationMembers(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
+    @GetUser() user: EnhancedJwtPayload,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sortBy') sortBy?: string,
@@ -280,7 +346,7 @@ export class OrganizationController {
     paginationDto.sortOrder = sortOrder;
     paginationDto.search = search;
 
-    return this.organizationService.getOrganizationMembers(organizationId, paginationDto);
+    return this.organizationService.getOrganizationMembers(organizationId, paginationDto, user);
   }
 
   /**

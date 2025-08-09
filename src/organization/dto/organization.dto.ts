@@ -1,26 +1,44 @@
 import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsEnum, Matches, Length } from 'class-validator';
-
-export enum OrganizationType {
-  INSTITUTE = 'INSTITUTE',
-  GLOBAL = 'GLOBAL',
-}
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { OrganizationType } from '@prisma/client';
 
 export class CreateOrganizationDto {
+  @ApiProperty({
+    description: 'Name of the organization',
+    example: 'Tech Innovation Club'
+  })
   @IsString()
   @IsNotEmpty()
   name: string;
 
+  @ApiProperty({
+    description: 'Type of organization',
+    enum: OrganizationType,
+    example: OrganizationType.INSTITUTE
+  })
   @IsEnum(OrganizationType)
   type: OrganizationType;
 
+  @ApiPropertyOptional({
+    description: 'Whether the organization is public',
+    example: false
+  })
   @IsBoolean()
   @IsOptional()
   isPublic?: boolean = false;
 
+  @ApiPropertyOptional({
+    description: 'Enrollment key for joining the organization',
+    example: 'tech-club-2024'
+  })
   @IsString()
   @IsOptional()
   enrollmentKey?: string;
 
+  @ApiPropertyOptional({
+    description: 'Institute ID (numeric string)',
+    example: '123'
+  })
   @IsString()
   @IsOptional()
   @Matches(/^\d+$/, { message: 'instituteId must be a numeric string (e.g., "1", "123")' })
@@ -28,18 +46,34 @@ export class CreateOrganizationDto {
 }
 
 export class UpdateOrganizationDto {
+  @ApiPropertyOptional({
+    description: 'Name of the organization',
+    example: 'Tech Innovation Club Updated'
+  })
   @IsString()
   @IsOptional()
   name?: string;
 
+  @ApiPropertyOptional({
+    description: 'Whether the organization is public',
+    example: true
+  })
   @IsBoolean()
   @IsOptional()
   isPublic?: boolean;
 
+  @ApiPropertyOptional({
+    description: 'Enrollment key for joining the organization',
+    example: 'tech-club-2024-updated'
+  })
   @IsString()
   @IsOptional()
   enrollmentKey?: string;
 
+  @ApiPropertyOptional({
+    description: 'Institute ID (numeric string)',
+    example: '456'
+  })
   @IsString()
   @IsOptional()
   @Matches(/^\d+$/, { message: 'instituteId must be a numeric string (e.g., "1", "123")' })
@@ -47,11 +81,19 @@ export class UpdateOrganizationDto {
 }
 
 export class EnrollUserDto {
+  @ApiProperty({
+    description: 'Organization ID (numeric string)',
+    example: '123'
+  })
   @IsString()
   @IsNotEmpty()
   @Matches(/^\d+$/, { message: 'organizationId must be a numeric string (e.g., "1", "123")' })
   organizationId: string;
 
+  @ApiPropertyOptional({
+    description: 'Enrollment key for private organizations',
+    example: 'tech-club-2024'
+  })
   @IsString()
   @IsOptional()
   enrollmentKey?: string;
@@ -94,4 +136,37 @@ export class RemoveInstituteDto {
   @IsNotEmpty()
   @Matches(/^\d+$/, { message: 'organizationId must be a numeric string (e.g., "1", "123")' })
   organizationId: string;
+}
+
+export class OrganizationDto {
+  @ApiProperty({
+    description: 'Unique identifier of the organization',
+    example: '12345',
+  })
+  id: string;
+
+  @ApiProperty({
+    description: 'Name of the organization',
+    example: 'Tech Innovation Club',
+  })
+  name: string;
+
+  @ApiProperty({
+    description: 'Type of the organization',
+    enum: OrganizationType,
+    example: OrganizationType.INSTITUTE,
+  })
+  type: OrganizationType;
+
+  @ApiProperty({
+    description: 'Whether the organization is public',
+    example: true,
+  })
+  isPublic: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Institute ID associated with the organization',
+    example: '123',
+  })
+  instituteId?: string | null;
 }

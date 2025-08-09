@@ -118,7 +118,14 @@ export class OrganizationService {
       },
     });
 
-    return organization;
+    // Transform to match OrganizationDto
+    return {
+      id: organization.organizationId.toString(),
+      name: organization.name,
+      type: organization.type,
+      isPublic: organization.isPublic,
+      instituteId: organization.instituteId ? organization.instituteId.toString() : null
+    };
   }
 
   /**
@@ -387,7 +394,7 @@ export class OrganizationService {
 
     this.logger.log(`📝 Organization ${organizationId} updated by user ${user.sub} (${this.jwtAccessValidation.getUserRoleInOrganization(user, organizationId)})`);
 
-    return this.prisma.organization.update({
+    const updatedOrganization = await this.prisma.organization.update({
       where: { organizationId: orgBigIntId },
       data: updateData,
       select: {
@@ -399,6 +406,15 @@ export class OrganizationService {
         // Exclude: enrollmentKey, createdAt, updatedAt
       },
     });
+
+    // Transform to match OrganizationDto
+    return {
+      id: updatedOrganization.organizationId.toString(),
+      name: updatedOrganization.name,
+      type: updatedOrganization.type,
+      isPublic: updatedOrganization.isPublic,
+      instituteId: updatedOrganization.instituteId ? updatedOrganization.instituteId.toString() : null
+    };
   }
 
   /**
@@ -549,72 +565,6 @@ export class OrganizationService {
     await this.triggerTokenRefresh(userId);
 
     return result;
-  }
-
-  /**
-   * Get organization members
-   */
-  async getOrganizationMembers(organizationId: string, paginationDto: PaginationDto) {
-    // Validate organization exists
-    const orgBigIntId = convertToBigInt(organizationId);
-    const organization = await this.prisma.organization.findUnique({
-      where: { organizationId: orgBigIntId },
-      select: { organizationId: true, isPublic: true },
-    });
-
-    if (!organization) {
-      throw new NotFoundException('Organization not found');
-    }
-
-    const where: any = { organizationId: orgBigIntId };
-
-    // Add search functionality
-    if (paginationDto.search) {
-      where.user = {
-        OR: [
-          {
-            name: {
-              contains: paginationDto.search,
-            },
-          },
-          {
-            email: {
-              contains: paginationDto.search,
-            },
-          },
-        ],
-      };
-    }
-
-    // Build order by
-    const orderBy: any = {};
-    if (paginationDto.sortBy === 'userName') {
-      orderBy.user = { name: paginationDto.sortOrder };
-    } else if (paginationDto.sortBy === 'userEmail') {
-      orderBy.user = { email: paginationDto.sortOrder };
-    } else {
-      orderBy[paginationDto.sortBy || 'role'] = paginationDto.sortOrder;
-    }
-
-    // Get total count
-    const total = await this.prisma.organizationUser.count({ where });
-
-    // Get paginated data
-    const members = await this.prisma.organizationUser.findMany({
-      where,
-      orderBy,
-      skip: paginationDto.skip,
-      take: paginationDto.limitNumber,
-      select: {
-        userId: true,
-        organizationId: true,
-        role: true,
-        isVerified: true,
-        // Exclude: createdAt, updatedAt
-      },
-    });
-
-    return createPaginatedResponse(members, total, paginationDto);
   }
 
   /**
@@ -1140,5 +1090,261 @@ export class OrganizationService {
     }));
 
     return createPaginatedResponse(formattedInstitutes, total, pagination);
+  }
+
+  /**
+   * Get organization members with roles
+   */
+  async getOrganizationMembers(organizationId: string, pagination: PaginationDto, user: EnhancedJwtPayload) {
+    // Validate access using existing JWT validation
+    this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
+
+    const orgBigIntId = convertToBigInt(organizationId);
+
+    // Get total count
+    const total = await this.prisma.organizationUser.count({
+      where: { organizationId: orgBigIntId }
+    });
+
+    // Get paginated members
+    const members = await this.prisma.organizationUser.findMany({
+      where: { organizationId: orgBigIntId },
+      include: {
+        user: {
+          select: {
+            userId: true,
+            name: true,
+            email: true
+          }
+        }
+      },
+      skip: pagination.skip,
+      take: pagination.limitNumber,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Calculate role breakdown
+    const roleBreakdown = await this.prisma.organizationUser.groupBy({
+      by: ['role'],
+      where: { organizationId: orgBigIntId },
+      _count: { role: true }
+    });
+
+    const roleCount = roleBreakdown.reduce((acc, item) => {
+      acc[item.role] = item._count.role;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      members: members.map(member => ({
+        userId: member.user.userId.toString(),
+        name: member.user.name,
+        email: member.user.email,
+        role: member.role,
+        isVerified: member.isVerified,
+        joinedAt: member.createdAt
+      })),
+      totalMembers: total,
+      roleBreakdown: roleCount
+    };
+  }
+
+  /**
+   * Assign role to user in organization
+   */
+  async assignUserRole(organizationId: string, assignUserRoleDto: any, user: EnhancedJwtPayload) {
+    // Validate access
+    this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
+
+    const orgBigIntId = convertToBigInt(organizationId);
+    const targetUserBigIntId = convertToBigInt(assignUserRoleDto.userId);
+
+    // Prevent assigning PRESIDENT role
+    if (assignUserRoleDto.role === 'PRESIDENT') {
+      throw new BadRequestException('Cannot assign PRESIDENT role directly. Use transfer presidency instead.');
+    }
+
+    // Check if user is already in organization
+    const existingMember = await this.prisma.organizationUser.findUnique({
+      where: {
+        organizationId_userId: {
+          userId: targetUserBigIntId,
+          organizationId: orgBigIntId
+        }
+      }
+    });
+
+    if (!existingMember) {
+      throw new BadRequestException('User is not a member of this organization');
+    }
+
+    // Update role
+    const updatedMember = await this.prisma.organizationUser.update({
+      where: {
+        organizationId_userId: {
+          userId: targetUserBigIntId,
+          organizationId: orgBigIntId
+        }
+      },
+      data: { role: assignUserRoleDto.role }
+    });
+
+    return {
+      message: 'User role assigned successfully',
+      userId: assignUserRoleDto.userId,
+      organizationId,
+      role: assignUserRoleDto.role,
+      assignedAt: updatedMember.updatedAt
+    };
+  }
+
+  /**
+   * Change user role in organization
+   */
+  async changeUserRole(organizationId: string, changeUserRoleDto: any, user: EnhancedJwtPayload) {
+    // Validate access
+    this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
+
+    const orgBigIntId = convertToBigInt(organizationId);
+    const targetUserBigIntId = convertToBigInt(changeUserRoleDto.userId);
+
+    // Prevent changing PRESIDENT role
+    if (changeUserRoleDto.newRole === 'PRESIDENT') {
+      throw new BadRequestException('Cannot assign PRESIDENT role directly. Use transfer presidency instead.');
+    }
+
+    // Check if target user is PRESIDENT
+    const targetMember = await this.prisma.organizationUser.findUnique({
+      where: {
+        organizationId_userId: {
+          userId: targetUserBigIntId,
+          organizationId: orgBigIntId
+        }
+      }
+    });
+
+    if (!targetMember) {
+      throw new BadRequestException('User is not a member of this organization');
+    }
+
+    if (targetMember.role === 'PRESIDENT') {
+      throw new BadRequestException('Cannot change PRESIDENT role. Use transfer presidency instead.');
+    }
+
+    // Update role
+    const updatedMember = await this.prisma.organizationUser.update({
+      where: {
+        organizationId_userId: {
+          userId: targetUserBigIntId,
+          organizationId: orgBigIntId
+        }
+      },
+      data: { role: changeUserRoleDto.newRole }
+    });
+
+    return {
+      message: 'User role changed successfully',
+      userId: changeUserRoleDto.userId,
+      organizationId,
+      role: changeUserRoleDto.newRole,
+      assignedAt: updatedMember.updatedAt
+    };
+  }
+
+  /**
+   * Remove user from organization
+   */
+  async removeUserFromOrganization(organizationId: string, removeUserDto: any, user: EnhancedJwtPayload) {
+    // Validate access
+    this.validateJwtAccess(user, organizationId, ['ADMIN', 'PRESIDENT']);
+
+    const orgBigIntId = convertToBigInt(organizationId);
+    const targetUserBigIntId = convertToBigInt(removeUserDto.userId);
+
+    // Check if target user exists in organization
+    const targetMember = await this.prisma.organizationUser.findUnique({
+      where: {
+        organizationId_userId: {
+          userId: targetUserBigIntId,
+          organizationId: orgBigIntId
+        }
+      }
+    });
+
+    if (!targetMember) {
+      throw new BadRequestException('User is not a member of this organization');
+    }
+
+    // Prevent removing PRESIDENT
+    if (targetMember.role === 'PRESIDENT') {
+      throw new BadRequestException('Cannot remove PRESIDENT. Transfer presidency first.');
+    }
+
+    // Remove user
+    await this.prisma.organizationUser.delete({
+      where: {
+        organizationId_userId: {
+          userId: targetUserBigIntId,
+          organizationId: orgBigIntId
+        }
+      }
+    });
+  }
+
+  /**
+   * Transfer presidency to another user
+   */
+  async transferPresidency(organizationId: string, newPresidentUserId: string, user: EnhancedJwtPayload) {
+    // Validate access - only current PRESIDENT can transfer
+    this.validateJwtAccess(user, organizationId, ['PRESIDENT']);
+
+    const orgBigIntId = convertToBigInt(organizationId);
+    const newPresidentBigIntId = convertToBigInt(newPresidentUserId);
+    const currentPresidentBigIntId = convertToBigInt(user.sub);
+
+    // Check if new president is a member
+    const newPresidentMember = await this.prisma.organizationUser.findUnique({
+      where: {
+        organizationId_userId: {
+          userId: newPresidentBigIntId,
+          organizationId: orgBigIntId
+        }
+      }
+    });
+
+    if (!newPresidentMember) {
+      throw new BadRequestException('New president must be a member of the organization');
+    }
+
+    // Transfer presidency in a transaction
+    await this.prisma.$transaction([
+      // Make current president an admin
+      this.prisma.organizationUser.update({
+        where: {
+          organizationId_userId: {
+            userId: currentPresidentBigIntId,
+            organizationId: orgBigIntId
+          }
+        },
+        data: { role: 'ADMIN' }
+      }),
+      // Make new user president
+      this.prisma.organizationUser.update({
+        where: {
+          organizationId_userId: {
+            userId: newPresidentBigIntId,
+            organizationId: orgBigIntId
+          }
+        },
+        data: { role: 'PRESIDENT' }
+      })
+    ]);
+
+    return {
+      message: 'Presidency transferred successfully',
+      newPresidentUserId,
+      previousPresidentUserId: user.sub,
+      transferredAt: new Date().toISOString()
+    };
   }
 }
