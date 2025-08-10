@@ -4,10 +4,20 @@
  * ORGANIZATION ENROLLMENT API - WORKING EXAMPLES
  * 
  * This file demonstrates the correct way to use the enrollment API
- * and shows common mistakes that cause "ID must be numeric" errors.
+ * and shows common mistakes that cause errors.
+ * 
+ * FIXES INCLUDED:
+ * 1. Data type validation improvements 
+ * 2. Self-enrollment capability (no prior membership required)
  */
 
 console.log('🏛️  ORGANIZATION ENROLLMENT API - WORKING EXAMPLES\n');
+
+console.log('🎉 RECENT FIXES:');
+console.log('✅ Fixed "organizationId must be numeric" validation errors');
+console.log('✅ Fixed "User must be at least one member organization" blocking self-enrollment');
+console.log('✅ New users can now enroll without existing memberships!');
+console.log('');
 
 console.log('✅ CORRECT USAGE:');
 console.log('');
@@ -65,6 +75,11 @@ console.log(JSON.stringify({
 }, null, 2));
 console.log('');
 
+console.log('5. ❌ OLD ISSUE (NOW FIXED): "User must be at least one member organization"');
+console.log('   This error used to prevent new users from enrolling');
+console.log('   ✅ FIXED: Users can now self-enroll without existing memberships');
+console.log('');
+
 console.log('🔧 TROUBLESHOOTING GUIDE:');
 console.log('');
 console.log('If you get "organizationId must be a string" error:');
@@ -78,6 +93,11 @@ console.log('');
 console.log('If you get "organizationId is required" error:');
 console.log('  → Make sure to include organizationId in your request body');
 console.log('  → Check that it\'s not null, undefined, or empty string');
+console.log('');
+console.log('✅ SELF-ENROLLMENT NOW WORKS:');
+console.log('  → New users can enroll without existing organization memberships');
+console.log('  → No more "User must be at least one member organization" error');
+console.log('  → First-time enrollment is now possible for all users');
 console.log('');
 
 console.log('📖 API DOCUMENTATION:');
@@ -103,6 +123,7 @@ console.log('□ organizationId is not empty');
 console.log('□ Content-Type header is application/json');
 console.log('□ Request body is valid JSON');
 console.log('□ Authorization header includes valid JWT token');
+console.log('□ ✅ NEW: No existing organization membership required!');
 console.log('');
 
 console.log('💡 EXAMPLE CURL COMMAND:');

@@ -150,10 +150,23 @@ Before making API calls, ensure:
    - Added explicit error messages
    - Improved API documentation
 
-2. **Created Documentation Files**
+2. **src/organization/organization.controller.ts** (NEW FIX)
+   - Removed `UserVerificationGuard` from enrollment endpoint
+   - Fixed circular dependency preventing self-enrollment
+   - Added explanatory comments about guard usage
+
+3. **Created Documentation Files**
    - `ENROLLMENT_API_WORKING_EXAMPLES.js` - Working examples and troubleshooting
    - `ENROLLMENT_API_FIX_DOCUMENTATION.md` - This comprehensive fix guide
 
 ## Status: ✅ RESOLVED
 
-The enrollment API now provides clear, actionable error messages and works correctly when proper data types are used. Users will no longer see generic "ID must be numeric" errors and will instead receive specific guidance on how to fix their requests.
+The enrollment API now:
+- ✅ Provides clear, actionable error messages for data type issues
+- ✅ Works correctly with proper string formatting
+- ✅ **Allows self-enrollment without requiring existing membership**
+- ✅ **Fixes the circular dependency that prevented new users from enrolling**
+- ✅ Has comprehensive documentation and examples
+- ✅ Guides users to fix their requests correctly
+
+**Key Fix**: Users can now enroll themselves in organizations that allow self-enrollment, even if they have no existing organization memberships. The "user must be at least one member organization" error is eliminated for the enrollment endpoint.
