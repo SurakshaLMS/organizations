@@ -1,15 +1,23 @@
-# 🔧 ENROLLMENT API FIX - "ID Must Be Numeric" Error
+# 🔧 ENROLLMENT API FIX - "ID Must Be Numeric" Error + Self-Enrollment Fix
 
-## Problem Solved ✅
+## Problems Solved ✅
 
-The "ID must be numeric" error in the organizations/enroll API has been **FIXED** with enhanced validation and better error messages.
+1. **"ID must be numeric" error** in the organizations/enroll API has been **FIXED** with enhanced validation and better error messages.
+2. **"User must be at least one member organization" error** preventing self-enrollment has been **FIXED** by removing the circular dependency.
 
 ## Root Cause Analysis 🔍
 
+### Issue 1: Invalid Data Types
 The error was caused by improper data types being sent to the enrollment endpoint. The API expects:
 - `organizationId` as a **numeric string** (e.g., `"123"`)
 - NOT as a number (e.g., `123`)
 - NOT as a non-numeric string (e.g., `"abc"`)
+
+### Issue 2: Circular Dependency (NEW FIX)
+The `UserVerificationGuard` was preventing users from enrolling because it required them to already be a member of at least one organization. This created a chicken-and-egg problem:
+- Users couldn't enroll because they weren't members
+- Users couldn't become members without enrolling first
+- **SOLUTION**: Removed `UserVerificationGuard` from enrollment endpoint
 
 ## What Was Fixed 🛠️
 

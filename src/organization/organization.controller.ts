@@ -299,9 +299,13 @@ export class OrganizationController {
   /**
    * Enroll user in organization
    * Enhanced with rate limiting to prevent spam enrollments
+   * 
+   * NOTE: UserVerificationGuard is NOT used here because enrollment is how users
+   * get their first organization membership. Requiring existing membership 
+   * would create a circular dependency preventing self-enrollment.
    */
   @Post('enroll')
-  @UseGuards(JwtAuthGuard, UserVerificationGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
   @RateLimit(10, 60000) // 10 enrollments per minute
   async enrollUser(
     @Body() enrollUserDto: EnrollUserDto,
