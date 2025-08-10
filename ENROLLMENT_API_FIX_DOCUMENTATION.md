@@ -34,7 +34,13 @@ The `UserVerificationGuard` was preventing users from enrolling because it requi
   - `"organizationId must be a string (e.g., "123")"`
   - `"organizationId must be a numeric string (e.g., "1", "123", "456"). Do not send as number or non-numeric string."`
 
-### 3. Comprehensive Documentation
+### 3. Self-Enrollment Fix (NEW)
+- **File**: `src/organization/organization.controller.ts`
+- **Problem**: `UserVerificationGuard` prevented users from enrolling if they weren't already members
+- **Solution**: Removed `UserVerificationGuard` from the enrollment endpoint
+- **Result**: Users can now enroll themselves in organizations that allow self-enrollment
+
+### 4. Comprehensive Documentation
 - Created working examples file: `ENROLLMENT_API_WORKING_EXAMPLES.js`
 - Added troubleshooting guide
 - Provided correct API usage patterns
@@ -67,12 +73,20 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ## Common Mistakes (FIXED) ❌➡️✅
 
+### Data Type Issues
 | ❌ Wrong | ✅ Correct | Error Message |
 |----------|------------|---------------|
 | `organizationId: 27` | `organizationId: "27"` | "organizationId must be a string" |
 | `organizationId: "abc"` | `organizationId: "123"` | "organizationId must be a numeric string" |
 | `organizationId: ""` | `organizationId: "27"` | "organizationId is required" |
 | Missing organizationId | Include organizationId | "organizationId is required" |
+
+### Self-Enrollment Issues (NEW FIX)
+| ❌ Before | ✅ After | 
+|----------|----------|
+| ❌ "User must be at least one member organization" error | ✅ Users can enroll themselves in any organization |
+| ❌ Circular dependency preventing first enrollment | ✅ Self-enrollment works for new users |
+| ❌ Required existing membership to get membership | ✅ No prior membership required for enrollment |
 
 ## Error Messages Guide 📋
 
