@@ -83,29 +83,43 @@ export class UpdateOrganizationDto {
 export class EnrollUserDto {
   @ApiProperty({
     description: 'Organization ID (numeric string)',
-    example: '123'
+    example: '123',
+    type: 'string'
   })
-  @IsString()
-  @IsNotEmpty()
-  @Matches(/^\d+$/, { message: 'organizationId must be a numeric string (e.g., "1", "123")' })
+  @IsString({ message: 'organizationId must be a string (e.g., "123")' })
+  @IsNotEmpty({ message: 'organizationId is required' })
+  @Matches(/^\d+$/, { 
+    message: 'organizationId must be a numeric string (e.g., "1", "123", "456"). Do not send as number or non-numeric string.' 
+  })
   organizationId: string;
 
   @ApiPropertyOptional({
     description: 'Enrollment key for private organizations',
     example: 'tech-club-2024'
   })
-  @IsString()
+  @IsString({ message: 'enrollmentKey must be a string' })
   @IsOptional()
   enrollmentKey?: string;
 }
 
 export class VerifyUserDto {
-  @IsString()
-  @IsNotEmpty()
-  @Matches(/^\d+$/, { message: 'userId must be a numeric string (e.g., "1", "123")' })
+  @ApiProperty({
+    description: 'User ID (numeric string)',
+    example: '456',
+    type: 'string'
+  })
+  @IsString({ message: 'userId must be a string (e.g., "456")' })
+  @IsNotEmpty({ message: 'userId is required' })
+  @Matches(/^\d+$/, { 
+    message: 'userId must be a numeric string (e.g., "1", "123", "456"). Do not send as number or non-numeric string.' 
+  })
   userId: string;
 
-  @IsBoolean()
+  @ApiProperty({
+    description: 'Verification status',
+    example: true
+  })
+  @IsBoolean({ message: 'isVerified must be a boolean (true or false)' })
   isVerified: boolean;
 }
 
