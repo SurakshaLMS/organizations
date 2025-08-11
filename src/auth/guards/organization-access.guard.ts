@@ -2,6 +2,7 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Unauthor
 import { Reflector } from '@nestjs/core';
 import { ORGANIZATION_ACCESS_KEY, OrganizationAccessConfig } from '../decorators/organization-access.decorator';
 import { OrganizationAccessService, EnhancedJwtPayload } from '../organization-access.service';
+import { UserType, GLOBAL_ACCESS_ROLES } from '../../common/enums/user-types.enum';
 
 @Injectable()
 export class OrganizationAccessGuard implements CanActivate {
@@ -26,6 +27,12 @@ export class OrganizationAccessGuard implements CanActivate {
 
     if (!user) {
       throw new UnauthorizedException('Authentication required');
+    }
+
+    // Check if user is ORGANIZATION_MANAGER (has global access to all organizations)
+    if (user.userType && GLOBAL_ACCESS_ROLES.includes(user.userType as UserType)) {
+      request.userRole = 'ORGANIZATION_MANAGER';
+      return true; // ORGANIZATION_MANAGER can access all APIs
     }
 
     // Extract organization ID from request parameters

@@ -84,7 +84,22 @@ export class JwtAccessValidationService {
         };
       }
 
-      // 4. GLOBAL ADMIN ACCESS CHECK
+      // 4. ORGANIZATION_MANAGER ACCESS CHECK (highest privilege)
+      if (user.userType === 'ORGANIZATION_MANAGER') {
+        this.logAccessEvent('ORGANIZATION_MANAGER_ACCESS', {
+          userId: user.sub,
+          organizationId,
+          accessLevel: 'ORGANIZATION_MANAGER'
+        });
+        
+        return {
+          hasAccess: true,
+          userRole: 'ORGANIZATION_MANAGER',
+          accessLevel: 'ORGANIZATION_MANAGER'
+        };
+      }
+
+      // 5. GLOBAL ADMIN ACCESS CHECK
       if (allowGlobalAdmin && user.isGlobalAdmin) {
         this.logAccessEvent('GLOBAL_ADMIN_ACCESS', {
           userId: user.sub,
@@ -99,7 +114,7 @@ export class JwtAccessValidationService {
         };
       }
 
-      // 5. ORGANIZATION MEMBERSHIP CHECK
+      // 6. ORGANIZATION MEMBERSHIP CHECK
       const membershipEntry = user.orgAccess.find(entry => entry.endsWith(organizationId));
       
       if (!membershipEntry) {
@@ -115,7 +130,7 @@ export class JwtAccessValidationService {
         };
       }
 
-      // 6. ROLE EXTRACTION AND VALIDATION
+      // 7. ROLE EXTRACTION AND VALIDATION
       const roleCode = membershipEntry.charAt(0);
       const userRole = this.roleCodeMap[roleCode];
       

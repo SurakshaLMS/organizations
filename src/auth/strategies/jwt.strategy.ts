@@ -30,6 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       userId: payload.sub,
       email: payload.email,
       name: payload.name,
+      userType: payload.userType, // Include userType (ORGANIZATION_MANAGER, etc.)
       orgAccess: payload.orgAccess || [], // Compact format
       isGlobalAdmin: payload.isGlobalAdmin || false,
     };

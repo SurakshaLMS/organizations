@@ -179,7 +179,15 @@ export class EnhancedOrganizationSecurityGuard implements CanActivate {
     request: any
   ): { hasAccess: boolean; userRole?: string; error?: string } {
     
-    // 1. GLOBAL ADMIN CHECK (highest privilege)
+    // 1. ORGANIZATION_MANAGER CHECK (highest privilege for organization access)
+    if (user.userType === 'ORGANIZATION_MANAGER') {
+      return { 
+        hasAccess: true, 
+        userRole: 'ORGANIZATION_MANAGER' 
+      };
+    }
+    
+    // 2. GLOBAL ADMIN CHECK (highest privilege)
     if (user.isGlobalAdmin && accessConfig.allowGlobalAdmin !== false) {
       return { 
         hasAccess: true, 
@@ -187,7 +195,7 @@ export class EnhancedOrganizationSecurityGuard implements CanActivate {
       };
     }
 
-    // 2. ORGANIZATION MEMBERSHIP CHECK
+    // 3. ORGANIZATION MEMBERSHIP CHECK
     const membershipEntry = user.orgAccess.find(entry => entry.endsWith(organizationId));
     
     if (!membershipEntry) {

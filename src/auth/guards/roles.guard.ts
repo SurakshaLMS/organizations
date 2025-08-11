@@ -10,6 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { ROLES_KEY, RoleConfig } from '../decorators/roles.decorator';
 import { OrganizationRole } from '@prisma/client';
 import { EnhancedJwtPayload } from '../organization-access.service';
+import { UserType, GLOBAL_ACCESS_ROLES } from '../../common/enums/user-types.enum';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -48,6 +49,12 @@ export class RolesGuard implements CanActivate {
     
     if (!organizationId) {
       throw new ForbiddenException(`Organization ID parameter '${roleConfig.orgParam}' not found in request`);
+    }
+
+    // Check if user is ORGANIZATION_MANAGER (has global access to all organizations)
+    if (user.userType && GLOBAL_ACCESS_ROLES.includes(user.userType as UserType)) {
+      this.logger.log(`ORGANIZATION_MANAGER access granted for user ${user.sub} on organization ${organizationId}`);
+      return true;
     }
 
     // Check global admin access

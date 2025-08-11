@@ -22,6 +22,7 @@ export interface EnhancedJwtPayload {
   sub: string; // userId as string for JWT compatibility
   email: string;
   name: string;
+  userType?: string; // User type (ORGANIZATION_MANAGER, etc.)
   orgAccess: CompactOrganizationAccess; // Compact format ["Porg-123", "Aorg-456"]
   isGlobalAdmin: boolean; // Global organization admin
   iat?: number;
