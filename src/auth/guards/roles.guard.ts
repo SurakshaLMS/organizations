@@ -11,6 +11,8 @@ import { ROLES_KEY, RoleConfig } from '../decorators/roles.decorator';
 import { OrganizationRole } from '@prisma/client';
 import { EnhancedJwtPayload } from '../organization-access.service';
 import { UserType, GLOBAL_ACCESS_ROLES } from '../../common/enums/user-types.enum';
+import { UltraCompactAccessValidationService } from '../services/ultra-compact-access-validation.service';
+import { validateUltraCompactPayload, CompactUserType } from '../interfaces/ultra-compact-jwt.interface';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -24,7 +26,10 @@ export class RolesGuard implements CanActivate {
     [OrganizationRole.PRESIDENT]: 4
   };
 
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private reflector: Reflector,
+    private ultraCompactAccessValidation: UltraCompactAccessValidationService
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const roleConfig = this.reflector.getAllAndOverride<RoleConfig>(ROLES_KEY, [
@@ -51,15 +56,51 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException(`Organization ID parameter '${roleConfig.orgParam}' not found in request`);
     }
 
+    // ULTRA-COMPACT JWT FORMAT CHECK (Priority 1) - New optimized format
+    if (validateUltraCompactPayload(user)) {
+      this.logger.log(`🚀 Ultra-compact JWT roles check for user: ${user.s}, org: ${organizationId}`);
+      
+      // Check for ORGANIZATION_MANAGER access (highest priority)
+      const omAccess = this.ultraCompactAccessValidation.validateOrganizationManagerAccess(user, organizationId);
+      if (omAccess.hasAccess) {
+        this.logger.log(`✅ Ultra-compact ORGANIZATION_MANAGER access granted for user: ${user.s}`);
+        return true;
+      }
+
+      // Check global access for other admin types
+      const globalAccess = this.ultraCompactAccessValidation.validateGlobalAccess(user);
+      if (globalAccess.hasAccess && roleConfig.allowGlobalAdmin) {
+        this.logger.log(`✅ Ultra-compact global access granted for ${user.ut}: ${user.s}`);
+        return true;
+      }
+
+      // For ultra-compact format, if user has any access to related institute, allow organization access
+      const instituteAccess = this.ultraCompactAccessValidation.validateInstituteAccess(user, organizationId);
+      if (instituteAccess.hasAccess) {
+        this.logger.log(`✅ Ultra-compact institute access granted for ${user.ut}: ${user.s}`);
+        return true;
+      }
+
+      // If no access found in ultra-compact format, deny
+      throw new ForbiddenException({
+        statusCode: 403,
+        message: 'Access denied: User does not have access to this organization',
+        error: 'Forbidden',
+        organizationId,
+        userType: user.ut
+      });
+    }
+
+    // LEGACY FORMAT CHECK (Priority 2) - Backward compatibility
     // Check if user is ORGANIZATION_MANAGER (has global access to all organizations)
     if (user.userType && GLOBAL_ACCESS_ROLES.includes(user.userType as UserType)) {
-      this.logger.log(`ORGANIZATION_MANAGER access granted for user ${user.sub} on organization ${organizationId}`);
+      this.logger.log(`✅ Legacy ORGANIZATION_MANAGER access granted for user ${user.sub} on organization ${organizationId}`);
       return true;
     }
 
     // Check global admin access
     if (roleConfig.allowGlobalAdmin && user.isGlobalAdmin) {
-      this.logger.log(`Global admin access granted for user ${user.sub} on organization ${organizationId}`);
+      this.logger.log(`✅ Legacy global admin access granted for user ${user.sub} on organization ${organizationId}`);
       return true;
     }
 
@@ -90,7 +131,7 @@ export class RolesGuard implements CanActivate {
       });
     }
 
-    this.logger.log(`Access granted for user ${user.sub} with role ${userRole} on organization ${organizationId}`);
+    this.logger.log(`✅ Legacy access granted for user ${user.sub} with role ${userRole} on organization ${organizationId}`);
     return true;
   }
 
