@@ -89,7 +89,7 @@ export class OrganizationService {
       }
     }
 
-    // Create organization
+    // Create organization first
     const creatorUserBigIntId = this.toBigInt(creatorUserId);
     const instituteBigIntId = instituteId ? convertToBigInt(instituteId) : null;
     
@@ -100,13 +100,6 @@ export class OrganizationService {
         isPublic,
         enrollmentKey: isPublic ? null : enrollmentKey,
         instituteId: instituteBigIntId,
-        organizationUsers: {
-          create: {
-            userId: creatorUserBigIntId,
-            role: 'PRESIDENT',
-            isVerified: true,
-          },
-        },
       },
       select: {
         organizationId: true,
@@ -114,8 +107,17 @@ export class OrganizationService {
         type: true,
         isPublic: true,
         instituteId: true,
-        // Exclude: enrollmentKey, createdAt, updatedAt
       },
+    });
+
+    // Create the organization user relationship separately
+    await this.prisma.organizationUser.create({
+      data: {
+        organizationId: organization.organizationId,
+        userId: creatorUserBigIntId,
+        role: 'PRESIDENT',
+        isVerified: true,
+      }
     });
 
     // Transform to match OrganizationDto
