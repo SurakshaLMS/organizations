@@ -17,6 +17,7 @@ model User {
   lastSyncAt        DateTime?
   instituteUsers    InstituteUser[]
   organizationUsers OrganizationUser[]
+  verifiedUsers     OrganizationUser[] @relation("VerifiedBy")
 
   @@map("user")
 }
@@ -51,14 +52,16 @@ model InstituteUser {
 }
 
 model Organization {
-  organizationId    BigInt             @id @default(autoincrement())
-  name              String
-  type              OrganizationType
-  isPublic          Boolean            @default(false)
-  enrollmentKey     String?
-  instituteId       BigInt?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  organizationId            BigInt             @id @default(autoincrement())
+  name                      String
+  type                      OrganizationType
+  isPublic                  Boolean            @default(false)
+  enrollmentKey             String?
+  needEnrollmentVerification Boolean           @default(true)
+  imageUrl                  String?            @db.VarChar(500)
+  instituteId               BigInt?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
   causes            Cause[]
   institute         Institute?         @relation(fields: [instituteId], references: [instituteId])
   organizationUsers OrganizationUser[]
@@ -74,10 +77,13 @@ model OrganizationUser {
   userId         BigInt
   role           OrganizationRole @default(MEMBER)
   isVerified     Boolean          @default(false)
+  verifiedBy     BigInt?
+  verifiedAt     DateTime?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   organization   Organization     @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
   user           User             @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  verifier       User?            @relation("VerifiedBy", fields: [verifiedBy], references: [userId])
 
   @@id([organizationId, userId])
   @@index([role])

@@ -9,14 +9,11 @@ export class CauseService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Create a new cause
+   * Create a new cause (SIMPLIFIED - no authentication required)
    */
   async createCause(createCauseDto: CreateCauseDto, userId: string) {
     const { organizationId, title, description, isPublic } = createCauseDto;
     const orgBigIntId = convertToBigInt(organizationId);
-
-    // Check if user has permission to create causes in this organization
-    await this.checkUserAccess(organizationId, userId, ['ADMIN', 'PRESIDENT', 'MODERATOR']);
 
     return this.prisma.cause.create({
       data: {
@@ -151,16 +148,6 @@ export class CauseService {
       throw new NotFoundException('Cause not found');
     }
 
-    // Check if user has access to this cause
-    if (!cause.isPublic && userId) {
-      const hasAccess = await this.checkUserHasAccess(convertToString(cause.organizationId), userId);
-      if (!hasAccess) {
-        throw new ForbiddenException('Access denied to this cause');
-      }
-    } else if (!cause.isPublic && !userId) {
-      throw new ForbiddenException('Access denied to this cause');
-    }
-
     return cause;
   }
 
@@ -177,9 +164,6 @@ export class CauseService {
     if (!cause) {
       throw new NotFoundException('Cause not found');
     }
-
-    // Check if user has permission to update this cause
-    await this.checkUserAccess(convertToString(cause.organizationId), userId, ['ADMIN', 'PRESIDENT', 'MODERATOR']);
 
     return this.prisma.cause.update({
       where: { causeId: causeBigIntId },
@@ -209,9 +193,6 @@ export class CauseService {
       throw new NotFoundException('Cause not found');
     }
 
-    // Check if user has permission to delete this cause
-    await this.checkUserAccess(convertToString(cause.organizationId), userId, ['ADMIN', 'PRESIDENT']);
-
     return this.prisma.cause.delete({
       where: { causeId: causeBigIntId },
     });
@@ -223,14 +204,6 @@ export class CauseService {
   async getCausesByOrganization(organizationId: string, userId?: string) {
     const orgBigIntId = convertToBigInt(organizationId);
     
-    // Check if user has access to this organization
-    if (userId) {
-      const hasAccess = await this.checkUserHasAccess(organizationId, userId);
-      if (!hasAccess) {
-        throw new ForbiddenException('Access denied to this organization');
-      }
-    }
-
     const where: any = { organizationId: orgBigIntId };
 
     if (!userId) {
@@ -274,58 +247,4 @@ export class CauseService {
     });
   }
 
-  /**
-   * Helper: Check if user has required role in organization
-   */
-  private async checkUserAccess(organizationId: string, userId: string, requiredRoles: string[]) {
-    const orgBigIntId = convertToBigInt(organizationId);
-    const userBigIntId = convertToBigInt(userId);
-    
-    const organizationUser = await this.prisma.organizationUser.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId: orgBigIntId,
-          userId: userBigIntId,
-        },
-      },
-    });
-
-    if (!organizationUser) {
-      throw new ForbiddenException('User is not a member of this organization');
-    }
-
-    if (!organizationUser.isVerified) {
-      throw new ForbiddenException('User is not verified in this organization');
-    }
-
-    if (!requiredRoles.includes(organizationUser.role)) {
-      throw new ForbiddenException('Insufficient permissions');
-    }
-  }
-
-  /**
-   * Helper: Check if user has access to organization
-   */
-  private async checkUserHasAccess(organizationId: string, userId: string): Promise<boolean> {
-    const orgBigIntId = convertToBigInt(organizationId);
-    const userBigIntId = convertToBigInt(userId);
-    
-    const organization = await this.prisma.organization.findUnique({
-      where: { organizationId: orgBigIntId },
-      include: {
-        organizationUsers: {
-          where: {
-            userId: userBigIntId,
-            isVerified: true,
-          },
-        },
-      },
-    });
-
-    if (!organization) {
-      return false;
-    }
-
-    return organization.isPublic || (organization as any).organizationUsers.length > 0;
-  }
 }

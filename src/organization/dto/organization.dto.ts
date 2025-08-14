@@ -36,6 +36,24 @@ export class CreateOrganizationDto {
   enrollmentKey?: string;
 
   @ApiPropertyOptional({
+    description: 'Whether enrollment requires admin/president verification',
+    example: true,
+    default: true
+  })
+  @IsBoolean()
+  @IsOptional()
+  needEnrollmentVerification?: boolean = true;
+
+  @ApiPropertyOptional({
+    description: 'Image URL for the organization',
+    example: 'https://example.com/organization-logo.jpg'
+  })
+  @IsString()
+  @IsOptional()
+  @Length(0, 500, { message: 'Image URL must be less than 500 characters' })
+  imageUrl?: string;
+
+  @ApiPropertyOptional({
     description: 'Institute ID (numeric string)',
     example: '123'
   })
@@ -69,6 +87,23 @@ export class UpdateOrganizationDto {
   @IsString()
   @IsOptional()
   enrollmentKey?: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether enrollment requires admin/president verification',
+    example: false
+  })
+  @IsBoolean()
+  @IsOptional()
+  needEnrollmentVerification?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Image URL for the organization',
+    example: 'https://example.com/updated-organization-logo.jpg'
+  })
+  @IsString()
+  @IsOptional()
+  @Length(0, 500, { message: 'Image URL must be less than 500 characters' })
+  imageUrl?: string;
 
   @ApiPropertyOptional({
     description: 'Institute ID (numeric string)',
@@ -177,6 +212,18 @@ export class OrganizationDto {
     example: true,
   })
   isPublic: boolean;
+
+  @ApiProperty({
+    description: 'Whether enrollment requires admin/president verification',
+    example: true,
+  })
+  needEnrollmentVerification: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Image URL of the organization',
+    example: 'https://example.com/organization-logo.jpg',
+  })
+  imageUrl?: string | null;
 
   @ApiPropertyOptional({
     description: 'Institute ID associated with the organization',
