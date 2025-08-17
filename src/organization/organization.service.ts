@@ -477,21 +477,6 @@ export class OrganizationService {
       throw new NotFoundException('Organization not found');
     }
 
-    // Check if user is already enrolled
-    const userBigIntId = this.toBigInt(userId);
-    const existingEnrollment = await this.prisma.organizationUser.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId: orgBigIntId,
-          userId: userBigIntId,
-        },
-      },
-    });
-
-    if (existingEnrollment) {
-      throw new BadRequestException('User is already enrolled in this organization');
-    }
-
     // Validate enrollment key for private organizations
     if (!organization.isPublic) {
       if (!enrollmentKey || enrollmentKey !== organization.enrollmentKey) {
@@ -505,38 +490,55 @@ export class OrganizationService {
     // 2. Organization doesn't require enrollment verification
     const shouldAutoVerify = organization.isPublic || !organization.needEnrollmentVerification;
 
-    // Enroll user
-    const enrollment = await this.prisma.organizationUser.create({
-      data: {
-        organizationId: orgBigIntId,
-        userId: userBigIntId,
-        role: 'MEMBER',
-        isVerified: shouldAutoVerify,
-        verifiedBy: shouldAutoVerify ? userBigIntId : null, // Self-verified if auto-verified
-        verifiedAt: shouldAutoVerify ? new Date() : null,
-      },
-      include: {
-        user: {
-          select: {
-            userId: true,
-            email: true,
-            name: true,
+    const userBigIntId = this.toBigInt(userId);
+
+    try {
+      // Attempt to create enrollment directly
+      // If user is already enrolled, the composite primary key constraint will cause an error
+      const enrollment = await this.prisma.organizationUser.create({
+        data: {
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
+          role: 'MEMBER',
+          isVerified: shouldAutoVerify,
+          verifiedBy: shouldAutoVerify ? userBigIntId : null, // Self-verified if auto-verified
+          verifiedAt: shouldAutoVerify ? new Date() : null,
+        },
+        include: {
+          user: {
+            select: {
+              userId: true,
+              email: true,
+              name: true,
+            },
+          },
+          organization: {
+            select: {
+              organizationId: true,
+              name: true,
+              type: true,
+            },
           },
         },
-        organization: {
-          select: {
-            organizationId: true,
-            name: true,
-            type: true,
-          },
-        },
-      },
-    });
+      });
 
-    // Trigger token refresh for the user to update organization access
-    await this.triggerTokenRefresh(userId);
+      // Trigger token refresh for the user to update organization access
+      await this.triggerTokenRefresh(userId);
 
-    return enrollment;
+      return enrollment;
+    } catch (error) {
+      // Check if this is a duplicate key constraint error (user already enrolled)
+      // Prisma throws P2002 for unique constraint violations or we can check the message
+      if (error.code === 'P2002' || 
+          (error.message && error.message.includes('Unique constraint failed')) ||
+          (error.message && error.message.includes('PRIMARY'))) {
+        // User is already enrolled - return a friendly message instead of technical error
+        throw new BadRequestException('User is already enrolled in this organization');
+      }
+      
+      // Re-throw any other errors
+      throw error;
+    }
   }
 
   /**
