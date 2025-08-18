@@ -91,6 +91,16 @@ export class OrganizationService {
 
     // Create organization first
     const creatorUserBigIntId = this.toBigInt(creatorUserId);
+
+    // Validate that the creator user exists
+    const creatorUser = await this.prisma.user.findUnique({
+      where: { userId: creatorUserBigIntId },
+    });
+
+    if (!creatorUser) {
+      throw new BadRequestException(`Creator user with ID ${creatorUserId} not found`);
+    }
+
     const instituteBigIntId = instituteId ? convertToBigInt(instituteId) : null;
     
     const organization = await this.prisma.organization.create({
@@ -176,7 +186,7 @@ export class OrganizationService {
           ...searchCondition,
         }));
       } else {
-        where.name = searchCondition.name;
+        where.name = { contains: paginationDto?.search };
       }
     }
 
@@ -509,7 +519,8 @@ export class OrganizationService {
             select: {
               userId: true,
               email: true,
-              name: true,
+              firstName: true,
+              lastName: true,
             },
           },
           organization: {
@@ -584,15 +595,17 @@ export class OrganizationService {
           select: {
             userId: true,
             email: true,
-            name: true,
+            firstName: true,
+            lastName: true,
           },
         },
         verifier: isVerified ? {
           select: {
-            userId: true,
-            name: true,
-            email: true,
-          },
+              userId: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
         } : undefined,
       },
     });
@@ -622,16 +635,16 @@ export class OrganizationService {
     const where: any = { organizationId: orgBigIntId };
 
     // Add search functionality
-    if (paginationDto.search) {
+    if (paginationDto?.search) {
       where.OR = [
         {
           title: {
-            contains: paginationDto.search,
+            contains: paginationDto?.search,
           },
         },
         {
           description: {
-            contains: paginationDto.search,
+            contains: paginationDto?.search,
           },
         },
       ];
@@ -822,7 +835,8 @@ export class OrganizationService {
               select: {
                 userId: true,
                 email: true,
-                name: true,
+                firstName: true,
+                lastName: true,
               },
             },
           },
@@ -884,7 +898,7 @@ export class OrganizationService {
           ...searchCondition,
         }));
       } else {
-        where.name = searchCondition.name;
+        where.name = { contains: paginationDto?.search };
       }
     }
 
@@ -924,9 +938,10 @@ export class OrganizationService {
             role: true,
             isVerified: true,
             user: {
-              select: {
-                userId: true,
-                name: true,
+          select: {
+            userId: true,
+            firstName: true,
+            lastName: true,
               },
             },
           },
@@ -945,10 +960,10 @@ export class OrganizationService {
       name: org.name,
       type: org.type,
       isPublic: org.isPublic,
-      memberCount: org._count.organizationUsers,
+      memberCount: org.organizationUsers?.length || 0,
       causeCount: org._count.causes,
       createdAt: org.createdAt,
-      institute: org.institute,
+      instituteId: org.instituteId,
     }));
 
     const paginatedResponse = createPaginatedResponse(formattedOrgs, total, pagination);
@@ -1037,7 +1052,8 @@ export class OrganizationService {
         user: {
           select: {
             userId: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true
           }
         }
@@ -1051,18 +1067,18 @@ export class OrganizationService {
     const roleBreakdown = await this.prisma.organizationUser.groupBy({
       by: ['role'],
       where: { organizationId: orgBigIntId },
-      _count: { role: true }
+      _count: { role: true, }
     });
 
     const roleCount = roleBreakdown.reduce((acc, item) => {
-      acc[item.role] = item._count.role;
+      acc[item.role] = item._count?.role || 0;
       return acc;
     }, {} as Record<string, number>);
 
     return {
       members: members.map(member => ({
         userId: member.user.userId.toString(),
-        name: member.user.name,
+        name: user.name,
         email: member.user.email,
         role: member.role,
         isVerified: member.isVerified,

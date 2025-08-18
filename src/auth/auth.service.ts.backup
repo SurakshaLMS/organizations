@@ -7,24 +7,13 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
-import * as bcrypt from 'bcrypt';
-import { LoginDto, RefreshTokenDto, SetupPasswordDto, ChangePasswordDto } from './dto/auth.dto';
+import * as bcrypt from 'bcryptjs';
+import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { SetupPasswordDto } from './dto/setup-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { convertToBigInt, convertToString } from '../utils/bigint.utils';
 import * as crypto from 'crypto';
-
-export interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: {
-    id: string;
-    email: string;
-    name: string;
-    organizations: {
-      organizationId: string;
-      role: string;
-    }[];
-  };
-}
 
 @Injectable()
 export class AuthService {
@@ -46,11 +35,11 @@ export class AuthService {
       const user = await this.prisma.user.findUnique({
         where: { email },
         include: {
-          organizationUsers: {
+          userOrganizations: {
             select: {
               organizationId: true,
               role: true,
-              isVerified: true,
+              isActive: true,
             },
           },
         },
@@ -80,7 +69,7 @@ export class AuthService {
         sub: convertToString(user.userId),
         email: user.email,
         name: this.getFullName(user),
-        organizations: user.organizationUsers.filter(uo => uo.isVerified).map(uo => ({
+        organizations: user.userOrganizations.filter(uo => uo.isActive).map(uo => ({
           organizationId: convertToString(uo.organizationId),
           role: uo.role,
         })),
@@ -99,7 +88,7 @@ export class AuthService {
           id: convertToString(user.userId),
           email: user.email,
           name: this.getFullName(user),
-          organizations: user.organizationUsers.filter(uo => uo.isVerified).map(uo => ({
+          organizations: user.userOrganizations.filter(uo => uo.isActive).map(uo => ({
             organizationId: convertToString(uo.organizationId),
             role: uo.role,
           })),
@@ -124,11 +113,11 @@ export class AuthService {
       const user = await this.prisma.user.findUnique({
         where: { userId: convertToBigInt(userId) },
         include: {
-          organizationUsers: {
+          userOrganizations: {
             select: {
               organizationId: true,
               role: true,
-              isVerified: true,
+              isActive: true,
             },
           },
         },
@@ -142,7 +131,7 @@ export class AuthService {
         sub: convertToString(user.userId),
         email: user.email,
         name: this.getFullName(user),
-        organizations: user.organizationUsers.filter(uo => uo.isVerified).map(uo => ({
+        organizations: user.userOrganizations.filter(uo => uo.isActive).map(uo => ({
           organizationId: convertToString(uo.organizationId),
           role: uo.role,
         })),
@@ -195,7 +184,7 @@ export class AuthService {
       if (process.env.AES_SECRET && hashedPassword.length % 4 === 0 && /^[A-Za-z0-9+/=]+$/.test(hashedPassword)) {
         try {
           const key = crypto.createHash('sha256').update(process.env.AES_SECRET).digest();
-          const decipher = crypto.createDecipheriv('aes-256-cbc', key, Buffer.alloc(16));
+          const decipher = crypto.createDecipher('aes-256-cbc', key);
           let decrypted = decipher.update(hashedPassword, 'base64', 'utf8');
           decrypted += decipher.final('utf8');
           
@@ -314,13 +303,13 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { userId: userBigIntId },
       include: {
-        organizationUsers: {
+        userOrganizations: {
           include: {
             organization: {
               select: {
                 organizationId: true,
-                name: true,
-                type: true,
+                organizationName: true,
+                organizationType: true,
               },
             },
           },
@@ -336,20 +325,21 @@ export class AuthService {
       id: convertToString(user.userId),
       email: user.email,
       firstName: user.firstName,
+      middleName: user.middleName,
       lastName: user.lastName,
       name: this.getFullName(user),
-      organizations: user.organizationUsers.map(uo => ({
+      organizations: user.userOrganizations.map(uo => ({
         organizationId: convertToString(uo.organizationId),
-        organizationName: uo.organization.name,
-        organizationType: uo.organization.type,
+        organizationName: uo.organization.organizationName,
+        organizationType: uo.organization.organizationType,
         role: uo.role,
-        isVerified: uo.isVerified,
+        isActive: uo.isActive,
       })),
     };
   }
 
   private getFullName(user: any): string {
-    const parts = [user.firstName, user.lastName].filter(Boolean);
+    const parts = [user.firstName, user.middleName, user.lastName].filter(Boolean);
     return parts.length > 0 ? parts.join(' ') : user.email;
   }
 
@@ -384,11 +374,11 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { userId: convertToBigInt(userId) },
       include: {
-        organizationUsers: {
+        userOrganizations: {
           select: {
             organizationId: true,
             role: true,
-            isVerified: true,
+            isActive: true,
           },
         },
       },
@@ -402,7 +392,7 @@ export class AuthService {
       sub: convertToString(user.userId),
       email: user.email,
       name: this.getFullName(user),
-      organizations: user.organizationUsers.filter(uo => uo.isVerified).map(uo => ({
+      organizations: user.userOrganizations.filter(uo => uo.isActive).map(uo => ({
         organizationId: convertToString(uo.organizationId),
         role: uo.role,
       })),

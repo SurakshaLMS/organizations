@@ -45,7 +45,7 @@ async function checkData() {
       organizationUsers: {
         include: {
           user: {
-            select: { name: true, email: true }
+            select: { firstName: true, lastName: true, email: true }
           }
         }
       },

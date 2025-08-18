@@ -10,7 +10,8 @@ import {
   UsePipes,
   ValidationPipe,
   HttpCode,
-  HttpStatus
+  HttpStatus,
+  UseGuards
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,12 +19,15 @@ import {
   ApiResponse,
   ApiBody,
   ApiParam,
-  ApiQuery
+  ApiQuery,
+  ApiBearerAuth
 } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { RateLimit } from '../auth/guards/rate-limit.guard';
 import { EnhancedJwtPayload } from '../auth/organization-access.service';
 import { ParseOrganizationIdPipe } from '../common/pipes/parse-numeric-id.pipe';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import {
   CreateOrganizationDto,
   UpdateOrganizationDto,
@@ -40,6 +44,8 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('Organization Management')
 @Controller('organizations/:id/management')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 @UsePipes(new ValidationPipe({
   transform: true,
   whitelist: true,
@@ -50,25 +56,14 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 export class OrganizationManagerController {
   constructor(private readonly organizationService: OrganizationService) {}
 
-  // Mock user for testing period
-  private getMockUser(): EnhancedJwtPayload {
-    return {
-      sub: "1",
-      email: "test@test.com", 
-      name: "Test User",
-      orgAccess: [],
-      isGlobalAdmin: true
-    };
-  }
-
   /**
    * Create Organization (Global endpoint, moved here for consistency)
    */
   @Post('/create')
   @RateLimit(5, 60000) // 5 organizations per minute
   @ApiOperation({
-    summary: 'Create new organization',
-    description: 'Create a new organization. User becomes PRESIDENT automatically.'
+    summary: 'Create new organization - Requires Authentication',
+    description: 'Create a new organization. User becomes PRESIDENT automatically. Requires JWT token.'
   })
   @ApiBody({ type: CreateOrganizationDto })
   @ApiResponse({
@@ -80,9 +75,10 @@ export class OrganizationManagerController {
   @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async createOrganization(
-    @Body() createOrganizationDto: CreateOrganizationDto
+    @Body() createOrganizationDto: CreateOrganizationDto,
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<OrganizationDto> {
-    return this.organizationService.createOrganization(createOrganizationDto, "1"); // Default user ID for testing
+    return this.organizationService.createOrganization(createOrganizationDto, user.sub);
   }
 
   /**
@@ -91,7 +87,7 @@ export class OrganizationManagerController {
   @Put()
   @RateLimit(20, 60000) // 20 updates per minute
   @ApiOperation({
-    summary: 'Update organization',
+    summary: 'Update organization - Requires Authentication',
     description: 'Update organization details. Requires ADMIN or PRESIDENT role.'
   })
   @ApiParam({
@@ -107,13 +103,15 @@ export class OrganizationManagerController {
     type: OrganizationDto
   })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Organization not found' })
   async updateOrganization(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
-    @Body() updateOrganizationDto: UpdateOrganizationDto
+    @Body() updateOrganizationDto: UpdateOrganizationDto,
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<OrganizationDto> {
-    return this.organizationService.updateOrganization(organizationId, updateOrganizationDto, this.getMockUser());
+    return this.organizationService.updateOrganization(organizationId, updateOrganizationDto, user);
   }
 
   /**
@@ -123,7 +121,7 @@ export class OrganizationManagerController {
   @RateLimit(3, 60000) // 3 deletions per minute
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
-    summary: 'Delete organization',
+    summary: 'Delete organization - Requires Authentication',
     description: 'Permanently delete organization. Only PRESIDENT can delete. This action is irreversible.'
   })
   @ApiParam({
@@ -133,12 +131,14 @@ export class OrganizationManagerController {
     type: String
   })
   @ApiResponse({ status: 204, description: 'Organization deleted successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions (PRESIDENT only)' })
   @ApiResponse({ status: 404, description: 'Organization not found' })
   async deleteOrganization(
-    @Param('id', ParseOrganizationIdPipe()) organizationId: string
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<void> {
-    await this.organizationService.deleteOrganization(organizationId, this.getMockUser());
+    await this.organizationService.deleteOrganization(organizationId, user);
   }
 
   /**
@@ -147,7 +147,7 @@ export class OrganizationManagerController {
   @Get('/members')
   @RateLimit(50, 60000) // 50 requests per minute
   @ApiOperation({
-    summary: 'Get organization members',
+    summary: 'Get organization members - Requires Authentication',
     description: 'Retrieve list of all organization members with their roles. Requires ADMIN or PRESIDENT role.'
   })
   @ApiParam({
@@ -175,13 +175,15 @@ export class OrganizationManagerController {
     description: 'Organization members retrieved successfully',
     type: OrganizationMembersResponseDto
   })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Organization not found' })
   async getOrganizationMembers(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
-    @Query() pagination: PaginationDto
+    @Query() pagination: PaginationDto,
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<OrganizationMembersResponseDto> {
-    return this.organizationService.getOrganizationMembers(organizationId, pagination, this.getMockUser());
+    return this.organizationService.getOrganizationMembers(organizationId, pagination, user);
   }
 
   /**
@@ -190,7 +192,7 @@ export class OrganizationManagerController {
   @Post('/assign-role')
   @RateLimit(30, 60000) // 30 role assignments per minute
   @ApiOperation({
-    summary: 'Assign role to user',
+    summary: 'Assign role to user - Requires Authentication',
     description: 'Assign ADMIN, MODERATOR, or MEMBER role to a user. Requires ADMIN or PRESIDENT role. Cannot assign PRESIDENT role.'
   })
   @ApiParam({
@@ -206,13 +208,15 @@ export class OrganizationManagerController {
     type: RoleAssignmentResponseDto
   })
   @ApiResponse({ status: 400, description: 'Invalid input data or user not in organization' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Organization or user not found' })
   async assignUserRole(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
-    @Body() assignUserRoleDto: AssignUserRoleDto
+    @Body() assignUserRoleDto: AssignUserRoleDto,
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<RoleAssignmentResponseDto> {
-    return this.organizationService.assignUserRole(organizationId, assignUserRoleDto, this.getMockUser());
+    return this.organizationService.assignUserRole(organizationId, assignUserRoleDto, user);
   }
 
   /**
@@ -221,7 +225,7 @@ export class OrganizationManagerController {
   @Put('/change-role')
   @RateLimit(20, 60000) // 20 role changes per minute
   @ApiOperation({
-    summary: 'Change user role',
+    summary: 'Change user role - Requires Authentication',
     description: 'Change existing member role. Requires ADMIN or PRESIDENT role. Cannot change PRESIDENT role.'
   })
   @ApiParam({
@@ -237,13 +241,15 @@ export class OrganizationManagerController {
     type: RoleAssignmentResponseDto
   })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Organization or user not found' })
   async changeUserRole(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
-    @Body() changeUserRoleDto: ChangeUserRoleDto
+    @Body() changeUserRoleDto: ChangeUserRoleDto,
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<RoleAssignmentResponseDto> {
-    return this.organizationService.changeUserRole(organizationId, changeUserRoleDto, this.getMockUser());
+    return this.organizationService.changeUserRole(organizationId, changeUserRoleDto, user);
   }
 
   /**
@@ -253,7 +259,7 @@ export class OrganizationManagerController {
   @RateLimit(15, 60000) // 15 removals per minute
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
-    summary: 'Remove user from organization',
+    summary: 'Remove user from organization - Requires Authentication',
     description: 'Remove user from organization. Requires ADMIN or PRESIDENT role. Cannot remove PRESIDENT.'
   })
   @ApiParam({
@@ -265,13 +271,15 @@ export class OrganizationManagerController {
   @ApiBody({ type: RemoveUserDto })
   @ApiResponse({ status: 204, description: 'User removed successfully' })
   @ApiResponse({ status: 400, description: 'Cannot remove user (e.g., trying to remove PRESIDENT)' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Organization or user not found' })
   async removeUserFromOrganization(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
-    @Body() removeUserDto: RemoveUserDto
+    @Body() removeUserDto: RemoveUserDto,
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<void> {
-    await this.organizationService.removeUserFromOrganization(organizationId, removeUserDto, this.getMockUser());
+    await this.organizationService.removeUserFromOrganization(organizationId, removeUserDto, user);
   }
 
   /**
@@ -280,7 +288,7 @@ export class OrganizationManagerController {
   @Put('/transfer-presidency')
   @RateLimit(5, 60000) // 5 transfers per minute
   @ApiOperation({
-    summary: 'Transfer presidency',
+    summary: 'Transfer presidency - Requires Authentication',
     description: 'Transfer PRESIDENT role to another user. Only current PRESIDENT can do this. Current PRESIDENT becomes ADMIN.'
   })
   @ApiParam({
@@ -316,12 +324,14 @@ export class OrganizationManagerController {
     }
   })
   @ApiResponse({ status: 400, description: 'Invalid user or user not in organization' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 403, description: 'Only PRESIDENT can transfer presidency' })
   @ApiResponse({ status: 404, description: 'Organization or user not found' })
   async transferPresidency(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
-    @Body('newPresidentUserId') newPresidentUserId: string
+    @Body('newPresidentUserId') newPresidentUserId: string,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    return this.organizationService.transferPresidency(organizationId, newPresidentUserId, this.getMockUser());
+    return this.organizationService.transferPresidency(organizationId, newPresidentUserId, user);
   }
 }

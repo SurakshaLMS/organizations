@@ -113,7 +113,7 @@ export class OrganizationAccessService {
       },
       select: {
         organizationId: true,
-        role: true,
+        role: true, isVerified: true,
       },
     });
 

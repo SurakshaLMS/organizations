@@ -32,6 +32,11 @@ export class AuthService {
   private readonly ivLength: number;
   private readonly saltRounds: number;
 
+  // Helper function to get full name from firstName and lastName
+  private getFullName(user: { firstName: string; lastName?: string | null }): string {
+    return `${user.firstName} ${user.lastName || ''}`.trim();
+  }
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -69,7 +74,7 @@ export class AuthService {
         user: {
           id: convertToString(user.userId),
           email: user.email,
-          name: user.name,
+          name: this.getFullName(user),
           isFirstLogin: true
         },
         permissions: {
@@ -96,7 +101,7 @@ export class AuthService {
     const payload: EnhancedJwtPayload = { 
       sub: convertToString(user.userId), 
       email: user.email, 
-      name: user.name,
+      name: this.getFullName(user),
       orgAccess,
       isGlobalAdmin,
       iat: Math.floor(Date.now() / 1000),
@@ -119,7 +124,7 @@ export class AuthService {
       user: {
         id: convertToString(user.userId),
         email: user.email,
-        name: user.name,
+        name: this.getFullName(user),
         lastLoginAt: new Date()
       },
       permissions: {
@@ -257,7 +262,7 @@ export class AuthService {
       user: {
         id: convertToString(user.userId),
         email: user.email,
-        name: user.name
+        name: this.getFullName(user)
       }
     };
   }
@@ -339,13 +344,11 @@ export class AuthService {
     return {
       id: convertToString(user.userId),
       email: user.email,
-      name: user.name,
-      lastSyncAt: user.lastSyncAt,
+      name: this.getFullName(user),
       institutes: user.instituteUsers.map(iu => ({
         instituteId: convertToString(iu.institute.instituteId),
         name: iu.institute.name,
-        role: iu.role,
-        isActive: iu.isActive,
+        status: iu.status, // Use status instead of role/isActive
         imageUrl: iu.institute.imageUrl
       })),
       organizations: user.organizationUsers.map(ou => ({
@@ -373,7 +376,7 @@ export class AuthService {
     return {
       id: convertToString(user.userId),
       email: user.email,
-      name: user.name,
+      name: this.getFullName(user),
       hasPassword: !!user.password
     };
   }
@@ -417,7 +420,7 @@ export class AuthService {
     const payload: EnhancedJwtPayload = { 
       sub: convertToString(user.userId), 
       email: user.email, 
-      name: user.name,
+      name: this.getFullName(user),
       orgAccess,
       isGlobalAdmin,
       iat: Math.floor(Date.now() / 1000),
@@ -430,7 +433,7 @@ export class AuthService {
       user: {
         id: convertToString(user.userId),
         email: user.email,
-        name: user.name,
+        name: this.getFullName(user),
       },
     };
   }

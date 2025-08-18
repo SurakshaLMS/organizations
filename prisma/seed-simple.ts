@@ -16,14 +16,16 @@ async function main() {
       data: {
         email: 'admin@example.com',
         password: await hashPassword('AdminPassword123!'),
-        name: 'Admin User',
+        firstName: 'Admin',
+        lastName: 'User',
       },
     }),
     prisma.user.create({
       data: {
         email: 'student@example.com',
         password: await hashPassword('StudentPassword123!'),
-        name: 'Student User',
+        firstName: 'Student',
+        lastName: 'User',
       },
     }),
   ]);
@@ -35,6 +37,8 @@ async function main() {
     prisma.institute.create({
       data: {
         name: 'University of Technology',
+        code: 'UTECH001',
+        email: 'admin@utech.edu',
         imageUrl: 'https://example.com/university.jpg',
       },
     }),

@@ -52,6 +52,8 @@ async function main() {
       const institute = await prisma.institute.create({
         data: {
           name: instituteData[i].name,
+          code: `INST${String(i + 1).padStart(3, '0')}`,
+          email: `admin${i + 1}@institute.edu`,
           imageUrl: instituteData[i].imageUrl,
         },
       });
@@ -88,11 +90,16 @@ async function main() {
     
     for (let i = 0; i < userProfiles.length; i++) {
       const isTestUser = userProfiles[i].email === 'ia@gmail.com';
+      const nameParts = userProfiles[i].name.split(' ');
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ') || null;
+      
       const user = await prisma.user.create({
         data: {
           email: userProfiles[i].email,
           password: await hashPassword(isTestUser ? 'Password123@' : `Password${i + 1}!`),
-          name: userProfiles[i].name,
+          firstName: firstName,
+          lastName: lastName,
         },
       });
       users.push(user);
@@ -297,8 +304,7 @@ async function main() {
             data: {
               instituteId: institute.instituteId,
               userId: users[i].userId,
-              role: Math.random() > 0.8 ? 'ADMIN' : Math.random() > 0.7 ? 'FACULTY' : Math.random() > 0.5 ? 'STAFF' : 'STUDENT',
-              isActive: Math.random() > 0.1, // 90% active users
+              status: Math.random() > 0.1 ? 'ACTIVE' : 'PENDING', // 90% active users
             },
           });
           instituteUserCount++;

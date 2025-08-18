@@ -8,9 +8,10 @@ import {
   Delete, 
   Query, 
   UsePipes, 
-  ValidationPipe
+  ValidationPipe,
+  UseGuards
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { OrganizationDto } from './dto/organization.dto';
@@ -18,9 +19,13 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { ParseOrganizationIdPipe, ParseInstituteIdPipe } from '../common/pipes/parse-numeric-id.pipe';
 import { PaginationValidationPipe } from '../common/pipes/pagination-validation.pipe';
 import { EnhancedJwtPayload, CompactOrganizationAccess } from '../auth/organization-access.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @ApiTags('Organizations')
 @Controller('organizations')
+@ApiBearerAuth()
 @UsePipes(new ValidationPipe({ 
   transform: true, 
   whitelist: true, 
@@ -31,170 +36,222 @@ import { EnhancedJwtPayload, CompactOrganizationAccess } from '../auth/organizat
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
-  // Mock user for testing period
-  private getMockUser(): EnhancedJwtPayload {
-    return {
-      sub: "1",
-      email: "test@test.com", 
-      name: "Test User",
-      orgAccess: [],
-      isGlobalAdmin: true
-    };
-  }
-
   @Post()
-  @ApiOperation({ summary: 'Create organization' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Create organization - Requires Authentication' })
   @ApiBody({ type: CreateOrganizationDto })
   @ApiResponse({ status: 201, description: 'Organization created successfully', type: OrganizationDto })
-  async createOrganization(@Body() createOrganizationDto: CreateOrganizationDto) {
-    return this.organizationService.createOrganization(createOrganizationDto, "1");
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  async createOrganization(
+    @Body() createOrganizationDto: CreateOrganizationDto,
+    @GetUser() user: EnhancedJwtPayload
+  ) {
+    return this.organizationService.createOrganization(createOrganizationDto, user.sub);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all organizations with pagination' })
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Get all organizations with pagination - Optional Authentication' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Organizations retrieved successfully' })
-  async getOrganizations(@Query(new PaginationValidationPipe()) paginationQuery?: any) {
+  async getOrganizations(
+    @Query(new PaginationValidationPipe()) paginationQuery?: any,
+    @GetUser() user?: EnhancedJwtPayload
+  ) {
     const paginationDto = paginationQuery || new PaginationDto();
-    return this.organizationService.getOrganizations(undefined, paginationDto);
+    const userId = user?.sub; // undefined if not authenticated
+    return this.organizationService.getOrganizations(userId, paginationDto);
   }
 
   @Get('user/enrolled')
-  @ApiOperation({ summary: 'Get organizations that the user is enrolled in' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get organizations that the user is enrolled in - Requires Authentication' })
   @ApiResponse({ status: 200, description: 'User enrolled organizations retrieved successfully' })
-  async getUserEnrolledOrganizations(@Query(new PaginationValidationPipe()) paginationQuery?: any) {
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  async getUserEnrolledOrganizations(
+    @GetUser() user: EnhancedJwtPayload,
+    @Query(new PaginationValidationPipe()) paginationQuery?: any
+  ) {
     const paginationDto = paginationQuery || new PaginationDto();
-    return this.organizationService.getUserEnrolledOrganizations("1", paginationDto);
+    return this.organizationService.getUserEnrolledOrganizations(user.sub, paginationDto);
   }
 
   @Get('user/dashboard')
-  @ApiOperation({ summary: 'Get user organization dashboard' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get user organization dashboard - Requires Authentication' })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiResponse({ status: 200, description: 'User dashboard retrieved successfully' })
-  async getUserOrganizationDashboard(@Query('search') search?: string) {
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  async getUserOrganizationDashboard(
+    @GetUser() user: EnhancedJwtPayload,
+    @Query('search') search?: string
+  ) {
     // Mock dashboard data for testing
     return {
       message: 'Dashboard endpoint - functionality available during testing',
       organizations: [],
+      userId: user.sub,
+      userEmail: user.email,
       search: search || null
     };
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get organization by ID' })
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Get organization by ID - Optional Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiResponse({ status: 200, description: 'Organization found', type: OrganizationDto })
   @ApiResponse({ status: 404, description: 'Organization not found' })
-  async getOrganizationById(@Param('id', ParseOrganizationIdPipe()) id: string) {
-    return this.organizationService.getOrganizationById(id, "1");
+  async getOrganizationById(
+    @Param('id', ParseOrganizationIdPipe()) id: string,
+    @GetUser() user?: EnhancedJwtPayload
+  ) {
+    const userId = user?.sub; // undefined if not authenticated
+    return this.organizationService.getOrganizationById(id, userId);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update organization' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Update organization - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiBody({ type: UpdateOrganizationDto })
   @ApiResponse({ status: 200, description: 'Organization updated successfully', type: OrganizationDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   async updateOrganization(
     @Param('id', ParseOrganizationIdPipe()) id: string,
-    @Body() updateOrganizationDto: UpdateOrganizationDto
+    @Body() updateOrganizationDto: UpdateOrganizationDto,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    return this.organizationService.updateOrganization(id, updateOrganizationDto, this.getMockUser());
+    return this.organizationService.updateOrganization(id, updateOrganizationDto, user);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete organization' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Delete organization - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiResponse({ status: 200, description: 'Organization deleted successfully' })
-  async deleteOrganization(@Param('id', ParseOrganizationIdPipe()) id: string) {
-    return this.organizationService.deleteOrganization(id, this.getMockUser());
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  async deleteOrganization(
+    @Param('id', ParseOrganizationIdPipe()) id: string,
+    @GetUser() user: EnhancedJwtPayload
+  ) {
+    return this.organizationService.deleteOrganization(id, user);
   }
 
   @Post('enroll')
-  @ApiOperation({ summary: 'Enroll user in organization' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Enroll user in organization - Requires Authentication' })
   @ApiBody({ type: EnrollUserDto })
   @ApiResponse({ status: 201, description: 'User enrolled successfully' })
-  async enrollUser(@Body() enrollUserDto: EnrollUserDto) {
-    return this.organizationService.enrollUser(enrollUserDto, "1");
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  async enrollUser(
+    @Body() enrollUserDto: EnrollUserDto,
+    @GetUser() user: EnhancedJwtPayload
+  ) {
+    return this.organizationService.enrollUser(enrollUserDto, user.sub);
   }
 
   @Put(':id/verify')
-  @ApiOperation({ summary: 'Verify user in organization' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Verify user in organization - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiBody({ type: VerifyUserDto })
   @ApiResponse({ status: 200, description: 'User verified successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   async verifyUser(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
-    @Body() verifyUserDto: VerifyUserDto
+    @Body() verifyUserDto: VerifyUserDto,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    return this.organizationService.verifyUser(organizationId, verifyUserDto, this.getMockUser());
+    return this.organizationService.verifyUser(organizationId, verifyUserDto, user);
   }
 
   @Get(':id/members')
-  @ApiOperation({ summary: 'Get organization members' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get organization members - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Organization members retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   async getOrganizationMembers(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
+    @GetUser() user: EnhancedJwtPayload,
     @Query(new PaginationValidationPipe()) paginationQuery?: any
   ) {
     const paginationDto = paginationQuery || new PaginationDto();
-    return this.organizationService.getOrganizationMembers(organizationId, paginationDto, this.getMockUser());
+    return this.organizationService.getOrganizationMembers(organizationId, paginationDto, user);
   }
 
   @Delete(':id/leave')
-  @ApiOperation({ summary: 'Leave organization' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Leave organization - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiResponse({ status: 200, description: 'User left organization successfully' })
-  async leaveOrganization(@Param('id', ParseOrganizationIdPipe()) organizationId: string) {
-    return this.organizationService.leaveOrganization(organizationId, "1");
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  async leaveOrganization(
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
+    @GetUser() user: EnhancedJwtPayload
+  ) {
+    return this.organizationService.leaveOrganization(organizationId, user.sub);
   }
 
   @Put(':id/assign-institute')
-  @ApiOperation({ summary: 'Assign institute to organization' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Assign institute to organization - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiBody({ type: AssignInstituteDto })
   @ApiResponse({ status: 200, description: 'Institute assigned successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   async assignInstitute(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
-    @Body() assignInstituteDto: AssignInstituteDto
+    @Body() assignInstituteDto: AssignInstituteDto,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    return this.organizationService.assignToInstitute(organizationId, assignInstituteDto, this.getMockUser());
+    return this.organizationService.assignToInstitute(organizationId, assignInstituteDto, user);
   }
 
   @Delete(':id/remove-institute')
-  @ApiOperation({ summary: 'Remove institute from organization' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Remove institute from organization - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiResponse({ status: 200, description: 'Institute removed successfully' })
-  async removeInstitute(@Param('id', ParseOrganizationIdPipe()) organizationId: string) {
-    return this.organizationService.removeFromInstitute(organizationId, this.getMockUser());
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  async removeInstitute(
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
+    @GetUser() user: EnhancedJwtPayload
+  ) {
+    return this.organizationService.removeFromInstitute(organizationId, user);
   }
 
   @Get('institute/:instituteId')
-  @ApiOperation({ summary: 'Get organizations by institute ID' })
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Get organizations by institute ID - Optional Authentication' })
   @ApiParam({ name: 'instituteId', description: 'Institute ID' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Organizations retrieved successfully' })
   async getOrganizationsByInstitute(
     @Param('instituteId', ParseInstituteIdPipe()) instituteId: string,
+    @GetUser() user?: EnhancedJwtPayload,
     @Query(new PaginationValidationPipe()) paginationQuery?: any
   ) {
     const paginationDto = paginationQuery || new PaginationDto();
-    return this.organizationService.getOrganizationsByInstitute(instituteId, "1", paginationDto);
+    const userId = user?.sub; // undefined if not authenticated
+    return this.organizationService.getOrganizationsByInstitute(instituteId, userId, paginationDto);
   }
 
   @Get('institutes/available')
-  @ApiOperation({ summary: 'Get available institutes for assignment' })
+  @ApiOperation({ summary: 'Get available institutes for assignment - Public Endpoint' })
   @ApiResponse({ status: 200, description: 'Available institutes retrieved successfully' })
   async getAvailableInstitutes() {
     return this.organizationService.getAvailableInstitutes();
   }
 
   @Get(':id/causes')
-  @ApiOperation({ summary: 'Get organization causes' })
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Get organization causes - Optional Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })

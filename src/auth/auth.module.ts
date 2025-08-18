@@ -9,7 +9,6 @@ import { EnhancedAuthService } from './enhanced-auth.service';
 import { OrganizationAccessService } from './organization-access.service';
 import { JwtAccessValidationService } from './jwt-access-validation.service';
 import { UltraCompactAccessValidationService } from './services/ultra-compact-access-validation.service';
-import { UltraCompactJwtService } from './services/ultra-compact-jwt.service';
 import { OrganizationAccessGuard } from './guards/organization-access.guard';
 import { EnhancedOrganizationSecurityGuard } from './guards/enhanced-organization-security.guard';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -37,7 +36,6 @@ import { PrismaModule } from '../prisma/prisma.module';
     OrganizationAccessService,
     JwtAccessValidationService,
     UltraCompactAccessValidationService, // ✅ Ultra-compact JWT access validation
-    UltraCompactJwtService,              // ✅ Ultra-compact JWT token generation
     OrganizationAccessGuard,
     EnhancedOrganizationSecurityGuard,
   ],
@@ -48,7 +46,6 @@ import { PrismaModule } from '../prisma/prisma.module';
     OrganizationAccessService,
     JwtAccessValidationService,
     UltraCompactAccessValidationService, // ✅ Ultra-compact JWT access validation
-    UltraCompactJwtService,              // ✅ Ultra-compact JWT token generation
     OrganizationAccessGuard,
     EnhancedOrganizationSecurityGuard,
   ],

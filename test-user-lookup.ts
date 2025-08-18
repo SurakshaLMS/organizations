@@ -14,7 +14,7 @@ async function testUserLookup() {
     console.log('User found with BigInt(1):', userById ? {
       id: userById.userId.toString(),
       email: userById.email,
-      name: userById.name
+      name: `${userById.firstName} ${userById.lastName || ''}`.trim()
     } : 'Not found');
 
     // Test direct number
@@ -25,7 +25,7 @@ async function testUserLookup() {
     console.log('User found with BigInt(1):', userByDirectId ? {
       id: userByDirectId.userId.toString(),
       email: userByDirectId.email,
-      name: userByDirectId.name
+      name: `${userByDirectId.firstName} ${userByDirectId.lastName || ''}`.trim()
     } : 'Not found');
 
     // List all users
@@ -35,7 +35,7 @@ async function testUserLookup() {
     
     console.log('First 5 users:');
     allUsers.forEach(user => {
-      console.log(`- ID: ${user.userId.toString()}, Email: ${user.email}, Name: ${user.name}`);
+      console.log(`- ID: ${user.userId.toString()}, Email: ${user.email}, Name: ${`${user.firstName} ${user.lastName || ''}`.trim()}`);
     });
 
   } catch (error) {

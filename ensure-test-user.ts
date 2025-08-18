@@ -17,7 +17,8 @@ async function ensureTestUser() {
         data: {
           userId: BigInt(1),
           email: 'test@test.com',
-          name: 'Test User',
+          firstName: 'Test',
+          lastName: 'User',
           password: 'test123' // Simple password for testing
         }
       });
@@ -25,13 +26,13 @@ async function ensureTestUser() {
       console.log('✅ Test user created:', {
         id: user.userId.toString(),
         email: user.email,
-        name: user.name
+        name: `${user.firstName} ${user.lastName || ''}`.trim()
       });
     } else {
       console.log('✅ Test user already exists:', {
         id: user.userId.toString(),
         email: user.email,
-        name: user.name
+        name: `${user.firstName} ${user.lastName || ''}`.trim()
       });
     }
 

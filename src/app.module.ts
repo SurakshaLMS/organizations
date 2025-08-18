@@ -11,7 +11,6 @@ import { InstituteModule } from './institute/institute.module';
 import { CauseModule } from './cause/cause.module';
 import { LectureModule } from './lecture/lecture.module';
 import { JobsModule } from './jobs/jobs.module';
-import { SyncModule } from './sync/sync.module';
 import { SecurityMiddleware } from './middleware/security.middleware';
 
 // Config imports
@@ -58,7 +57,7 @@ import appConfig from './config/app.config';
     CauseModule,
     LectureModule,
     JobsModule,
-    SyncModule,
+    // Removed: // Removed: SyncModule,
   ],
   controllers: [AppController],
   providers: [AppService],

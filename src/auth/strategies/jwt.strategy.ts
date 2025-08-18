@@ -11,28 +11,48 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private configService: ConfigService,
     private authService: AuthService,
   ) {
+    const jwtSecret = configService.get<string>('auth.jwtSecret') || 'default-secret';
+    console.log('JWT Strategy - Initializing with secret:', jwtSecret.substring(0, 20) + '...');
+    
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('auth.jwtSecret') || 'default-secret',
+      secretOrKey: jwtSecret,
     });
   }
 
-  async validate(payload: EnhancedJwtPayload) {
-    const user = await this.authService.validateJwtUser(payload);
-    if (!user) {
+  async validate(payload: any) {
+    console.log('JWT Strategy - validating payload:', { sub: payload.sub, email: payload.email });
+    
+    try {
+      const user = await this.authService.validateJwtUser(payload);
+      if (!user) {
+        console.log('JWT Strategy - User validation failed');
+        throw new UnauthorizedException();
+      }
+      
+      console.log('JWT Strategy - User validated successfully:', user.userId);
+      
+      // Handle both legacy and new token formats
+      const orgAccess = payload.orgAccess || [];
+      const organizations = payload.organizations || [];
+      
+      const result = {
+        sub: payload.sub,
+        userId: payload.sub,
+        email: payload.email,
+        name: payload.name,
+        userType: payload.userType, // Include userType (ORGANIZATION_MANAGER, etc.)
+        orgAccess: orgAccess, // Compact format
+        organizations: organizations, // Legacy format for backward compatibility
+        isGlobalAdmin: payload.isGlobalAdmin || false,
+      };
+      
+      console.log('JWT Strategy - Returning user data:', { sub: result.sub, email: result.email });
+      return result;
+    } catch (error) {
+      console.error('JWT Strategy - Validation error:', error.message);
       throw new UnauthorizedException();
     }
-    
-    // Return enhanced payload with compact organization access
-    return {
-      sub: payload.sub,
-      userId: payload.sub,
-      email: payload.email,
-      name: payload.name,
-      userType: payload.userType, // Include userType (ORGANIZATION_MANAGER, etc.)
-      orgAccess: payload.orgAccess || [], // Compact format
-      isGlobalAdmin: payload.isGlobalAdmin || false,
-    };
   }
 }

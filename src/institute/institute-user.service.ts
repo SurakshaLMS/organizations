@@ -53,14 +53,12 @@ export class InstituteUserService {
       data: {
         instituteId: instituteBigIntId,
         userId: userBigIntId,
-        role: assignDto.role,
-        isActive: assignDto.isActive || true,
+        status: 'ACTIVE', // Use status instead of role
       },
       select: {
         instituteId: true,
         userId: true,
-        role: true,
-        isActive: true,
+        status: true,
       },
     });
 
@@ -101,13 +99,13 @@ export class InstituteUserService {
       ...updateDto,
     };
 
-    // Handle activation/deactivation dates
+    // Handle activation/deactivation based on status changes
     if (updateDto.isActive !== undefined) {
-      if (updateDto.isActive && !existingAssignment.isActive) {
-        updateData.activatedDate = new Date();
-        updateData.deactivatedDate = null;
-      } else if (!updateDto.isActive && existingAssignment.isActive) {
-        updateData.deactivatedDate = new Date();
+      if (updateDto.isActive && existingAssignment.status !== 'ACTIVE') {
+        updateData.verifiedAt = new Date(); // Use verifiedAt for activation
+        updateData.status = 'ACTIVE';
+      } else if (!updateDto.isActive && existingAssignment.status === 'ACTIVE') {
+        updateData.status = 'INACTIVE';
       }
     }
 
@@ -132,7 +130,9 @@ export class InstituteUserService {
           select: {
             userId: true,
             email: true,
-            name: true,
+            firstName: true,
+
+            lastName: true,
           },
         },
       },
@@ -170,7 +170,9 @@ export class InstituteUserService {
           select: {
             userId: true,
             email: true,
-            name: true,
+            firstName: true,
+
+            lastName: true,
           },
         },
       },
@@ -271,8 +273,7 @@ export class InstituteUserService {
       select: {
         instituteId: true,
         userId: true,
-        role: true,
-        isActive: true,
+        status: true,
       },
     });
 

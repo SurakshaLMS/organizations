@@ -27,13 +27,13 @@ export class TestController {
           // Test user lookup
           const user = await this.prisma.user.findUnique({
             where: { userId: bigIntId },
-            select: { userId: true, email: true, name: true }
+            select: { userId: true, email: true, firstName: true, lastName: true }
           });
           
           // Test organization user lookup
           const orgUser = await this.prisma.organizationUser.findFirst({
             where: { userId: bigIntId },
-            select: { userId: true, organizationId: true, role: true }
+            select: { userId: true, organizationId: true, role: true, isVerified: true, }
           });
           
           results.push({
@@ -292,6 +292,11 @@ export class TestController {
           synced: true
         },
         organizationUsers: {
+          include: {
+            organization: {
+              select: { name: true, type: true }
+            }
+          },
           local: await this.prisma.organizationUser.count(),
           synced: true
         }
@@ -376,13 +381,15 @@ export class TestController {
         select: {
           userId: true,
           email: true,
-          name: true,
+          firstName: true,
+          lastName: true,
           password: true,
           organizationUsers: {
             where: { isVerified: true },
             select: {
               organizationId: true,
-              role: true
+              role: true,
+              isVerified: true,
             },
             take: 50
           }
@@ -401,7 +408,7 @@ export class TestController {
         user: {
           id: user.userId.toString(),
           email: user.email,
-          name: user.name
+          name: `${user.firstName} ${user.lastName || ''}`.trim()
         },
         permissions: {
           organizations: user.organizationUsers.map(ou => `${ou.role[0]}${ou.organizationId.toString()}`),

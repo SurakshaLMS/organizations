@@ -9,7 +9,8 @@ async function main() {
     select: {
       userId: true,
       email: true,
-      name: true,
+      firstName: true,
+      lastName: true,
       password: true,
       createdAt: true,
     },
@@ -18,7 +19,8 @@ async function main() {
 
   console.log(`Found ${users.length} users:`);
   users.forEach((user, index) => {
-    console.log(`${index + 1}. ID: ${user.userId}, Email: ${user.email}, Name: ${user.name}, Has Password: ${!!user.password}`);
+    const fullName = `${user.firstName} ${user.lastName || ''}`.trim();
+    console.log(`${index + 1}. ID: ${user.userId}, Email: ${user.email}, Name: ${fullName}, Has Password: ${!!user.password}`);
   });
 
   await prisma.$disconnect();
