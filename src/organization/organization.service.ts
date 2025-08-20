@@ -505,7 +505,7 @@ export class OrganizationService {
     try {
       // Attempt to create enrollment directly
       // If user is already enrolled, the composite primary key constraint will cause an error
-      const enrollment = await this.prisma.organizationUser.create({
+      await this.prisma.organizationUser.create({
         data: {
           organizationId: orgBigIntId,
           userId: userBigIntId,
@@ -514,29 +514,22 @@ export class OrganizationService {
           verifiedBy: shouldAutoVerify ? userBigIntId : null, // Self-verified if auto-verified
           verifiedAt: shouldAutoVerify ? new Date() : null,
         },
-        include: {
-          user: {
-            select: {
-              userId: true,
-              email: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-          organization: {
-            select: {
-              organizationId: true,
-              name: true,
-              type: true,
-            },
-          },
-        },
       });
 
       // Trigger token refresh for the user to update organization access
       await this.triggerTokenRefresh(userId);
 
-      return enrollment;
+      // Return simplified organization details only (no sensitive data, no joins)
+      return {
+        organizationId: convertToString(organization.organizationId),
+        name: organization.name,
+        type: organization.type,
+        isPublic: organization.isPublic,
+        enrollmentStatus: shouldAutoVerify ? 'verified' : 'pending_verification',
+        message: shouldAutoVerify 
+          ? 'Successfully enrolled and verified in organization' 
+          : 'Successfully enrolled in organization. Awaiting verification.'
+      };
     } catch (error) {
       // Check if this is a duplicate key constraint error (user already enrolled)
       // Prisma throws P2002 for unique constraint violations or we can check the message
