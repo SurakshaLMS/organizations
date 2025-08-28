@@ -149,24 +149,51 @@ export class OrganizationService {
   /**
    * Get all organizations with pagination (public ones or user's organizations)
    */
-  async getOrganizations(userId?: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any>> {
+  async getOrganizations(userId?: string, paginationDto?: PaginationDto, user?: any): Promise<PaginatedResponse<any>> {
     const pagination = paginationDto || new PaginationDto();
     
     const where: any = {};
 
     if (userId) {
       const userBigIntId = this.toBigInt(userId);
-      // Get user's organizations and public organizations
-      where.OR = [
-        { isPublic: true },
+      
+      // Get user's institute IDs from JWT token for private organization filtering
+      const userInstituteIds = user?.instituteIds || [];
+      
+      // Build comprehensive filtering logic:
+      // 1. All public organizations (whole system)
+      // 2. User's enrolled organizations 
+      // 3. Private organizations from user's institutes
+      const orConditions: any[] = [
+        { isPublic: true }, // All public organizations
         {
+          // User's enrolled organizations
           organizationUsers: {
             some: {
               userId: userBigIntId,
             },
           },
-        },
+        }
       ];
+
+      // Add private organizations filtering by user's institute IDs
+      if (userInstituteIds.length > 0) {
+        orConditions.push({
+          AND: [
+            { isPublic: false }, // Only private organizations
+            {
+              instituteId: {
+                in: userInstituteIds // Filter by user's institute IDs
+              }
+            }
+          ]
+        });
+      }
+
+      where.OR = orConditions;
+      
+      // Log the filtering for debugging
+      this.logger.log(`🏫 Filtering organizations for user ${userId} with institute IDs: [${userInstituteIds.join(', ')}]`);
     } else {
       // Only public organizations for unauthenticated users
       where.isPublic = true;

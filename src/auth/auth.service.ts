@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { UltraCompactJwtService } from './services/ultra-compact-jwt.service';
 import * as bcrypt from 'bcrypt';
 import { LoginDto, RefreshTokenDto, SetupPasswordDto, ChangePasswordDto } from './dto/auth.dto';
 import { convertToBigInt, convertToString } from '../utils/bigint.utils';
@@ -31,6 +32,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly ultraCompactJwtService: UltraCompactJwtService,
   ) {}
 
   private readonly logger = {
@@ -75,7 +77,7 @@ export class AuthService {
         throw new UnauthorizedException('Account is deactivated');
       }
 
-      // Create JWT payload
+      // Create ultra-compact JWT payload with institute IDs
       const payload = {
         sub: convertToString(user.userId),
         email: user.email,
@@ -84,13 +86,19 @@ export class AuthService {
           organizationId: convertToString(uo.organizationId),
           role: uo.role,
         })),
+        // Get institute IDs for this user 
+        instituteIds: await this.getUserInstituteIds(user.userId),
       };
 
-      // Generate tokens
-      const accessToken = this.jwtService.sign(payload);
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+      // Generate ultra-compact tokens
+      const accessToken = await this.ultraCompactJwtService.signUltraCompact(payload);
+      const refreshToken = await this.ultraCompactJwtService.signUltraCompact(payload, { expiresIn: '7d' });
 
-      this.logger.log(`✅ Login successful for: ${email}`);
+      this.logger.log(`✅ Ultra-compact JWT login successful for: ${email}`);
+      
+      if (payload.instituteIds && payload.instituteIds.length > 0) {
+        this.logger.log(`🏫 User has access to institutes: [${payload.instituteIds.join(', ')}]`);
+      }
 
       return {
         accessToken,
@@ -411,5 +419,36 @@ export class AuthService {
     return {
       accessToken: this.jwtService.sign(payload),
     };
+  }
+
+  /**
+   * Get institute IDs that a user has access to
+   */
+  private async getUserInstituteIds(userId: bigint): Promise<number[]> {
+    try {
+      // Get user enrolled institute IDs using your exact SQL query
+      const instituteUsers = await this.prisma.$queryRaw<Array<{ 
+        institute_id: number; 
+        status: string; 
+        created_at: Date; 
+      }>>`
+        SELECT iu.institute_id, iu.status, iu.created_at 
+        FROM institute_user iu
+        WHERE iu.user_id = ${userId} AND (${null} IS NULL OR iu.status = ${null})
+        ORDER BY iu.created_at DESC
+      `;
+
+      // Extract institute IDs from the query results
+      const instituteIds = instituteUsers.map(iu => iu.institute_id);
+      
+      if (instituteIds.length > 0) {
+        this.logger.log(`🏫 User ${userId} enrolled in institutes: [${instituteIds.join(', ')}]`);
+      }
+
+      return instituteIds;
+    } catch (error) {
+      this.logger.error(`Error getting institute IDs for user ${userId}: ${error.message}`);
+      return [];
+    }
   }
 }

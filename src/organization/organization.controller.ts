@@ -61,7 +61,7 @@ export class OrganizationController {
   ) {
     const paginationDto = paginationQuery || new PaginationDto();
     const userId = user?.sub; // undefined if not authenticated
-    return this.organizationService.getOrganizations(userId, paginationDto);
+    return this.organizationService.getOrganizations(userId, paginationDto, user);
   }
 
   @Get('user/enrolled')
