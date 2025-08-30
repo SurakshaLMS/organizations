@@ -4,7 +4,7 @@ import { AuthService } from '../auth/auth.service';
 import { JwtAccessValidationService } from '../auth/jwt-access-validation.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
-import { convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
+import { EnhancedJwtPayload } from '../auth/organization-access.service';
 
 @Injectable()
 export class OrganizationService {
