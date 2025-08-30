@@ -45,6 +45,15 @@ export class CreateOrganizationDto {
   needEnrollmentVerification?: boolean = true;
 
   @ApiPropertyOptional({
+    description: 'Whether users can self-enroll in this organization',
+    example: true,
+    default: true
+  })
+  @IsBoolean()
+  @IsOptional()
+  enabledEnrollments?: boolean = true;
+
+  @ApiPropertyOptional({
     description: 'Image URL for the organization',
     example: 'https://example.com/organization-logo.jpg'
   })
@@ -95,6 +104,14 @@ export class UpdateOrganizationDto {
   @IsBoolean()
   @IsOptional()
   needEnrollmentVerification?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether users can self-enroll in this organization',
+    example: true
+  })
+  @IsBoolean()
+  @IsOptional()
+  enabledEnrollments?: boolean;
 
   @ApiPropertyOptional({
     description: 'Image URL for the organization',

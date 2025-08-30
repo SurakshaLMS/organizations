@@ -113,6 +113,7 @@ model Organization {
   isPublic                  Boolean            @default(false)
   enrollmentKey             String?            @db.VarChar(255)
   needEnrollmentVerification Boolean           @default(true)
+  enabledEnrollments        Boolean            @default(true)
   imageUrl                  String?            @db.VarChar(500)
   instituteId               BigInt?
   createdAt                 DateTime           @default(now())

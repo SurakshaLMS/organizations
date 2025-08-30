@@ -69,7 +69,7 @@ export class OrganizationService {
    * Create a new organization
    */
   async createOrganization(createOrganizationDto: CreateOrganizationDto, creatorUserId: string) {
-    const { name, type, isPublic, enrollmentKey, needEnrollmentVerification, imageUrl, instituteId } = createOrganizationDto;
+    const { name, type, isPublic, enrollmentKey, needEnrollmentVerification, enabledEnrollments, imageUrl, instituteId } = createOrganizationDto;
 
     // Validate enrollment key requirement
     if (!isPublic && !enrollmentKey) {
@@ -110,6 +110,7 @@ export class OrganizationService {
         isPublic,
         enrollmentKey: enrollmentKey || null,
         needEnrollmentVerification: needEnrollmentVerification ?? true,
+        enabledEnrollments: enabledEnrollments ?? true,
         imageUrl,
         instituteId: instituteBigIntId,
       },
@@ -119,6 +120,7 @@ export class OrganizationService {
         type: true,
         isPublic: true,
         needEnrollmentVerification: true,
+        enabledEnrollments: true,
         imageUrl: true,
         instituteId: true,
       },
@@ -141,6 +143,7 @@ export class OrganizationService {
       type: organization.type,
       isPublic: organization.isPublic,
       needEnrollmentVerification: organization.needEnrollmentVerification,
+      enabledEnrollments: organization.enabledEnrollments,
       imageUrl: organization.imageUrl,
       instituteId: organization.instituteId ? organization.instituteId.toString() : null
     };
@@ -413,7 +416,7 @@ export class OrganizationService {
     updateOrganizationDto: UpdateOrganizationDto, 
     user?: any
   ) {
-    const { name, isPublic, enrollmentKey, needEnrollmentVerification, imageUrl, instituteId } = updateOrganizationDto;
+    const { name, isPublic, enrollmentKey, needEnrollmentVerification, enabledEnrollments, imageUrl, instituteId } = updateOrganizationDto;
 
     // Validate enrollment key requirement
     if (isPublic === false && !enrollmentKey) {
@@ -438,6 +441,7 @@ export class OrganizationService {
     if (name !== undefined) updateData.name = name;
     if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
     if (needEnrollmentVerification !== undefined) updateData.needEnrollmentVerification = needEnrollmentVerification;
+    if (enabledEnrollments !== undefined) updateData.enabledEnrollments = enabledEnrollments;
     if (isPublic !== undefined) updateData.isPublic = isPublic;
     if (enrollmentKey !== undefined) updateData.enrollmentKey = enrollmentKey || null;
     if (instituteId !== undefined) updateData.instituteId = instituteId ? convertToBigInt(instituteId) : null;
@@ -453,6 +457,7 @@ export class OrganizationService {
         type: true,
         isPublic: true,
         needEnrollmentVerification: true,
+        enabledEnrollments: true,
         imageUrl: true,
         instituteId: true,
         // Exclude: enrollmentKey, createdAt, updatedAt
@@ -466,6 +471,7 @@ export class OrganizationService {
       type: updatedOrganization.type,
       isPublic: updatedOrganization.isPublic,
       needEnrollmentVerification: updatedOrganization.needEnrollmentVerification,
+      enabledEnrollments: updatedOrganization.enabledEnrollments,
       imageUrl: updatedOrganization.imageUrl,
       instituteId: updatedOrganization.instituteId ? updatedOrganization.instituteId.toString() : null
     };
@@ -498,7 +504,7 @@ export class OrganizationService {
   }
 
   /**
-   * Enroll user in organization
+   * Enroll user in organization - Enhanced with enrollment control
    */
   async enrollUser(enrollUserDto: EnrollUserDto, userId: string) {
     const { organizationId, enrollmentKey } = enrollUserDto;
@@ -512,11 +518,28 @@ export class OrganizationService {
       throw new NotFoundException('Organization not found');
     }
 
-    // Validate enrollment key for private organizations
-    if (!organization.isPublic) {
-      if (!enrollmentKey || enrollmentKey !== organization.enrollmentKey) {
+    // 1. Check if self-enrollment is enabled
+    if (!organization.enabledEnrollments) {
+      throw new BadRequestException('Self-enrollment is disabled for this organization. Please contact an administrator.');
+    }
+
+    // 2. Enhanced enrollment key validation
+    if (organization.enrollmentKey) {
+      // If organization has an enrollment key, user MUST provide the correct key
+      if (!enrollmentKey) {
+        throw new BadRequestException('Enrollment key is required for this organization');
+      }
+      if (enrollmentKey !== organization.enrollmentKey) {
         throw new BadRequestException('Invalid enrollment key');
       }
+    } else {
+      // If organization has no enrollment key, user can enroll freely (no key required)
+      // This allows for open enrollment when enabledEnrollments=true and no key is set
+    }
+
+    // 3. Additional validation for private organizations
+    if (!organization.isPublic && !organization.enrollmentKey) {
+      throw new BadRequestException('Private organizations must have an enrollment key or disable self-enrollment');
     }
 
     // Determine if user should be auto-verified
