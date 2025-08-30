@@ -4,7 +4,7 @@ import { AuthService } from '../auth/auth.service';
 import { JwtAccessValidationService } from '../auth/jwt-access-validation.service';
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
-import { convertToBigInt, convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
+import { convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
 
 @Injectable()
 export class OrganizationService {
@@ -18,20 +18,11 @@ export class OrganizationService {
   ) {}
 
   /**
-   * Simple conversion from string to BigInt for MySQL auto-increment IDs
-   * @param id - Numeric string ID
-   * @returns BigInt for database operations
-   */
-  private toBigInt(id: string): bigint {
-    return BigInt(id);
-  }
-
-  /**
    * Get organization names by IDs for compact JWT token operations
    * Used for search functionality when working with compact format
    */
   async getOrganizationNamesByIds(organizationIds: string[], searchTerm?: string) {
-    const orgBigIntIds = organizationIds.map(id => convertToBigInt(id));
+    const orgBigIntIds = organizationIds.map(id => BigInt(id));
     
     const whereClause: any = {
       organizationId: {
@@ -80,7 +71,7 @@ export class OrganizationService {
 
     // Validate institute exists if provided
     if (instituteId) {
-      const instituteBigIntId = convertToBigInt(instituteId);
+      const instituteBigIntId = BigInt(instituteId);
       const institute = await this.prisma.institute.findUnique({
         where: { instituteId: instituteBigIntId },
       });
@@ -90,7 +81,7 @@ export class OrganizationService {
     }
 
     // Create organization first
-    const creatorUserBigIntId = this.toBigInt(creatorUserId);
+    const creatorUserBigIntId = BigInt(creatorUserId);
 
     // Validate that the creator user exists
     const creatorUser = await this.prisma.user.findUnique({
@@ -101,7 +92,7 @@ export class OrganizationService {
       throw new BadRequestException(`Creator user with ID ${creatorUserId} not found`);
     }
 
-    const instituteBigIntId = instituteId ? convertToBigInt(instituteId) : null;
+    const instituteBigIntId = instituteId ? BigInt(instituteId) : null;
     
     const organization = await this.prisma.organization.create({
       data: {
@@ -158,7 +149,7 @@ export class OrganizationService {
     const where: any = {};
 
     if (userId) {
-      const userBigIntId = this.toBigInt(userId);
+      const userBigIntId = BigInt(userId);
       
       // Get user's institute IDs from JWT token for private organization filtering
       const userInstituteIds = user?.instituteIds || [];
@@ -268,7 +259,7 @@ export class OrganizationService {
     const pagination = paginationDto || new PaginationDto();
 
     // Convert user ID to BigInt for database operations
-    const userBigIntId = this.toBigInt(userId);
+    const userBigIntId = BigInt(userId);
 
     // Build where clause for user's enrolled organizations only
     const where: any = {
@@ -370,7 +361,7 @@ export class OrganizationService {
    * Get organization by ID
    */
   async getOrganizationById(organizationId: string, userId?: string) {
-    const orgBigIntId = convertToBigInt(organizationId);
+    const orgBigIntId = BigInt(organizationId);
     const organization = await this.prisma.organization.findUnique({
       where: { organizationId: orgBigIntId },
       select: {
@@ -391,7 +382,7 @@ export class OrganizationService {
 
     // Check if user has access to this organization (if it's private)
     if (!organization.isPublic && userId) {
-      const userBigIntId = this.toBigInt(userId);
+      const userBigIntId = BigInt(userId);
       const userInOrg = await this.prisma.organizationUser.findFirst({
         where: {
           organizationId: orgBigIntId,
@@ -426,7 +417,7 @@ export class OrganizationService {
     // Validate institute exists if provided
     if (instituteId !== undefined) {
       if (instituteId) {
-        const instituteBigIntId = convertToBigInt(instituteId);
+        const instituteBigIntId = BigInt(instituteId);
         const institute = await this.prisma.institute.findUnique({
           where: { instituteId: instituteBigIntId },
         });
@@ -436,7 +427,7 @@ export class OrganizationService {
       }
     }
 
-    const orgBigIntId = convertToBigInt(organizationId);
+    const orgBigIntId = BigInt(organizationId);
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
@@ -444,7 +435,7 @@ export class OrganizationService {
     if (enabledEnrollments !== undefined) updateData.enabledEnrollments = enabledEnrollments;
     if (isPublic !== undefined) updateData.isPublic = isPublic;
     if (enrollmentKey !== undefined) updateData.enrollmentKey = enrollmentKey || null;
-    if (instituteId !== undefined) updateData.instituteId = instituteId ? convertToBigInt(instituteId) : null;
+    if (instituteId !== undefined) updateData.instituteId = instituteId ? BigInt(instituteId) : null;
 
     this.logger.log(`📝 Organization ${organizationId} updated by user ${user?.sub || 'anonymous'}`);
 
@@ -481,7 +472,7 @@ export class OrganizationService {
    * Delete organization (SIMPLIFIED - no authentication required)
    */
   async deleteOrganization(organizationId: string, user?: any) {
-    const orgBigIntId = convertToBigInt(organizationId);
+    const orgBigIntId = BigInt(organizationId);
 
     this.logger.warn(`🗑️ Organization ${organizationId} deleted by user ${user?.sub || 'anonymous'}`);
 
@@ -509,7 +500,7 @@ export class OrganizationService {
   async enrollUser(enrollUserDto: EnrollUserDto, userId: string) {
     const { organizationId, enrollmentKey } = enrollUserDto;
 
-    const orgBigIntId = convertToBigInt(organizationId);
+    const orgBigIntId = BigInt(organizationId);
     const organization = await this.prisma.organization.findUnique({
       where: { organizationId: orgBigIntId },
     });
@@ -548,7 +539,7 @@ export class OrganizationService {
     // 2. Organization doesn't require enrollment verification
     const shouldAutoVerify = organization.isPublic || !organization.needEnrollmentVerification;
 
-    const userBigIntId = this.toBigInt(userId);
+    const userBigIntId = BigInt(userId);
 
     try {
       // Attempt to create enrollment directly
@@ -569,7 +560,7 @@ export class OrganizationService {
 
       // Return simplified organization details only (no sensitive data, no joins)
       return {
-        organizationId: convertToString(organization.organizationId),
+        organizationId: organization.organizationId.toString(),
         name: organization.name,
         type: organization.type,
         isPublic: organization.isPublic,
@@ -600,8 +591,8 @@ export class OrganizationService {
     const { userId, isVerified } = verifyUserDto;
 
     // Check if user exists in organization
-    const orgBigIntId = convertToBigInt(organizationId);
-    const userBigIntId = this.toBigInt(userId);
+    const orgBigIntId = BigInt(organizationId);
+    const userBigIntId = BigInt(userId);
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
@@ -617,7 +608,7 @@ export class OrganizationService {
 
     this.logger.log(`👤 User ${userId} ${isVerified ? 'verified' : 'unverified'} in organization ${organizationId} by ${verifierUser?.sub || 'anonymous'}`);
 
-    const verifierBigIntId = verifierUser?.sub ? this.toBigInt(verifierUser.sub) : userBigIntId;
+    const verifierBigIntId = verifierUser?.sub ? BigInt(verifierUser.sub) : userBigIntId;
 
     const result = await this.prisma.organizationUser.update({
       where: {
@@ -661,7 +652,7 @@ export class OrganizationService {
    * Get organization causes with pagination
    */
   async getOrganizationCauses(organizationId: string, paginationDto: PaginationDto) {
-    const orgBigIntId = convertToBigInt(organizationId);
+    const orgBigIntId = BigInt(organizationId);
     
     // Validate organization exists
     const organization = await this.prisma.organization.findUnique({
@@ -721,8 +712,8 @@ export class OrganizationService {
    * Leave organization
    */
   async leaveOrganization(organizationId: string, userId: string) {
-    const orgBigIntId = this.toBigInt(organizationId);
-    const userBigIntId = this.toBigInt(userId);
+    const orgBigIntId = BigInt(organizationId);
+    const userBigIntId = BigInt(userId);
     
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
@@ -758,8 +749,8 @@ export class OrganizationService {
     try {
       // INPUT VALIDATION AND SANITIZATION
       const { instituteId } = assignInstituteDto;
-      const instituteBigIntId = convertToBigInt(instituteId);
-      const orgBigIntId = convertToBigInt(organizationId);
+      const instituteBigIntId = BigInt(instituteId);
+      const orgBigIntId = BigInt(organizationId);
 
       // SINGLE ATOMIC TRANSACTION
       const result = await this.prisma.$transaction(async (tx) => {
@@ -788,7 +779,7 @@ export class OrganizationService {
         }
 
         // Prevent duplicate assignment
-        if (organization.instituteId && convertToString(organization.instituteId) === instituteId) {
+        if (organization.instituteId && organization.instituteId.toString() === instituteId) {
           throw new BadRequestException(`Organization "${organization.name}" is already assigned to this institute`);
         }
 
@@ -847,7 +838,7 @@ export class OrganizationService {
    * Remove organization from institute (SIMPLIFIED - no authentication required)
    */
   async removeFromInstitute(organizationId: string, user?: any) {
-    const orgBigIntId = convertToBigInt(organizationId);
+    const orgBigIntId = BigInt(organizationId);
 
     // Check if organization is currently assigned to an institute
     const organization = await this.prisma.organization.findUnique({
@@ -896,7 +887,7 @@ export class OrganizationService {
    */
   async getOrganizationsByInstitute(instituteId: string, userId?: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any> & { institute: any }> {
     const pagination = paginationDto || new PaginationDto();
-    const instituteBigIntId = convertToBigInt(instituteId);
+    const instituteBigIntId = BigInt(instituteId);
     
     // Validate institute exists
     const institute = await this.prisma.institute.findUnique({
@@ -911,7 +902,7 @@ export class OrganizationService {
 
     if (userId) {
       // Get organizations where user has access (member or public)
-      const userBigIntId = this.toBigInt(userId);
+      const userBigIntId = BigInt(userId);
       where.OR = [
         { isPublic: true },
         {
@@ -1079,7 +1070,7 @@ export class OrganizationService {
    * Get organization members with roles (SIMPLIFIED - no authentication required)
    */
   async getOrganizationMembers(organizationId: string, pagination: PaginationDto, user?: any) {
-    const orgBigIntId = convertToBigInt(organizationId);
+    const orgBigIntId = BigInt(organizationId);
 
     // Get total count
     const total = await this.prisma.organizationUser.count({
@@ -1134,8 +1125,8 @@ export class OrganizationService {
    * Assign role to user in organization (SIMPLIFIED - no authentication required)
    */
   async assignUserRole(organizationId: string, assignUserRoleDto: any, user?: any) {
-    const orgBigIntId = convertToBigInt(organizationId);
-    const targetUserBigIntId = convertToBigInt(assignUserRoleDto.userId);
+    const orgBigIntId = BigInt(organizationId);
+    const targetUserBigIntId = BigInt(assignUserRoleDto.userId);
 
     // Prevent assigning PRESIDENT role
     if (assignUserRoleDto.role === 'PRESIDENT') {
@@ -1180,8 +1171,8 @@ export class OrganizationService {
    * Change user role in organization (SIMPLIFIED - no authentication required)
    */
   async changeUserRole(organizationId: string, changeUserRoleDto: any, user?: any) {
-    const orgBigIntId = convertToBigInt(organizationId);
-    const targetUserBigIntId = convertToBigInt(changeUserRoleDto.userId);
+    const orgBigIntId = BigInt(organizationId);
+    const targetUserBigIntId = BigInt(changeUserRoleDto.userId);
 
     // Prevent changing PRESIDENT role
     if (changeUserRoleDto.newRole === 'PRESIDENT') {
@@ -1230,8 +1221,8 @@ export class OrganizationService {
    * Remove user from organization (SIMPLIFIED - no authentication required)
    */
   async removeUserFromOrganization(organizationId: string, removeUserDto: any, user?: any) {
-    const orgBigIntId = convertToBigInt(organizationId);
-    const targetUserBigIntId = convertToBigInt(removeUserDto.userId);
+    const orgBigIntId = BigInt(organizationId);
+    const targetUserBigIntId = BigInt(removeUserDto.userId);
 
     // Check if target user exists in organization
     const targetMember = await this.prisma.organizationUser.findUnique({
@@ -1267,9 +1258,9 @@ export class OrganizationService {
    * Transfer presidency to another user (SIMPLIFIED - no authentication required)
    */
   async transferPresidency(organizationId: string, newPresidentUserId: string, user?: any) {
-    const orgBigIntId = convertToBigInt(organizationId);
-    const newPresidentBigIntId = convertToBigInt(newPresidentUserId);
-    const currentPresidentBigIntId = user?.sub ? convertToBigInt(user.sub) : convertToBigInt('1'); // Default to user 1
+    const orgBigIntId = BigInt(organizationId);
+    const newPresidentBigIntId = BigInt(newPresidentUserId);
+    const currentPresidentBigIntId = user?.sub ? BigInt(user.sub) : BigInt('1'); // Default to user 1
 
     // Check if new president is a member
     const newPresidentMember = await this.prisma.organizationUser.findUnique({
