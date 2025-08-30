@@ -108,7 +108,7 @@ export class OrganizationService {
         name,
         type,
         isPublic,
-        enrollmentKey: isPublic ? null : enrollmentKey,
+        enrollmentKey: enrollmentKey || null,
         needEnrollmentVerification: needEnrollmentVerification ?? true,
         imageUrl,
         instituteId: instituteBigIntId,
@@ -129,7 +129,7 @@ export class OrganizationService {
       data: {
         organizationId: organization.organizationId,
         userId: creatorUserBigIntId,
-        role: 'PRESIDENT',
+        role: 'MEMBER',
         isVerified: true,
       }
     });
@@ -438,10 +438,8 @@ export class OrganizationService {
     if (name !== undefined) updateData.name = name;
     if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
     if (needEnrollmentVerification !== undefined) updateData.needEnrollmentVerification = needEnrollmentVerification;
-    if (isPublic !== undefined) {
-      updateData.isPublic = isPublic;
-      updateData.enrollmentKey = isPublic ? null : enrollmentKey;
-    }
+    if (isPublic !== undefined) updateData.isPublic = isPublic;
+    if (enrollmentKey !== undefined) updateData.enrollmentKey = enrollmentKey || null;
     if (instituteId !== undefined) updateData.instituteId = instituteId ? convertToBigInt(instituteId) : null;
 
     this.logger.log(`📝 Organization ${organizationId} updated by user ${user?.sub || 'anonymous'}`);
