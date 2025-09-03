@@ -10,6 +10,7 @@ import { OrganizationModule } from './organization/organization.module';
 import { InstituteModule } from './institute/institute.module';
 import { CauseModule } from './cause/cause.module';
 import { LectureModule } from './lecture/lecture.module';
+import { DocumentationModule } from './documentation/documentation.module';
 import { JobsModule } from './jobs/jobs.module';
 import { SecurityMiddleware } from './middleware/security.middleware';
 
@@ -56,6 +57,7 @@ import appConfig from './config/app.config';
     InstituteModule,
     CauseModule,
     LectureModule,
+    DocumentationModule,
     JobsModule,
     // Removed: // Removed: SyncModule,
   ],
