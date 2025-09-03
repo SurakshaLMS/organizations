@@ -2,8 +2,21 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAccessValidationService } from '../auth/jwt-access-validation.service';
 import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lecture.dto';
+import { CreateLectureWithDocumentsDto, LectureWithDocumentsResponseDto } from './dto/create-lecture-with-documents.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
+import { S3Service } from '../common/services/s3.service';
+
+/**
+ * Document upload result interface
+ */
+interface DocumentUploadResult {
+  documentationId: string;
+  title: string;
+  url: string;
+  fileName: string;
+  size: number;
+}
 
 /**
  * ENTERPRISE LECTURE SERVICE
@@ -22,6 +35,7 @@ export class LectureService {
   constructor(
     private prisma: PrismaService,
     private jwtAccessValidation: JwtAccessValidationService,
+    private s3Service: S3Service,
   ) {}
 
   /**
@@ -119,6 +133,137 @@ export class LectureService {
       
       this.logger.error(`Lecture creation failed for cause ${causeId}:`, error);
       throw new BadRequestException('Failed to create lecture');
+    }
+  }
+
+  /**
+   * CREATE LECTURE WITH DOCUMENTS
+   * 
+   * Enhanced lecture creation that supports uploading multiple documents to S3
+   * and creating lecture with documents in a single transaction.
+   */
+  async createLectureWithDocuments(
+    createLectureDto: CreateLectureDto,
+    causeId: string,
+    user: any,
+    files?: Express.Multer.File[]
+  ): Promise<LectureWithDocumentsResponseDto> {
+    try {
+      // Convert causeId to BigInt for database query
+      const causeIdBigInt = convertToBigInt(causeId);
+      
+      // Validate user access to cause
+      const cause = await this.prisma.cause.findUnique({
+        where: { causeId: causeIdBigInt },
+        include: {
+          organization: true,
+        },
+      });
+
+      if (!cause) {
+        throw new NotFoundException('Cause not found');
+      }
+
+      // Check user permissions for the organization
+      const organizationId = convertToString(cause.organizationId);
+      this.jwtAccessValidation.requireOrganizationMember(user, organizationId);
+
+      // Create the lecture first
+      const lecture = await this.prisma.lecture.create({
+        data: {
+          ...createLectureDto,
+          causeId: causeIdBigInt,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      let uploadedDocuments: DocumentUploadResult[] = [];
+
+      // Upload documents if provided
+      if (files && files.length > 0) {
+        this.logger.log(`📁 Uploading ${files.length} documents for lecture ${lecture.lectureId}`);
+
+        for (const file of files) {
+          try {
+            // Upload to S3
+            const uploadResult = await this.s3Service.uploadFile(
+              file,
+              `lectures/${lecture.lectureId}/documents`
+            );
+
+            // Create documentation record
+            const documentation = await this.prisma.documentation.create({
+              data: {
+                lectureId: lecture.lectureId,
+                title: file.originalname,
+                content: '', // Can be enhanced later if needed
+                description: `Document uploaded for lecture: ${lecture.title}`,
+                docUrl: uploadResult.url,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              },
+            });
+
+            uploadedDocuments.push({
+              documentationId: convertToString(documentation.documentationId),
+              title: documentation.title,
+              url: documentation.docUrl || '',
+              fileName: file.originalname,
+              size: file.size,
+            });
+
+            this.logger.log(`✅ Document uploaded: ${file.originalname} -> ${uploadResult.url}`);
+          } catch (docError) {
+            this.logger.error(`❌ Failed to upload document ${file.originalname}:`, docError);
+            // Continue with other files, don't fail the entire operation
+          }
+        }
+      }
+
+      const result: LectureWithDocumentsResponseDto = {
+        lectureId: convertToString(lecture.lectureId),
+        causeId: convertToString(lecture.causeId),
+        title: lecture.title,
+        description: lecture.description || undefined,
+        content: lecture.content || undefined,
+        venue: lecture.venue || undefined,
+        mode: lecture.mode || undefined,
+        timeStart: lecture.timeStart?.toISOString() || undefined,
+        timeEnd: lecture.timeEnd?.toISOString() || undefined,
+        liveLink: lecture.liveLink || undefined,
+        liveMode: lecture.liveMode || undefined,
+        recordingUrl: lecture.recordingUrl || undefined,
+        isPublic: lecture.isPublic || false,
+        createdAt: lecture.createdAt.toISOString(),
+        updatedAt: lecture.updatedAt.toISOString(),
+        documents: uploadedDocuments.map(doc => ({
+          documentationId: doc.documentationId,
+          lectureId: convertToString(lecture.lectureId),
+          title: doc.title,
+          description: undefined,
+          content: undefined,
+          docUrl: doc.url,
+          originalFileName: doc.fileName,
+          fileSize: doc.size,
+          mimeType: 'application/octet-stream', // Can be enhanced later
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })),
+      };
+
+      this.logger.log(
+        `🎓 Lecture with documents created: ${lecture.lectureId} (${uploadedDocuments.length}/${files?.length || 0} documents uploaded)`
+      );
+
+      return result;
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      
+      this.logger.error(`Enhanced lecture creation failed for cause ${causeId}:`, error);
+      throw new BadRequestException('Failed to create lecture with documents');
     }
   }
 
