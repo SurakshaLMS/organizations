@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateDocumentationDto } from './dto/create-documentation.dto';
-import { UpdateDocumentationDto } from './dto/update-documentation.dto';
+import { CreateDocumentationDto, UpdateDocumentationDto } from './dto/documentation.dto';
 
 /**
  * SIMPLE DOCUMENTATION SERVICE FOR PDF URL MANAGEMENT

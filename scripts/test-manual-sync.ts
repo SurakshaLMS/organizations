@@ -28,7 +28,7 @@ async function testManualSync() {
     // Test sync logs
     console.log('📋 Testing Sync Logs Endpoint...');
     const logsResponse = await fetch(`${baseUrl}/logs`);
-    const logsData = await logsResponse.json();
+    const logsData: any = await logsResponse.json();
     console.log('Sync Logs Response (last 5 entries):');
     const recentLogs = logsData.logs ? logsData.logs.slice(0, 5) : [];
     console.log(JSON.stringify({ ...logsData, logs: recentLogs }, null, 2));
