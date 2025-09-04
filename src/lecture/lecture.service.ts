@@ -46,7 +46,7 @@ export class LectureService {
    * - Minimal database queries
    * - Production-ready error handling
    */
-  async createLecture(createLectureDto: CreateLectureDto, user: EnhancedJwtPayload) {
+  async createLecture(createLectureDto: CreateLectureDto, user?: EnhancedJwtPayload) {
     const { causeId, title, content, isPublic } = createLectureDto;
 
     try {
@@ -66,9 +66,11 @@ export class LectureService {
         throw new NotFoundException('Cause not found');
       }
 
-      // Step 2: JWT-BASED ACCESS VALIDATION (zero database queries)
+      // Step 2: JWT-BASED ACCESS VALIDATION (optional when no authentication)
       const organizationId = convertToString(cause.organizationId);
-      this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
+      if (user) {
+        this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
+      }
 
       // Step 3: Create lecture with minimal data return (NO UNNECESSARY JOINS)
       const lecture = await this.prisma.lecture.create({
@@ -123,7 +125,7 @@ export class LectureService {
         updatedAt: lecture.updatedAt.toISOString(),
       };
 
-      this.logger.log(`📚 Lecture created: ${lecture.lectureId} by user ${user.sub} in cause ${causeId}`);
+      this.logger.log(`📚 Lecture created: ${lecture.lectureId} ${user ? `by user ${user.sub}` : 'without authentication'} in cause ${causeId}`);
       return result;
 
     } catch (error) {
@@ -145,7 +147,7 @@ export class LectureService {
   async createLectureWithDocuments(
     createLectureDto: CreateLectureDto,
     causeId: string,
-    user: any,
+    user?: any,
     files?: Express.Multer.File[]
   ): Promise<LectureWithDocumentsResponseDto> {
     try {
@@ -164,9 +166,11 @@ export class LectureService {
         throw new NotFoundException('Cause not found');
       }
 
-      // Check user permissions for the organization
+      // Check user permissions for the organization (optional when no authentication)
       const organizationId = convertToString(cause.organizationId);
-      this.jwtAccessValidation.requireOrganizationMember(user, organizationId);
+      if (user) {
+        this.jwtAccessValidation.requireOrganizationMember(user, organizationId);
+      }
 
       // Create the lecture first
       const lecture = await this.prisma.lecture.create({
@@ -492,7 +496,7 @@ export class LectureService {
   /**
    * UPDATE LECTURE (ENTERPRISE OPTIMIZED)
    */
-  async updateLecture(lectureId: string, updateLectureDto: UpdateLectureDto, user: EnhancedJwtPayload) {
+  async updateLecture(lectureId: string, updateLectureDto: UpdateLectureDto, user?: EnhancedJwtPayload) {
     try {
       const lectureBigIntId = convertToBigInt(lectureId);
 
@@ -514,9 +518,11 @@ export class LectureService {
         throw new NotFoundException('Lecture not found');
       }
 
-      // JWT-based access validation
+      // JWT-based access validation (optional when no authentication)
       const organizationId = convertToString(lecture.cause.organizationId);
-      this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
+      if (user) {
+        this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
+      }
 
       // Prepare update data
       const updateData: any = {};
@@ -570,7 +576,7 @@ export class LectureService {
         causeId: convertToString(updatedLecture.causeId),
       };
 
-      this.logger.log(`📚 Lecture ${lectureId} updated by user ${user.sub}`);
+      this.logger.log(`📚 Lecture ${lectureId} updated ${user ? `by user ${user.sub}` : 'without authentication'}`);
       return result;
 
     } catch (error) {
@@ -585,7 +591,7 @@ export class LectureService {
   /**
    * DELETE LECTURE (ENTERPRISE OPTIMIZED)
    */
-  async deleteLecture(lectureId: string, user: EnhancedJwtPayload) {
+  async deleteLecture(lectureId: string, user?: EnhancedJwtPayload) {
     try {
       const lectureBigIntId = convertToBigInt(lectureId);
 
@@ -608,16 +614,18 @@ export class LectureService {
         throw new NotFoundException('Lecture not found');
       }
 
-      // JWT-based access validation (require admin level)
+      // JWT-based access validation (require admin level when authenticated)
       const organizationId = convertToString(lecture.cause.organizationId);
-      this.jwtAccessValidation.requireOrganizationAdmin(user, organizationId);
+      if (user) {
+        this.jwtAccessValidation.requireOrganizationAdmin(user, organizationId);
+      }
 
       // Delete lecture
       await this.prisma.lecture.delete({
         where: { lectureId: lectureBigIntId },
       });
 
-      this.logger.warn(`🗑️ Lecture ${lectureId} (${lecture.title}) deleted by user ${user.sub}`);
+      this.logger.warn(`🗑️ Lecture ${lectureId} (${lecture.title}) deleted ${user ? `by user ${user.sub}` : 'without authentication'}`);
       
       return {
         message: 'Lecture deleted successfully',

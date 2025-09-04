@@ -1,12 +1,10 @@
 import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UploadedFiles } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { LectureService } from './lecture.service';
 import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lecture.dto';
 import { CreateLectureWithDocumentsDto } from './dto/create-lecture-with-documents.dto';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
-import { EnhancedJwtPayload } from '../auth/organization-access.service';
-import { GetUser } from '../auth/decorators/get-user.decorator';
 
 /**
  * LECTURE CONTROLLER
@@ -16,7 +14,6 @@ import { GetUser } from '../auth/decorators/get-user.decorator';
 @ApiTags('Lectures')
 @Controller('lectures')
 @UseInterceptors(SecurityHeadersInterceptor)
-@ApiBearerAuth()
 export class LectureController {
   private readonly logger = new Logger(LectureController.name);
 
@@ -26,16 +23,14 @@ export class LectureController {
    * CREATE LECTURE
    */
   @Post()
-  @ApiOperation({ summary: 'Create a new lecture - Requires Authentication' })
+  @ApiOperation({ summary: 'Create a new lecture' })
   @ApiBody({ type: CreateLectureDto })
   @ApiResponse({ status: 201, description: 'Lecture created successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   async createLecture(
-    @Body() createLectureDto: CreateLectureDto,
-    @GetUser() user: EnhancedJwtPayload
+    @Body() createLectureDto: CreateLectureDto
   ) {
-    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" by user ${user.sub}`);
-    return this.lectureService.createLecture(createLectureDto, user);
+    this.logger.log(`📚 Creating lecture "${createLectureDto.title}"`);
+    return this.lectureService.createLecture(createLectureDto, undefined);
   }
 
   /**
@@ -46,7 +41,7 @@ export class LectureController {
    */
   @Post('with-documents/:causeId')
   @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files
-  @ApiOperation({ summary: 'Create lecture with document uploads to S3 - Requires Authentication' })
+  @ApiOperation({ summary: 'Create lecture with document uploads to S3' })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'causeId', description: 'ID of the cause to create lecture for' })
   @ApiBody({ 
@@ -54,20 +49,17 @@ export class LectureController {
     description: 'Lecture data with optional file uploads (use form-data)' 
   })
   @ApiResponse({ status: 201, description: 'Lecture created with documents successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
-  @ApiResponse({ status: 403, description: 'Access denied to this cause' })
   async createLectureWithDocuments(
     @Param('causeId') causeId: string,
     @Body() createLectureDto: CreateLectureDto,
-    @GetUser() user: EnhancedJwtPayload,
     @UploadedFiles() files?: Express.Multer.File[]
   ) {
-    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents for cause ${causeId} by user ${user.sub}`);
+    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents for cause ${causeId}`);
     return this.lectureService.createLectureWithDocuments(
       createLectureDto,
       causeId,
-      user,
+      undefined,
       files
     );
   }
@@ -76,89 +68,77 @@ export class LectureController {
    * GET LECTURES WITH FILTERING
    */
   @Get()
-  @ApiOperation({ summary: 'Get lectures with filtering - Requires Authentication' })
+  @ApiOperation({ summary: 'Get lectures with filtering' })
   @ApiQuery({ name: 'causeId', required: false, description: 'Filter by cause ID' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page' })
   @ApiResponse({ status: 200, description: 'Lectures retrieved successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   async getLectures(
-    @Query() queryDto: LectureQueryDto,
-    @GetUser() user: EnhancedJwtPayload
+    @Query() queryDto: LectureQueryDto
   ) {
-    this.logger.log(`📚 Fetching lectures with filters: ${JSON.stringify(queryDto)} by user ${user.sub}`);
-    return this.lectureService.getLectures(user, queryDto);
+    this.logger.log(`📚 Fetching lectures with filters: ${JSON.stringify(queryDto)}`);
+    return this.lectureService.getLectures(undefined, queryDto);
   }
 
   /**
    * GET LECTURE BY ID
    */
   @Get(':id')
-  @ApiOperation({ summary: 'Get lecture by ID - Requires Authentication' })
+  @ApiOperation({ summary: 'Get lecture by ID' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture retrieved successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   async getLectureById(
-    @Param('id') id: string,
-    @GetUser() user: EnhancedJwtPayload
+    @Param('id') id: string
   ) {
-    this.logger.log(`📚 Fetching lecture with ID: ${id} by user ${user.sub}`);
-    return this.lectureService.getLectureById(id, user);
+    this.logger.log(`📚 Fetching lecture with ID: ${id}`);
+    return this.lectureService.getLectureById(id, undefined);
   }
 
   /**
    * UPDATE LECTURE
    */
   @Put(':id')
-  @ApiOperation({ summary: 'Update lecture - Requires Authentication' })
+  @ApiOperation({ summary: 'Update lecture' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiBody({ type: UpdateLectureDto })
   @ApiResponse({ status: 200, description: 'Lecture updated successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
-  @ApiResponse({ status: 403, description: 'Access denied' })
   async updateLecture(
     @Param('id') id: string,
-    @Body() updateLectureDto: UpdateLectureDto,
-    @GetUser() user: EnhancedJwtPayload
+    @Body() updateLectureDto: UpdateLectureDto
   ) {
-    this.logger.log(`📚 Updating lecture ${id} by user ${user.sub}`);
-    return this.lectureService.updateLecture(id, updateLectureDto, user);
+    this.logger.log(`📚 Updating lecture ${id}`);
+    return this.lectureService.updateLecture(id, updateLectureDto, undefined);
   }
 
   /**
    * DELETE LECTURE
    */
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete lecture - Requires Authentication' })
+  @ApiOperation({ summary: 'Delete lecture' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture deleted successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
-  @ApiResponse({ status: 403, description: 'Access denied' })
   async deleteLecture(
-    @Param('id') id: string,
-    @GetUser() user: EnhancedJwtPayload
+    @Param('id') id: string
   ) {
-    this.logger.log(`📚 Deleting lecture ${id} by user ${user.sub}`);
-    return this.lectureService.deleteLecture(id, user);
+    this.logger.log(`📚 Deleting lecture ${id}`);
+    return this.lectureService.deleteLecture(id, undefined);
   }
 
   /**
    * GET LECTURE DOCUMENTS
    */
   @Get(':id/documents')
-  @ApiOperation({ summary: 'Get lecture documents - Requires Authentication' })
+  @ApiOperation({ summary: 'Get lecture documents' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture documents retrieved successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   async getLectureDocuments(
-    @Param('id') id: string,
-    @GetUser() user: EnhancedJwtPayload
+    @Param('id') id: string
   ) {
-    this.logger.log(`📚 Fetching documents for lecture ${id} by user ${user.sub}`);
-    return this.lectureService.getLectureDocuments(id, user);
+    this.logger.log(`📚 Fetching documents for lecture ${id}`);
+    return this.lectureService.getLectureDocuments(id, undefined);
   }
 }
