@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UploadedFiles, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UploadedFiles } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { LectureService } from './lecture.service';
@@ -6,7 +6,6 @@ import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lectu
 import { CreateLectureWithDocumentsDto } from './dto/create-lecture-with-documents.dto';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
 import { EnhancedJwtPayload } from '../auth/organization-access.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 
 /**
@@ -27,7 +26,6 @@ export class LectureController {
    * CREATE LECTURE
    */
   @Post()
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create a new lecture - Requires Authentication' })
   @ApiBody({ type: CreateLectureDto })
   @ApiResponse({ status: 201, description: 'Lecture created successfully' })
@@ -47,7 +45,6 @@ export class LectureController {
    * Uses multipart/form-data to handle file uploads
    */
   @Post('with-documents/:causeId')
-  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files
   @ApiOperation({ summary: 'Create lecture with document uploads to S3 - Requires Authentication' })
   @ApiConsumes('multipart/form-data')
@@ -79,7 +76,6 @@ export class LectureController {
    * GET LECTURES WITH FILTERING
    */
   @Get()
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get lectures with filtering - Requires Authentication' })
   @ApiQuery({ name: 'causeId', required: false, description: 'Filter by cause ID' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
@@ -98,7 +94,6 @@ export class LectureController {
    * GET LECTURE BY ID
    */
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get lecture by ID - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture retrieved successfully' })
@@ -116,7 +111,6 @@ export class LectureController {
    * UPDATE LECTURE
    */
   @Put(':id')
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Update lecture - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiBody({ type: UpdateLectureDto })
@@ -137,7 +131,6 @@ export class LectureController {
    * DELETE LECTURE
    */
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Delete lecture - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture deleted successfully' })
@@ -156,7 +149,6 @@ export class LectureController {
    * GET LECTURE DOCUMENTS
    */
   @Get(':id/documents')
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get lecture documents - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture documents retrieved successfully' })
