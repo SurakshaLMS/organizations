@@ -117,6 +117,33 @@ export class LectureController {
   }
 
   /**
+   * UPDATE LECTURE WITH DOCUMENTS
+   * 
+   * Enhanced endpoint for updating lecture with new document uploads
+   * Supports both updating lecture details and adding/replacing documents
+   */
+  @Put(':id/with-documents')
+  @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files
+  @ApiOperation({ summary: 'Update lecture with document uploads' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'Lecture ID to update' })
+  @ApiBody({ 
+    type: UpdateLectureDto,
+    description: 'Lecture update data with optional file uploads (use form-data)' 
+  })
+  @ApiResponse({ status: 200, description: 'Lecture updated with documents successfully' })
+  @ApiResponse({ status: 404, description: 'Lecture not found' })
+  @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
+  async updateLectureWithDocuments(
+    @Param('id') id: string,
+    @Body() updateLectureDto: UpdateLectureDto,
+    @UploadedFiles() files?: Express.Multer.File[]
+  ) {
+    this.logger.log(`📚 Updating lecture ${id} with ${files?.length || 0} documents`);
+    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, undefined);
+  }
+
+  /**
    * DELETE LECTURE
    */
   @Delete(':id')

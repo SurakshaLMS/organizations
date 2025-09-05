@@ -10,7 +10,7 @@ import { S3Service } from '../common/services/s3.service';
 /**
  * Document upload result interface
  */
-interface DocumentUploadResult {
+export interface DocumentUploadResult {
   documentationId: string;
   title: string;
   url: string;
@@ -589,6 +589,83 @@ export class LectureService {
   }
 
   /**
+   * UPDATE LECTURE WITH DOCUMENTS
+   * 
+   * Enhanced method to update lecture details and manage documents
+   * Allows adding new documents while optionally replacing existing ones
+   */
+  async updateLectureWithDocuments(
+    lectureId: string,
+    updateLectureDto: UpdateLectureDto,
+    files?: Express.Multer.File[],
+    user?: EnhancedJwtPayload
+  ) {
+    try {
+      const lectureBigIntId = convertToBigInt(lectureId);
+
+      // First, update the lecture details using existing method
+      const updatedLecture = await this.updateLecture(lectureId, updateLectureDto, user);
+
+      let uploadedDocuments: DocumentUploadResult[] = [];
+
+      // Handle document uploads if provided
+      if (files && files.length > 0) {
+        this.logger.log(`📁 Uploading ${files.length} new documents for lecture ${lectureId}`);
+
+        for (const file of files) {
+          try {
+            // Upload to S3
+            const uploadResult = await this.s3Service.uploadFile(
+              file,
+              `lectures/${lectureId}/documents`
+            );
+
+            // Create database record for the document
+            const document = await this.prisma.documentation.create({
+              data: {
+                title: file.originalname,
+                description: `Document uploaded for lecture ${lectureId}`,
+                docUrl: uploadResult.url,
+                lectureId: lectureBigIntId,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              },
+            });
+
+            uploadedDocuments.push({
+              documentationId: convertToString(document.documentationId),
+              title: document.title,
+              url: document.docUrl || uploadResult.url,
+              fileName: uploadResult.originalName,
+              size: uploadResult.size,
+            });
+
+            this.logger.log(`📄 Document uploaded: ${file.originalname} for lecture ${lectureId}`);
+          } catch (uploadError) {
+            this.logger.error(`Failed to upload document ${file.originalname} for lecture ${lectureId}:`, uploadError);
+            // Continue with other files even if one fails
+          }
+        }
+      }
+
+      // Return enhanced response with updated lecture and new documents
+      return {
+        ...updatedLecture,
+        uploadedDocuments,
+        documentsCount: uploadedDocuments.length,
+        message: `Lecture updated successfully${uploadedDocuments.length > 0 ? ` with ${uploadedDocuments.length} new documents` : ''}`,
+      };
+
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      this.logger.error(`Failed to update lecture with documents for ID ${lectureId}:`, error);
+      throw new BadRequestException('Failed to update lecture with documents');
+    }
+  }
+
+  /**
    * DELETE LECTURE (ENTERPRISE OPTIMIZED)
    */
   async deleteLecture(lectureId: string, user?: EnhancedJwtPayload) {
@@ -620,19 +697,86 @@ export class LectureService {
         this.jwtAccessValidation.requireOrganizationAdmin(user, organizationId);
       }
 
-      // Delete lecture
+      // Step 1: Get all documents associated with this lecture
+      const documents = await this.prisma.documentation.findMany({
+        where: { lectureId: lectureBigIntId },
+        select: {
+          documentationId: true,
+          title: true,
+          docUrl: true,
+        },
+      });
+
+      this.logger.log(`🗑️ Found ${documents.length} documents to delete for lecture ${lectureId}`);
+
+      // Step 2: Delete documents from S3 storage
+      const deletedDocuments: Array<{
+        documentationId: string;
+        title: string;
+        url: string | null;
+      }> = [];
+      
+      const failedDeletions: Array<{
+        documentationId: string;
+        title: string;
+        error: string;
+      }> = [];
+
+      for (const document of documents) {
+        try {
+          if (document.docUrl) {
+            // Extract S3 key from URL for deletion
+            const urlParts = document.docUrl.split('/');
+            const s3Key = urlParts.slice(-3).join('/'); // Get the last 3 parts: lectures/lectureId/documents/filename
+            
+            await this.s3Service.deleteFile(s3Key);
+            this.logger.log(`📄 Deleted document from S3: ${document.title}`);
+          }
+          
+          deletedDocuments.push({
+            documentationId: convertToString(document.documentationId),
+            title: document.title,
+            url: document.docUrl,
+          });
+        } catch (s3Error) {
+          this.logger.error(`Failed to delete document ${document.title} from S3:`, s3Error);
+          failedDeletions.push({
+            documentationId: convertToString(document.documentationId),
+            title: document.title,
+            error: 'S3 deletion failed',
+          });
+          // Continue with database deletion even if S3 fails
+        }
+      }
+
+      // Step 3: Delete documents from database (this will cascade due to foreign key relationship)
+      // The Prisma schema should have onDelete: Cascade for this to work automatically
+      // But we'll be explicit for safety
+      if (documents.length > 0) {
+        await this.prisma.documentation.deleteMany({
+          where: { lectureId: lectureBigIntId },
+        });
+        this.logger.log(`🗑️ Deleted ${documents.length} documents from database for lecture ${lectureId}`);
+      }
+
+      // Step 4: Delete the lecture itself
       await this.prisma.lecture.delete({
         where: { lectureId: lectureBigIntId },
       });
 
-      this.logger.warn(`🗑️ Lecture ${lectureId} (${lecture.title}) deleted ${user ? `by user ${user.sub}` : 'without authentication'}`);
+      this.logger.warn(`🗑️ Lecture ${lectureId} (${lecture.title}) and ${documents.length} documents deleted ${user ? `by user ${user.sub}` : 'without authentication'}`);
       
       return {
-        message: 'Lecture deleted successfully',
+        message: 'Lecture and all related documents deleted successfully',
         deletedLecture: {
           lectureId: convertToString(lecture.lectureId),
           title: lecture.title,
           deletedAt: new Date().toISOString(),
+        },
+        deletedDocuments: {
+          count: deletedDocuments.length,
+          successful: deletedDocuments,
+          failed: failedDeletions,
         },
       };
 
