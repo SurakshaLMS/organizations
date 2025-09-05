@@ -63,7 +63,8 @@ async function bootstrap() {
       'Accept-Encoding',
       'Accept-Language',
       'Connection',
-      'Host'
+      'Host',
+      'ngrok-skip-browser-warning'
     ],
     exposedHeaders: [
       'Content-Length',
@@ -109,7 +110,8 @@ async function bootstrap() {
         'Accept-Encoding',
         'Accept-Language',
         'Connection',
-        'Host'
+        'Host',
+        'ngrok-skip-browser-warning'
       ].join(', '));
       res.header('Access-Control-Max-Age', '86400'); // 24 hours
       res.header('Access-Control-Allow-Credentials', 'true');
