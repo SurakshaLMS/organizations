@@ -10,6 +10,7 @@ import { SecurityHeadersInterceptor } from '../common/interceptors/security-head
  * LECTURE CONTROLLER
  * 
  * Handles all lecture-related operations including document uploads to S3
+ * CORS and proxy support handled centrally in main.ts for any origin/proxy configuration
  */
 @ApiTags('Lectures')
 @Controller('lectures')
@@ -38,6 +39,7 @@ export class LectureController {
    * 
    * Enhanced endpoint that allows creating a lecture with multiple document uploads to S3
    * Uses multipart/form-data to handle file uploads
+   * CORS and proxy support handled centrally in main.ts
    */
   @Post('with-documents/:causeId')
   @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files
@@ -50,12 +52,14 @@ export class LectureController {
   })
   @ApiResponse({ status: 201, description: 'Lecture created with documents successfully' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
+  @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
   async createLectureWithDocuments(
     @Param('causeId') causeId: string,
     @Body() createLectureDto: CreateLectureDto,
     @UploadedFiles() files?: Express.Multer.File[]
   ) {
     this.logger.log(`📚 Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents for cause ${causeId}`);
+    
     return this.lectureService.createLectureWithDocuments(
       createLectureDto,
       causeId,

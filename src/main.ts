@@ -21,24 +21,136 @@ async function bootstrap() {
   // Get Prisma service for shutdown hooks
   const prismaService = app.get(PrismaService);
   
-  // Security middleware
+  // Security middleware with relaxed settings for proxy and cross-origin
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        scriptSrc: ["'self'"],
-        imgSrc: ["'self'", "data:", "https:"],
+        defaultSrc: ["'self'", "*"],
+        styleSrc: ["'self'", "'unsafe-inline'", "*"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*"],
+        imgSrc: ["'self'", "data:", "https:", "http:", "*"],
+        connectSrc: ["'self'", "*"],
+        fontSrc: ["'self'", "*"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'", "*"],
+        frameSrc: ["'self'", "*"],
       },
     },
     crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: { policy: "unsafe-none" },
   }));
 
-  // CORS configuration
+  // Enhanced CORS configuration for any proxy and cross-origin access
   app.enableCors({
-    origin: configService.get<string>('app.corsOrigin'),
-    methods: configService.get<string>('app.corsMethods'),
-    credentials: configService.get<boolean>('app.corsCredentials'),
+    origin: true, // Allow all origins
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Accept',
+      'Authorization', 
+      'Content-Type',
+      'X-Requested-With',
+      'X-HTTP-Method-Override',
+      'X-Forwarded-For',
+      'X-Forwarded-Proto',
+      'X-Forwarded-Host',
+      'X-Real-IP',
+      'User-Agent',
+      'Referer',
+      'Cache-Control',
+      'Pragma',
+      'Origin',
+      'Accept-Encoding',
+      'Accept-Language',
+      'Connection',
+      'Host'
+    ],
+    exposedHeaders: [
+      'Content-Length',
+      'Content-Type',
+      'Content-Disposition',
+      'X-Total-Count',
+      'X-Page-Count',
+      'X-Per-Page',
+      'X-Current-Page',
+      'Access-Control-Allow-Origin',
+      'Access-Control-Allow-Credentials'
+    ],
+    credentials: true,
+    optionsSuccessStatus: 200, // For legacy browser support
+    preflightContinue: false,
+    maxAge: 86400, // 24 hours for preflight cache
+  });
+
+  // Trust proxy settings for load balancers and reverse proxies
+  app.getHttpAdapter().getInstance().set('trust proxy', true);
+
+  // Enhanced middleware for proxy and cross-origin compatibility
+  app.use((req: any, res: any, next: any) => {
+    // Handle preflight requests for any route
+    if (req.method === 'OPTIONS') {
+      res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+      res.header('Access-Control-Allow-Headers', [
+        'Accept',
+        'Authorization', 
+        'Content-Type',
+        'X-Requested-With',
+        'X-HTTP-Method-Override',
+        'X-Forwarded-For',
+        'X-Forwarded-Proto',
+        'X-Forwarded-Host',
+        'X-Real-IP',
+        'User-Agent',
+        'Referer',
+        'Cache-Control',
+        'Pragma',
+        'Origin',
+        'Accept-Encoding',
+        'Accept-Language',
+        'Connection',
+        'Host'
+      ].join(', '));
+      res.header('Access-Control-Max-Age', '86400'); // 24 hours
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Vary', 'Origin, Access-Control-Request-Headers');
+      return res.sendStatus(200);
+    }
+    
+    // Enhanced CORS headers for all requests
+    const origin = req.headers.origin;
+    if (origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+    } else {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Vary', 'Origin, Accept-Encoding');
+    
+    // Enhanced proxy-friendly headers
+    if (req.headers['x-forwarded-proto']) {
+      req.protocol = req.headers['x-forwarded-proto'];
+      res.header('X-Forwarded-Proto', req.headers['x-forwarded-proto']);
+    }
+    if (req.headers['x-forwarded-host']) {
+      req.headers.host = req.headers['x-forwarded-host'];
+      res.header('X-Forwarded-Host', req.headers['x-forwarded-host']);
+    }
+    if (req.headers['x-forwarded-for']) {
+      res.header('X-Forwarded-For', req.headers['x-forwarded-for']);
+    }
+    if (req.headers['x-real-ip']) {
+      res.header('X-Real-IP', req.headers['x-real-ip']);
+    }
+    
+    // Handle different content types for cross-origin requests
+    if (req.headers['content-type']?.includes('application/json') || 
+        req.headers['content-type']?.includes('multipart/form-data') ||
+        req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+      res.header('Access-Control-Expose-Headers', 'Content-Type, Content-Length, Content-Disposition');
+    }
+    
+    next();
   });
 
   // Global exception filter for enhanced error handling
