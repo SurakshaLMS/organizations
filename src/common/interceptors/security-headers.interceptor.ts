@@ -210,7 +210,50 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
       return `[LARGE_RESPONSE: ${stringified.length} characters]`;
     }
 
-    return this.sanitizeResponse(data);
+    // For logging purposes, redact ALL sensitive fields including tokens
+    return this.sanitizeForLogging(data);
+  }
+
+  private sanitizeForLogging(data: any): any {
+    if (data === null || data === undefined) {
+      return data;
+    }
+
+    // Handle BigInt conversion for JSON serialization
+    if (typeof data === 'bigint') {
+      return data.toString();
+    }
+
+    // Handle arrays
+    if (Array.isArray(data)) {
+      return data.map(item => this.sanitizeForLogging(item));
+    }
+
+    // Handle objects
+    if (typeof data === 'object') {
+      const sanitized = {};
+      
+      for (const key in data) {
+        if (data.hasOwnProperty(key)) {
+          const value = data[key];
+          
+          // For logging, redact ALL sensitive fields including tokens
+          if (this.isSensitiveField(key)) {
+            sanitized[key] = '[REDACTED]';
+          } else if (typeof value === 'bigint') {
+            sanitized[key] = value.toString();
+          } else if (value !== null && typeof value === 'object') {
+            sanitized[key] = this.sanitizeForLogging(value);
+          } else {
+            sanitized[key] = value;
+          }
+        }
+      }
+      
+      return sanitized;
+    }
+
+    return data;
   }
 
   private sanitizeResponse(data: any): any {
@@ -236,8 +279,8 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
         if (data.hasOwnProperty(key)) {
           const value = data[key];
           
-          // Remove sensitive fields
-          if (this.isSensitiveField(key)) {
+          // Don't redact tokens in login/auth responses - they need to be sent to frontend
+          if (this.isSensitiveField(key) && !this.isAuthTokenField(key)) {
             sanitized[key] = '[REDACTED]';
           } else if (typeof value === 'bigint') {
             sanitized[key] = value.toString();
@@ -265,5 +308,11 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
     return sensitiveFields.some(sensitive => 
       fieldName.toLowerCase().includes(sensitive.toLowerCase())
     );
+  }
+
+  private isAuthTokenField(fieldName: string): boolean {
+    // These token fields should NOT be redacted in responses as they need to be sent to frontend
+    const authTokenFields = ['accessToken', 'refreshToken'];
+    return authTokenFields.includes(fieldName);
   }
 }
