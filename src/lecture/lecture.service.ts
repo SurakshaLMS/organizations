@@ -691,10 +691,24 @@ export class LectureService {
         throw new NotFoundException('Lecture not found');
       }
 
-      // JWT-based access validation (require admin level when authenticated)
+      // JWT-based access validation 
+      // Allow organization admins and moderators to delete lectures
+      // Since Lecture model lacks createdBy field, we implement organization-level permissions
       const organizationId = convertToString(lecture.cause.organizationId);
       if (user) {
-        this.jwtAccessValidation.requireOrganizationAdmin(user, organizationId);
+        try {
+          // Try organization admin first (highest permission)
+          this.jwtAccessValidation.requireOrganizationAdmin(user, organizationId);
+        } catch (adminError) {
+          // If not admin, try moderator (teacher equivalent)
+          try {
+            this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
+          } catch (moderatorError) {
+            throw new ForbiddenException(
+              'Insufficient permissions. Only organization admins and moderators can delete lectures.'
+            );
+          }
+        }
       }
 
       // Step 1: Get all documents associated with this lecture

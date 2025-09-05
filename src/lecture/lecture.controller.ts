@@ -1,10 +1,13 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UploadedFiles, UseGuards } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { LectureService } from './lecture.service';
 import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lecture.dto';
 import { CreateLectureWithDocumentsDto } from './dto/create-lecture-with-documents.dto';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
+import { EnhancedJwtPayload } from '../auth/organization-access.service';
 
 /**
  * LECTURE CONTROLLER
@@ -145,17 +148,24 @@ export class LectureController {
 
   /**
    * DELETE LECTURE
+   * 
+   * Requires JWT authentication and organization-level authorization
+   * Only organization admins and moderators can delete lectures
+   * Implements cascade deletion of all related documents from S3 and database
    */
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete lecture' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Delete lecture (Admin/Moderator only)' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture deleted successfully' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   async deleteLecture(
-    @Param('id') id: string
+    @Param('id') id: string,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Deleting lecture ${id}`);
-    return this.lectureService.deleteLecture(id, undefined);
+    this.logger.log(`📚 Deleting lecture ${id} requested by user ${user.sub}`);
+    return this.lectureService.deleteLecture(id, user);
   }
 
   /**
