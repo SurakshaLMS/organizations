@@ -84,7 +84,8 @@ async function bootstrap() {
   });
 
   // Trust proxy settings for load balancers and reverse proxies
-  app.getHttpAdapter().getInstance().set('trust proxy', true);
+  // Set specific trust proxy configuration to avoid rate limiting validation errors
+  app.getHttpAdapter().getInstance().set('trust proxy', ['127.0.0.1', '::1', 'localhost']);
 
   // Enhanced middleware for proxy and cross-origin compatibility
   app.use((req: any, res: any, next: any) => {
