@@ -539,11 +539,11 @@ export class OrganizationService {
       throw new BadRequestException('Private organizations must have an enrollment key or disable self-enrollment');
     }
 
-    // Determine if user should be auto-verified
-    // Auto-verify if:
-    // 1. Organization is public OR
-    // 2. Organization doesn't require enrollment verification
-    const shouldAutoVerify = organization.isPublic || !organization.needEnrollmentVerification;
+    // Determine if user should be auto-verified based on organization settings
+    // User is automatically verified if:
+    // 1. Organization doesn't require enrollment verification (needEnrollmentVerification = false)
+    // Note: Public/private status doesn't affect verification - only needEnrollmentVerification matters
+    const shouldAutoVerify = !organization.needEnrollmentVerification;
 
     const userBigIntId = BigInt(userId);
 
@@ -554,7 +554,7 @@ export class OrganizationService {
         data: {
           organizationId: orgBigIntId,
           userId: userBigIntId,
-          role: 'MEMBER',
+          role: 'MEMBER', // Self-enrolled users always start as MEMBER
           isVerified: shouldAutoVerify,
           verifiedBy: shouldAutoVerify ? userBigIntId : null, // Self-verified if auto-verified
           verifiedAt: shouldAutoVerify ? new Date() : null,
@@ -591,14 +591,35 @@ export class OrganizationService {
   }
 
   /**
-   * Verify user in organization (SIMPLIFIED - no authentication required)
+   * Verify user in organization (with enrollment checks)
    */
   async verifyUser(organizationId: string, verifyUserDto: VerifyUserDto, verifierUser?: any) {
     const { userId, isVerified } = verifyUserDto;
 
-    // Check if user exists in organization
+    // Check if user exists in organization and organization settings
     const orgBigIntId = BigInt(organizationId);
     const userBigIntId = BigInt(userId);
+    
+    // First, check if the organization still has enrollments enabled
+    const organization = await this.prisma.organization.findUnique({
+      where: { organizationId: orgBigIntId },
+      select: { 
+        organizationId: true, 
+        enabledEnrollments: true,
+        needEnrollmentVerification: true,
+        name: true
+      }
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    // Check if enrollments are still enabled before verification
+    if (!organization.enabledEnrollments) {
+      throw new BadRequestException('Enrollments are disabled for this organization. Cannot verify new members.');
+    }
+
     const organizationUser = await this.prisma.organizationUser.findUnique({
       where: {
         organizationId_userId: {
@@ -1073,19 +1094,25 @@ export class OrganizationService {
   }
 
   /**
-   * Get organization members with roles (SIMPLIFIED - no authentication required)
+   * Get organization members (verified only)
    */
   async getOrganizationMembers(organizationId: string, pagination: PaginationDto, user?: any) {
     const orgBigIntId = BigInt(organizationId);
 
-    // Get total count
+    // Get total count of verified members only
     const total = await this.prisma.organizationUser.count({
-      where: { organizationId: orgBigIntId }
+      where: { 
+        organizationId: orgBigIntId,
+        isVerified: true
+      }
     });
 
-    // Get paginated members
+    // Get paginated verified members only
     const members = await this.prisma.organizationUser.findMany({
-      where: { organizationId: orgBigIntId },
+      where: { 
+        organizationId: orgBigIntId,
+        isVerified: true
+      },
       include: {
         user: {
           select: {
@@ -1101,10 +1128,13 @@ export class OrganizationService {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Calculate role breakdown
+    // Calculate role breakdown for verified members only
     const roleBreakdown = await this.prisma.organizationUser.groupBy({
       by: ['role'],
-      where: { organizationId: orgBigIntId },
+      where: { 
+        organizationId: orgBigIntId,
+        isVerified: true
+      },
       _count: { role: true, }
     });
 
@@ -1123,7 +1153,59 @@ export class OrganizationService {
         joinedAt: member.createdAt
       })),
       totalMembers: total,
-      roleBreakdown: roleCount
+      roleBreakdown: roleCount,
+      status: 'verified_only'
+    };
+  }
+
+  /**
+   * Get unverified organization members (Admin/President access required)
+   */
+  async getUnverifiedMembers(organizationId: string, pagination: PaginationDto, user?: any) {
+    const orgBigIntId = BigInt(organizationId);
+
+    // TODO: Add admin/president access validation here if needed
+    
+    // Get total count of unverified members only
+    const total = await this.prisma.organizationUser.count({
+      where: { 
+        organizationId: orgBigIntId,
+        isVerified: false
+      }
+    });
+
+    // Get paginated unverified members only
+    const members = await this.prisma.organizationUser.findMany({
+      where: { 
+        organizationId: orgBigIntId,
+        isVerified: false
+      },
+      include: {
+        user: {
+          select: {
+            userId: true,
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
+      },
+      skip: pagination.skip,
+      take: pagination.limitNumber,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return {
+      unverifiedMembers: members.map(member => ({
+        userId: member.user.userId.toString(),
+        name: `${member.user.firstName} ${member.user.lastName || ''}`.trim(),
+        email: member.user.email,
+        role: member.role,
+        isVerified: member.isVerified,
+        enrolledAt: member.createdAt
+      })),
+      totalUnverified: total,
+      status: 'unverified_only'
     };
   }
 

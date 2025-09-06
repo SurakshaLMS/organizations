@@ -170,11 +170,11 @@ export class OrganizationController {
 
   @Get(':id/members')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get organization members - Requires Authentication' })
+  @ApiOperation({ summary: 'Get organization members (verified only) - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiResponse({ status: 200, description: 'Organization members retrieved successfully' })
+  @ApiResponse({ status: 200, description: 'Organization verified members retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
   async getOrganizationMembers(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
@@ -183,6 +183,24 @@ export class OrganizationController {
   ) {
     const paginationDto = paginationQuery || new PaginationDto();
     return this.organizationService.getOrganizationMembers(organizationId, paginationDto, user);
+  }
+
+  @Get(':id/members/unverified')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get unverified organization members - Requires Admin/President Access' })
+  @ApiParam({ name: 'id', description: 'Organization ID' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Unverified organization members retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin/President access required' })
+  async getUnverifiedMembers(
+    @Param('id', ParseOrganizationIdPipe()) organizationId: string,
+    @GetUser() user: EnhancedJwtPayload,
+    @Query(new PaginationValidationPipe()) paginationQuery?: any
+  ) {
+    const paginationDto = paginationQuery || new PaginationDto();
+    return this.organizationService.getUnverifiedMembers(organizationId, paginationDto, user);
   }
 
   @Delete(':id/leave')
