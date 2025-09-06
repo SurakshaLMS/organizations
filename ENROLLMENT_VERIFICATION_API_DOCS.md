@@ -3,8 +3,23 @@
 ## Overview
 This document provides comprehensive documentation for the organization enrollment and verification system, including access levels, API endpoints, and workflow processes.
 
-## Table of Contents
-- [Access Levels & Roles](#access-levels--roles)
+## Table of Co### 5. Create Organization
+
+### Endpoint
+```http
+POST /organizations
+```
+
+### Access Level
+- **ORGANIZATION_MANAGER** only
+- **SUPERADMIN** (also has organization manager privileges)
+
+### Authentication Support
+- **Standard JWT Format**: `userType: "ORGANIZATION_MANAGER"`
+- **Ultra-Compact JWT Format**: `ut: "OM"` (Organization Manager) or `ut: "SA"` (Superadmin)
+- **Global Admin Flag**: `isGlobalAdmin: true`
+
+### Request BodyAccess Levels & Roles](#access-levels--roles)
 - [Organization Settings](#organization-settings)
 - [API Endpoints](#api-endpoints)
 - [Enrollment Workflow](#enrollment-workflow)

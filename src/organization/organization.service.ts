@@ -63,10 +63,23 @@ export class OrganizationService {
   async createOrganization(createOrganizationDto: CreateOrganizationDto, user: EnhancedJwtPayload) {
     const { name, type, isPublic, enrollmentKey, needEnrollmentVerification, enabledEnrollments, imageUrl, instituteId } = createOrganizationDto;
 
-    // Validate Organization Manager Access
-    if (!user.userType || !GLOBAL_ACCESS_ROLES.includes(user.userType as UserType)) {
+    // Validate Organization Manager Access - Support both JWT formats
+    // Cast to any to handle ultra-compact JWT format fields
+    const userAny = user as any;
+    
+    const isOrganizationManager = 
+      user.userType === 'ORGANIZATION_MANAGER' ||  // Standard JWT format
+      userAny.ut === 'OM' ||                       // Ultra-compact ORGANIZATION_MANAGER
+      userAny.ut === 'SA' ||                       // Ultra-compact SUPERADMIN
+      user.isGlobalAdmin === true ||               // Global admin flag
+      (user.userType && GLOBAL_ACCESS_ROLES.includes(user.userType as UserType));
+
+    if (!isOrganizationManager) {
+      this.logger.warn(`❌ Organization creation denied for user: ${user.sub || userAny.s}, userType: ${user.userType || userAny.ut}, isGlobalAdmin: ${user.isGlobalAdmin}`);
       throw new ForbiddenException('Only Organization Managers can create organizations');
     }
+
+    this.logger.log(`✅ Organization creation authorized for user: ${user.sub || userAny.s}, userType: ${user.userType || userAny.ut}`);
 
     // Validate enrollment key requirement
     if (!isPublic && !enrollmentKey) {
