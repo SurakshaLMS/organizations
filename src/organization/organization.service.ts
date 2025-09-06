@@ -1110,7 +1110,7 @@ export class OrganizationService {
     return {
       members: members.map(member => ({
         userId: member.user.userId.toString(),
-        name: user.name,
+        name: `${member.user.firstName} ${member.user.lastName || ''}`.trim(),
         email: member.user.email,
         role: member.role,
         isVerified: member.isVerified,

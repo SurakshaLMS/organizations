@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UploadedFiles, UseGuards } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { LectureService } from './lecture.service';
 import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lecture.dto';
@@ -124,15 +124,16 @@ export class LectureController {
    * 
    * Enhanced endpoint for updating lecture with new document uploads
    * Supports both updating lecture details and adding/replacing documents
+   * Accepts files from any field name (documents, files, file, etc.)
    */
   @Put(':id/with-documents')
-  @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files
+  @UseInterceptors(AnyFilesInterceptor()) // Accept files from any field name
   @ApiOperation({ summary: 'Update lecture with document uploads' })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Lecture ID to update' })
   @ApiBody({ 
     type: UpdateLectureDto,
-    description: 'Lecture update data with optional file uploads (use form-data)' 
+    description: 'Lecture update data with optional file uploads (use form-data with any field name like documents, files, or file)' 
   })
   @ApiResponse({ status: 200, description: 'Lecture updated with documents successfully' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
