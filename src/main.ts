@@ -133,7 +133,8 @@ async function bootstrap() {
     
     // Enhanced proxy-friendly headers
     if (req.headers['x-forwarded-proto']) {
-      req.protocol = req.headers['x-forwarded-proto'];
+      // Don't set req.protocol directly as it's read-only in newer Node.js versions
+      // Just set the response header for proxy awareness
       res.header('X-Forwarded-Proto', req.headers['x-forwarded-proto']);
     }
     if (req.headers['x-forwarded-host']) {

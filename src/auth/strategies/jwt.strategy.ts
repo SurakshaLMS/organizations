@@ -28,9 +28,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     try {
       let normalizedPayload;
       
-      // Handle ultra-compact format (s, e, o fields)
+      // Handle ultra-compact format with organization array (s, e, o fields)
       if (payload.s && payload.e && payload.o) {
-        console.log('✅ Detected ultra-compact JWT format');
+        console.log('✅ Detected ultra-compact JWT format with organizations');
         
         // Parse ultra-compact organizations: "P66" → { organizationId: "66", role: "PRESIDENT" }
         const organizations = payload.o.map((org: string) => {
@@ -59,6 +59,50 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           isGlobalAdmin: payload.g === 1,
         };
       }
+      // Handle Organization Manager ultra-compact format (s, ut, aa fields)
+      else if (payload.s && payload.ut === 'OM') {
+        console.log('✅ Detected Organization Manager ultra-compact JWT format');
+        
+        // Parse admin access object: {"1": 1} → admin access to organization ID 1
+        const adminAccess = payload.aa || {};
+        const organizations = Object.keys(adminAccess).map(orgId => ({
+          organizationId: orgId,
+          role: 'ORGANIZATION_MANAGER' // OM tokens get ORGANIZATION_MANAGER role
+        }));
+        
+        normalizedPayload = {
+          sub: payload.s,
+          email: payload.e || `om-${payload.s}@system.local`,
+          name: payload.n || 'Organization Manager',
+          organizations,
+          instituteIds: payload.ins || [],
+          userType: 'ORGANIZATION_MANAGER',
+          isGlobalAdmin: false, // OM is not global admin
+          adminAccess: adminAccess,
+        };
+      }
+      // Handle other ultra-compact formats (s, ut, aa fields)
+      else if (payload.s && payload.ut) {
+        console.log('✅ Detected ultra-compact JWT format with user type');
+        
+        // Parse admin access object: {"1": 1} → admin access to organization ID 1
+        const adminAccess = payload.aa || {};
+        const organizations = Object.keys(adminAccess).map(orgId => ({
+          organizationId: orgId,
+          role: 'ADMIN' // Users with admin access get ADMIN role
+        }));
+        
+        normalizedPayload = {
+          sub: payload.s,
+          email: payload.e || `user-${payload.s}@system.local`,
+          name: payload.n || 'User',
+          organizations,
+          instituteIds: payload.ins || [],
+          userType: this.expandUserType(payload.ut),
+          isGlobalAdmin: payload.ut === 'SA' || payload.ut === 'GA',
+          adminAccess: adminAccess,
+        };
+      }
       // Handle standard format (sub, email, organizations fields)
       else if (payload.sub && payload.email && payload.organizations) {
         console.log('✅ Detected standard JWT format');
@@ -66,15 +110,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
       // Handle SUPER_ADMIN/compact format (s, ut fields) 
       else if (payload.s && payload.ut) {
-        console.log('✅ Detected SUPER_ADMIN compact format');
+        console.log('✅ Detected SUPER_ADMIN/Organization Manager compact format');
+        
+        // Parse admin access object: {"1": 1} → admin access to organization ID 1
+        const adminAccess = payload.aa || {};
+        const organizations = Object.keys(adminAccess).map(orgId => ({
+          organizationId: orgId,
+          role: 'ADMIN' // Users with admin access get ADMIN role
+        }));
+        
         normalizedPayload = {
           sub: payload.s,
-          email: payload.e || `admin-${payload.s}@system.local`,
-          name: payload.n || 'System Administrator',
-          organizations: [],
+          email: payload.e || `user-${payload.s}@system.local`,
+          name: payload.n || 'User',
+          organizations,
           instituteIds: payload.ins || [],
-          userType: payload.ut === 'SA' ? 'SUPER_ADMIN' : this.expandUserType(payload.ut),
-          isGlobalAdmin: true,
+          userType: this.expandUserType(payload.ut),
+          isGlobalAdmin: payload.ut === 'SA' || payload.ut === 'GA',
+          adminAccess: adminAccess,
         };
       }
       // Legacy format fallback
@@ -106,6 +159,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         organizations: normalizedPayload.organizations || [],
         instituteIds: normalizedPayload.instituteIds || [],
         isGlobalAdmin: normalizedPayload.isGlobalAdmin || false,
+        adminAccess: normalizedPayload.adminAccess || {},
       };
       
       if (result.instituteIds.length > 0) {

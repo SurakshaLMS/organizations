@@ -100,15 +100,25 @@ export class OrganizationService {
     }
 
     // Create organization first
-    const creatorUserBigIntId = BigInt(user.sub);
+    // Handle special Organization Manager case
+    let creatorUserBigIntId: bigint | null = null;
+    let creatorUser: any = null;
 
-    // Validate that the creator user exists
-    const creatorUser = await this.prisma.user.findUnique({
-      where: { userId: creatorUserBigIntId },
-    });
+    if (user.sub !== 'OM_USER') {
+      // Regular user creation
+      creatorUserBigIntId = BigInt(user.sub);
+      
+      // Validate that the creator user exists
+      creatorUser = await this.prisma.user.findUnique({
+        where: { userId: creatorUserBigIntId },
+      });
 
-    if (!creatorUser) {
-      throw new BadRequestException(`Creator user with ID ${user.sub} not found`);
+      if (!creatorUser) {
+        throw new BadRequestException(`Creator user with ID ${user.sub} not found`);
+      }
+    } else {
+      // Organization Manager creation - no user relationship needed
+      this.logger.log('✅ Creating organization via Organization Manager - no user relationship created');
     }
 
     const instituteBigIntId = instituteId ? BigInt(instituteId) : null;
@@ -136,15 +146,50 @@ export class OrganizationService {
       },
     });
 
-    // Create the organization user relationship separately
-    await this.prisma.organizationUser.create({
-      data: {
-        organizationId: organization.organizationId,
-        userId: creatorUserBigIntId,
-        role: 'MEMBER',
-        isVerified: true,
+    // Create the organization user relationship
+    if (creatorUserBigIntId !== null) {
+      // Regular user creation - assign as MEMBER
+      await this.prisma.organizationUser.create({
+        data: {
+          organizationId: organization.organizationId,
+          userId: creatorUserBigIntId,
+          role: 'MEMBER',
+          isVerified: true,
+        }
+      });
+      this.logger.log(`✅ Organization-user relationship created for user ${user.sub} as MEMBER`);
+    } else {
+      // Organization Manager creation - create system user relationship as PRESIDENT
+      // First, check if OM system user exists, if not create it
+      let omSystemUser = await this.prisma.user.findUnique({
+        where: { email: 'org.manager@system.local' }
+      });
+
+      if (!omSystemUser) {
+        // Create Organization Manager system user
+        omSystemUser = await this.prisma.user.create({
+          data: {
+            email: 'org.manager@system.local',
+            firstName: 'Organization',
+            lastName: 'Manager',
+            isActive: true,
+            password: null, // No password for system user
+          }
+        });
+        this.logger.log(`✅ Created Organization Manager system user with ID: ${omSystemUser.userId}`);
       }
-    });
+
+      // Assign Organization Manager as PRESIDENT of the created organization
+      await this.prisma.organizationUser.create({
+        data: {
+          organizationId: organization.organizationId,
+          userId: omSystemUser.userId,
+          role: 'PRESIDENT',
+          isVerified: true,
+        }
+      });
+      this.logger.log(`✅ Organization Manager assigned as PRESIDENT of organization ${organization.organizationId}`);
+    }
 
     // Transform to match OrganizationDto
     return {

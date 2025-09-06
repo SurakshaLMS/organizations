@@ -21,6 +21,7 @@ import { PaginationValidationPipe } from '../common/pipes/pagination-validation.
 import { EnhancedJwtPayload, CompactOrganizationAccess } from '../auth/organization-access.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
+import { OrganizationManagerTokenGuard } from '../auth/guards/om-token.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @ApiTags('Organizations')
@@ -37,15 +38,15 @@ export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Create organization - Requires Organization Manager Access' })
+  @UseGuards(OrganizationManagerTokenGuard)
+  @ApiOperation({ summary: 'Create organization - Requires Organization Manager Token' })
   @ApiBody({ type: CreateOrganizationDto })
   @ApiResponse({ status: 201, description: 'Organization created successfully', type: OrganizationDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Organization Manager token required' })
   @ApiResponse({ status: 403, description: 'Forbidden - Organization Manager access required' })
   async createOrganization(
     @Body() createOrganizationDto: CreateOrganizationDto,
-    @GetUser() user: EnhancedJwtPayload
+    @GetUser() user: any
   ) {
     return this.organizationService.createOrganization(createOrganizationDto, user);
   }
