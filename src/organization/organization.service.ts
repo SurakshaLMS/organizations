@@ -5,6 +5,7 @@ import { JwtAccessValidationService } from '../auth/jwt-access-validation.servic
 import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { EnhancedJwtPayload } from '../auth/organization-access.service';
+import { UserType, GLOBAL_ACCESS_ROLES } from '../common/enums/user-types.enum';
 
 @Injectable()
 export class OrganizationService {
@@ -59,8 +60,13 @@ export class OrganizationService {
   /**
    * Create a new organization
    */
-  async createOrganization(createOrganizationDto: CreateOrganizationDto, creatorUserId: string) {
+  async createOrganization(createOrganizationDto: CreateOrganizationDto, user: EnhancedJwtPayload) {
     const { name, type, isPublic, enrollmentKey, needEnrollmentVerification, enabledEnrollments, imageUrl, instituteId } = createOrganizationDto;
+
+    // Validate Organization Manager Access
+    if (!user.userType || !GLOBAL_ACCESS_ROLES.includes(user.userType as UserType)) {
+      throw new ForbiddenException('Only Organization Managers can create organizations');
+    }
 
     // Validate enrollment key requirement
     if (!isPublic && !enrollmentKey) {
@@ -81,7 +87,7 @@ export class OrganizationService {
     }
 
     // Create organization first
-    const creatorUserBigIntId = BigInt(creatorUserId);
+    const creatorUserBigIntId = BigInt(user.sub);
 
     // Validate that the creator user exists
     const creatorUser = await this.prisma.user.findUnique({
@@ -89,7 +95,7 @@ export class OrganizationService {
     });
 
     if (!creatorUser) {
-      throw new BadRequestException(`Creator user with ID ${creatorUserId} not found`);
+      throw new BadRequestException(`Creator user with ID ${user.sub} not found`);
     }
 
     const instituteBigIntId = instituteId ? BigInt(instituteId) : null;

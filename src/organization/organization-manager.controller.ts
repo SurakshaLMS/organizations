@@ -57,31 +57,6 @@ export class OrganizationManagerController {
   constructor(private readonly organizationService: OrganizationService) {}
 
   /**
-   * Create Organization (Global endpoint, moved here for consistency)
-   */
-  @Post('/create')
-  @RateLimit(5, 60000) // 5 organizations per minute
-  @ApiOperation({
-    summary: 'Create new organization - Requires Authentication',
-    description: 'Create a new organization. User becomes PRESIDENT automatically. Requires JWT token.'
-  })
-  @ApiBody({ type: CreateOrganizationDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Organization created successfully',
-    type: OrganizationDto
-  })
-  @ApiResponse({ status: 400, description: 'Invalid input data' })
-  @ApiResponse({ status: 401, description: 'Authentication required' })
-  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
-  async createOrganization(
-    @Body() createOrganizationDto: CreateOrganizationDto,
-    @GetUser() user?: EnhancedJwtPayload
-  ): Promise<OrganizationDto> {
-    return this.organizationService.createOrganization(createOrganizationDto, user?.sub || '1');
-  }
-
-  /**
    * Update Organization
    */
   @Put()

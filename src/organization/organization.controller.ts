@@ -38,15 +38,16 @@ export class OrganizationController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Create organization - Requires Authentication' })
+  @ApiOperation({ summary: 'Create organization - Requires Organization Manager Access' })
   @ApiBody({ type: CreateOrganizationDto })
   @ApiResponse({ status: 201, description: 'Organization created successfully', type: OrganizationDto })
   @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Organization Manager access required' })
   async createOrganization(
     @Body() createOrganizationDto: CreateOrganizationDto,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    return this.organizationService.createOrganization(createOrganizationDto, user.sub);
+    return this.organizationService.createOrganization(createOrganizationDto, user);
   }
 
   @Get()
