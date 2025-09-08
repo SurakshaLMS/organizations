@@ -1406,7 +1406,6 @@ export class OrganizationService {
   async transferPresidency(organizationId: string, newPresidentUserId: string, user?: any) {
     const orgBigIntId = BigInt(organizationId);
     const newPresidentBigIntId = BigInt(newPresidentUserId);
-    const currentPresidentBigIntId = user?.sub ? BigInt(user.sub) : BigInt('1'); // Default to user 1
 
     // Check if new president is a member
     const newPresidentMember = await this.prisma.organizationUser.findUnique({
@@ -1422,20 +1421,41 @@ export class OrganizationService {
       throw new BadRequestException('New president must be a member of the organization');
     }
 
-    // Transfer presidency in a transaction
-    await this.prisma.$transaction([
-      // Make current president an admin
-      this.prisma.organizationUser.update({
-        where: {
-          organizationId_userId: {
-            userId: currentPresidentBigIntId,
-            organizationId: orgBigIntId
-          }
-        },
-        data: { role: 'ADMIN' }
-      }),
-      // Make new user president
-      this.prisma.organizationUser.update({
+    // Find current president (if any)
+    const currentPresident = await this.prisma.organizationUser.findFirst({
+      where: {
+        organizationId: orgBigIntId,
+        role: 'PRESIDENT'
+      }
+    });
+
+    if (currentPresident) {
+      // Transfer presidency in a transaction (demote current president)
+      await this.prisma.$transaction([
+        // Make current president an admin
+        this.prisma.organizationUser.update({
+          where: {
+            organizationId_userId: {
+              userId: currentPresident.userId,
+              organizationId: orgBigIntId
+            }
+          },
+          data: { role: 'ADMIN' }
+        }),
+        // Make new user president
+        this.prisma.organizationUser.update({
+          where: {
+            organizationId_userId: {
+              userId: newPresidentBigIntId,
+              organizationId: orgBigIntId
+            }
+          },
+          data: { role: 'PRESIDENT' }
+        })
+      ]);
+    } else {
+      // No current president - just promote the new user to president
+      await this.prisma.organizationUser.update({
         where: {
           organizationId_userId: {
             userId: newPresidentBigIntId,
@@ -1443,8 +1463,8 @@ export class OrganizationService {
           }
         },
         data: { role: 'PRESIDENT' }
-      })
-    ]);
+      });
+    }
 
     return {
       message: 'Presidency transferred successfully',

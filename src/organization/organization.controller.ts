@@ -22,6 +22,7 @@ import { EnhancedJwtPayload, CompactOrganizationAccess } from '../auth/organizat
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { OrganizationManagerTokenGuard } from '../auth/guards/om-token.guard';
+import { HybridOrganizationManagerGuard } from '../auth/guards/hybrid-om.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @ApiTags('Organizations')
@@ -38,17 +39,46 @@ export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
   @Post()
-  @UseGuards(OrganizationManagerTokenGuard)
-  @ApiOperation({ summary: 'Create organization - Requires Organization Manager Token' })
+  @UseGuards(HybridOrganizationManagerGuard)
+  @ApiOperation({ summary: 'Create organization - Requires Organization Manager Token (Static or JWT)' })
   @ApiBody({ type: CreateOrganizationDto })
   @ApiResponse({ status: 201, description: 'Organization created successfully', type: OrganizationDto })
   @ApiResponse({ status: 401, description: 'Unauthorized - Organization Manager token required' })
   @ApiResponse({ status: 403, description: 'Forbidden - Organization Manager access required' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data' })
   async createOrganization(
     @Body() createOrganizationDto: CreateOrganizationDto,
     @GetUser() user: any
   ) {
-    return this.organizationService.createOrganization(createOrganizationDto, user);
+    try {
+      console.log('🚀 Organization creation request received:', {
+        organizationData: createOrganizationDto,
+        userContext: {
+          userId: user?.userId,
+          userType: user?.userType,
+          authMethod: user?.authMethod,
+          isOrganizationManager: user?.isOrganizationManager
+        }
+      });
+
+      const result = await this.organizationService.createOrganization(createOrganizationDto, user);
+      
+      console.log('✅ Organization created successfully:', {
+        organizationId: result.id,
+        organizationName: result.name,
+        createdBy: user?.userId
+      });
+
+      return result;
+    } catch (error) {
+      console.error('❌ Organization creation failed:', {
+        error: error.message,
+        stack: error.stack,
+        organizationData: createOrganizationDto,
+        userContext: user
+      });
+      throw error;
+    }
   }
 
   @Get()

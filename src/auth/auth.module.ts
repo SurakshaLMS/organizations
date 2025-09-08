@@ -10,8 +10,11 @@ import { OrganizationAccessService } from './organization-access.service';
 import { JwtAccessValidationService } from './jwt-access-validation.service';
 import { UltraCompactAccessValidationService } from './services/ultra-compact-access-validation.service';
 import { UltraCompactJwtService } from './services/ultra-compact-jwt.service';
+import { EnhancedAccessService } from './services/enhanced-access.service';
 import { OrganizationAccessGuard } from './guards/organization-access.guard';
 import { EnhancedOrganizationSecurityGuard } from './guards/enhanced-organization-security.guard';
+import { OrganizationManagerTokenGuard } from './guards/om-token.guard';
+import { HybridOrganizationManagerGuard } from './guards/hybrid-om.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
@@ -38,8 +41,11 @@ import { PrismaModule } from '../prisma/prisma.module';
     JwtAccessValidationService,
     UltraCompactAccessValidationService, // ✅ Ultra-compact JWT access validation
     UltraCompactJwtService,              // ✅ Ultra-compact JWT service with institute IDs
+    EnhancedAccessService,               // ✅ Enhanced access validation service
     OrganizationAccessGuard,
     EnhancedOrganizationSecurityGuard,
+    OrganizationManagerTokenGuard,       // ✅ Organization Manager token guard
+    HybridOrganizationManagerGuard,      // ✅ Hybrid OM guard (static + JWT tokens)
   ],
   exports: [
     AuthService, 
@@ -49,8 +55,12 @@ import { PrismaModule } from '../prisma/prisma.module';
     JwtAccessValidationService,
     UltraCompactAccessValidationService, // ✅ Ultra-compact JWT access validation
     UltraCompactJwtService,              // ✅ Ultra-compact JWT service with institute IDs
+    EnhancedAccessService,               // ✅ Enhanced access validation service
     OrganizationAccessGuard,
     EnhancedOrganizationSecurityGuard,
+    OrganizationManagerTokenGuard,       // ✅ Organization Manager token guard
+    HybridOrganizationManagerGuard,      // ✅ Hybrid OM guard (static + JWT tokens)
+    JwtModule,                           // ✅ Export JwtModule to make JwtService available
   ],
 })
 export class AuthModule {}
