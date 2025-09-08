@@ -36,10 +36,14 @@ export class HybridOrganizationManagerGuard implements CanActivate {
       return true;
     }
 
-    // Try JWT token with OM type
+    // Try JWT token with OM type - using OM_TOKEN as secret for Organization Manager JWTs
     try {
-      const jwtSecret = this.configService.get<string>('JWT_SECRET') || 'your-super-secret-jwt-key-change-this-in-production';
-      const payload = await this.jwtService.verifyAsync(token, { secret: jwtSecret });
+      const omTokenSecret = this.configService.get<string>('OM_TOKEN');
+      if (!omTokenSecret) {
+        throw new UnauthorizedException('OM_TOKEN not configured in environment');
+      }
+      
+      const payload = await this.jwtService.verifyAsync(token, { secret: omTokenSecret });
       
       // Check if it's an Organization Manager JWT token
       if (payload.ut === 'OM' || payload.userType === 'ORGANIZATION_MANAGER') {
