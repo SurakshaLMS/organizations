@@ -16,7 +16,7 @@ export class CauseService {
   /**
    * Create a new cause (SIMPLIFIED - no authentication required)
    */
-  async createCause(createCauseDto: CreateCauseDto, userId: string) {
+  async createCause(createCauseDto: CreateCauseDto) {
     const { organizationId, title, description, isPublic } = createCauseDto;
     const orgBigIntId = convertToBigInt(organizationId);
 
@@ -48,7 +48,6 @@ export class CauseService {
    */
   async createCauseWithImage(
     createCauseDto: CreateCauseWithImageDto,
-    userId: string,
     image?: Express.Multer.File
   ) {
     const { organizationId, title, description, introVideoUrl, isPublic } = createCauseDto;
@@ -225,7 +224,7 @@ export class CauseService {
   /**
    * Update cause
    */
-  async updateCause(causeId: string, updateCauseDto: UpdateCauseDto, userId: string) {
+  async updateCause(causeId: string, updateCauseDto: UpdateCauseDto) {
     const causeBigIntId = convertToBigInt(causeId);
     const cause = await this.prisma.cause.findUnique({
       where: { causeId: causeBigIntId },
@@ -264,7 +263,6 @@ export class CauseService {
   async updateCauseWithImage(
     causeId: string,
     updateCauseDto: UpdateCauseWithImageDto,
-    userId: string,
     image?: Express.Multer.File
   ) {
     const causeBigIntId = convertToBigInt(causeId);

@@ -50,7 +50,7 @@ export class CauseController {
   @ApiResponse({ status: 400, description: 'Invalid request data' })
   async createCause(@Body() createCauseDto: CreateCauseDto) {
     this.logger.log(`📋 Creating cause "${createCauseDto.title}"`);
-    return this.causeService.createCause(createCauseDto, "1");
+    return this.causeService.createCause(createCauseDto);
   }
 
   /**
@@ -76,7 +76,7 @@ export class CauseController {
     @UploadedFile() image?: Express.Multer.File
   ) {
     this.logger.log(`📋 Creating cause "${createCauseDto.title}" with ${image ? 'image' : 'no image'}`);
-    return this.causeService.createCauseWithImage(createCauseDto, "1", image);
+    return this.causeService.createCauseWithImage(createCauseDto, image);
   }
 
   /**
@@ -122,7 +122,7 @@ export class CauseController {
     @Body() updateCauseDto: UpdateCauseDto,
   ) {
     this.logger.log(`📋 Updating cause ${causeId}`);
-    return this.causeService.updateCause(causeId, updateCauseDto, "1");
+    return this.causeService.updateCause(causeId, updateCauseDto);
   }
 
   /**
@@ -151,7 +151,7 @@ export class CauseController {
     @UploadedFile() image?: Express.Multer.File
   ) {
     this.logger.log(`📋 Updating cause ${causeId} with ${image ? 'new image' : 'no image change'}`);
-    return this.causeService.updateCauseWithImage(causeId, updateCauseDto, "1", image);
+    return this.causeService.updateCauseWithImage(causeId, updateCauseDto, image);
   }
 
   /**
