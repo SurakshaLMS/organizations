@@ -1,6 +1,7 @@
 import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsEnum, Matches, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrganizationType } from '@prisma/client';
+import { Transform } from 'class-transformer';
 
 export class CreateOrganizationDto {
   @ApiProperty({
@@ -25,6 +26,12 @@ export class CreateOrganizationDto {
   })
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+    return value;
+  })
   isPublic?: boolean = false;
 
   @ApiPropertyOptional({
@@ -42,6 +49,12 @@ export class CreateOrganizationDto {
   })
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+    return value;
+  })
   needEnrollmentVerification?: boolean = true;
 
   @ApiPropertyOptional({
@@ -51,10 +64,16 @@ export class CreateOrganizationDto {
   })
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+    return value;
+  })
   enabledEnrollments?: boolean = true;
 
   @ApiPropertyOptional({
-    description: 'Image URL for the organization',
+    description: 'Image URL for the organization (will be ignored if image file is uploaded)',
     example: 'https://example.com/organization-logo.jpg'
   })
   @IsString()
@@ -72,6 +91,15 @@ export class CreateOrganizationDto {
   instituteId?: string; // Optional institute assignment
 }
 
+export class CreateOrganizationWithImageDto extends CreateOrganizationDto {
+  @ApiPropertyOptional({
+    description: 'Organization image file (JPEG, PNG, GIF, WebP - max 5MB)',
+    type: 'string',
+    format: 'binary'
+  })
+  image?: Express.Multer.File;
+}
+
 export class UpdateOrganizationDto {
   @ApiPropertyOptional({
     description: 'Name of the organization',
@@ -87,6 +115,12 @@ export class UpdateOrganizationDto {
   })
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+    return value;
+  })
   isPublic?: boolean;
 
   @ApiPropertyOptional({
@@ -103,6 +137,12 @@ export class UpdateOrganizationDto {
   })
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+    return value;
+  })
   needEnrollmentVerification?: boolean;
 
   @ApiPropertyOptional({
@@ -111,10 +151,16 @@ export class UpdateOrganizationDto {
   })
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+    return value;
+  })
   enabledEnrollments?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Image URL for the organization',
+    description: 'Image URL for the organization (will be ignored if image file is uploaded)',
     example: 'https://example.com/updated-organization-logo.jpg'
   })
   @IsString()
@@ -130,6 +176,15 @@ export class UpdateOrganizationDto {
   @IsOptional()
   @Matches(/^\d+$/, { message: 'instituteId must be a numeric string (e.g., "1", "123")' })
   instituteId?: string; // Optional institute assignment
+}
+
+export class UpdateOrganizationWithImageDto extends UpdateOrganizationDto {
+  @ApiPropertyOptional({
+    description: 'Organization image file (JPEG, PNG, GIF, WebP - max 5MB)',
+    type: 'string',
+    format: 'binary'
+  })
+  image?: Express.Multer.File;
 }
 
 export class EnrollUserDto {

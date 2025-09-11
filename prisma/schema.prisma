@@ -157,6 +157,7 @@ model Cause {
   description    String?      @db.Text
   isPublic       Boolean      @default(false)
   introVideoUrl  String?      @db.VarChar(500)
+  imageUrl       String?      @db.VarChar(500)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   

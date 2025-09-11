@@ -5,7 +5,7 @@ import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lectu
 import { CreateLectureWithDocumentsDto, LectureWithDocumentsResponseDto } from './dto/create-lecture-with-documents.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
-import { S3Service } from '../common/services/s3.service';
+import { GCSService } from '../common/services/gcs.service';
 
 /**
  * Document upload result interface
@@ -35,7 +35,7 @@ export class LectureService {
   constructor(
     private prisma: PrismaService,
     private jwtAccessValidation: JwtAccessValidationService,
-    private s3Service: S3Service,
+    private gcsService: GCSService,
   ) {}
 
   /**
@@ -190,8 +190,8 @@ export class LectureService {
 
         for (const file of files) {
           try {
-            // Upload to S3
-            const uploadResult = await this.s3Service.uploadFile(
+            // Upload to GCS
+            const uploadResult = await this.gcsService.uploadFile(
               file,
               `lectures/${lecture.lectureId}/documents`
             );
@@ -614,8 +614,8 @@ export class LectureService {
 
         for (const file of files) {
           try {
-            // Upload to S3
-            const uploadResult = await this.s3Service.uploadFile(
+            // Upload to GCS
+            const uploadResult = await this.gcsService.uploadFile(
               file,
               `lectures/${lectureId}/documents`
             );
@@ -739,12 +739,12 @@ export class LectureService {
       for (const document of documents) {
         try {
           if (document.docUrl) {
-            // Extract S3 key from URL for deletion
+            // Extract GCS key from URL for deletion
             const urlParts = document.docUrl.split('/');
-            const s3Key = urlParts.slice(-3).join('/'); // Get the last 3 parts: lectures/lectureId/documents/filename
+            const gcsKey = urlParts.slice(-3).join('/'); // Get the last 3 parts: lectures/lectureId/documents/filename
             
-            await this.s3Service.deleteFile(s3Key);
-            this.logger.log(`📄 Deleted document from S3: ${document.title}`);
+            await this.gcsService.deleteFile(gcsKey);
+            this.logger.log(`📄 Deleted document from GCS: ${document.title}`);
           }
           
           deletedDocuments.push({

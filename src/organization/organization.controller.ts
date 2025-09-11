@@ -9,11 +9,15 @@ import {
   Query, 
   UsePipes, 
   ValidationPipe,
-  UseGuards
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
-import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
+import { CreateOrganizationDto, CreateOrganizationWithImageDto, UpdateOrganizationDto, UpdateOrganizationWithImageDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { OrganizationDto } from './dto/organization.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ParseOrganizationIdPipe, ParseInstituteIdPipe } from '../common/pipes/parse-numeric-id.pipe';
@@ -24,6 +28,7 @@ import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { OrganizationManagerTokenGuard } from '../auth/guards/om-token.guard';
 import { HybridOrganizationManagerGuard } from '../auth/guards/hybrid-om.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
+import { GCSImageService } from '../common/services/gcs-image.service';
 
 @ApiTags('Organizations')
 @Controller('organizations')
@@ -36,23 +41,35 @@ import { GetUser } from '../auth/decorators/get-user.decorator';
   validateCustomDecorators: true
 }))
 export class OrganizationController {
-  constructor(private readonly organizationService: OrganizationService) {}
+  constructor(
+    private readonly organizationService: OrganizationService,
+    private readonly gcsImageService: GCSImageService
+  ) {}
 
   @Post()
   @UseGuards(HybridOrganizationManagerGuard)
-  @ApiOperation({ summary: 'Create organization - Requires Organization Manager Token (Static or JWT)' })
-  @ApiBody({ type: CreateOrganizationDto })
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Create organization with optional image upload - Requires Organization Manager Token (Static or JWT)' })
+  @ApiBody({ type: CreateOrganizationWithImageDto })
   @ApiResponse({ status: 201, description: 'Organization created successfully', type: OrganizationDto })
   @ApiResponse({ status: 401, description: 'Unauthorized - Organization Manager token required' })
   @ApiResponse({ status: 403, description: 'Forbidden - Organization Manager access required' })
-  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data or image file' })
   async createOrganization(
     @Body() createOrganizationDto: CreateOrganizationDto,
+    @UploadedFile() image: Express.Multer.File,
     @GetUser() user: any
   ) {
     try {
       console.log('🚀 Organization creation request received:', {
         organizationData: createOrganizationDto,
+        hasImage: !!image,
+        imageInfo: image ? {
+          originalName: image.originalname,
+          mimetype: image.mimetype,
+          size: image.size
+        } : null,
         userContext: {
           userId: user?.userId,
           userType: user?.userType,
@@ -61,12 +78,34 @@ export class OrganizationController {
         }
       });
 
-      const result = await this.organizationService.createOrganization(createOrganizationDto, user);
+      let imageUrl: string | undefined = createOrganizationDto.imageUrl;
+
+      // Handle image upload if provided
+      if (image) {
+        try {
+          // Upload image to Google Cloud Storage
+          const uploadResult = await this.gcsImageService.uploadImage(image, 'organization-images');
+          imageUrl = uploadResult.url;
+          console.log('📤 Image uploaded to Google Cloud Storage:', imageUrl);
+        } catch (imageError) {
+          console.error('❌ Image upload failed:', imageError.message);
+          throw new BadRequestException(`Image upload failed: ${imageError.message}`);
+        }
+      }
+
+      // Create organization with image URL
+      const organizationData = {
+        ...createOrganizationDto,
+        imageUrl
+      };
+
+      const result = await this.organizationService.createOrganization(organizationData, user);
       
       console.log('✅ Organization created successfully:', {
         organizationId: result.id,
-        organizationName: result.name,
-        createdBy: user?.userId
+        name: result.name,
+        hasImage: !!imageUrl,
+        imageUrl: imageUrl
       });
 
       return result;
@@ -145,17 +184,81 @@ export class OrganizationController {
 
   @Put(':id')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Update organization - Requires Authentication' })
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Update organization with optional image upload - Requires Authentication' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
-  @ApiBody({ type: UpdateOrganizationDto })
+  @ApiBody({ type: UpdateOrganizationWithImageDto })
   @ApiResponse({ status: 200, description: 'Organization updated successfully', type: OrganizationDto })
   @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data or image file' })
   async updateOrganization(
     @Param('id', ParseOrganizationIdPipe()) id: string,
     @Body() updateOrganizationDto: UpdateOrganizationDto,
+    @UploadedFile() image: Express.Multer.File,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    return this.organizationService.updateOrganization(id, updateOrganizationDto, user);
+    try {
+      console.log('🔄 Organization update request received:', {
+        organizationId: id,
+        updateData: updateOrganizationDto,
+        hasImage: !!image,
+        imageInfo: image ? {
+          originalName: image.originalname,
+          mimetype: image.mimetype,
+          size: image.size
+        } : null,
+        userId: user?.sub
+      });
+
+      let imageUrl: string | undefined = updateOrganizationDto.imageUrl;
+
+      // Handle image upload if provided
+      if (image) {
+        try {
+          // Get current organization to check for existing image
+          const currentOrg = await this.organizationService.getOrganizationById(id, user.sub);
+          
+          // Upload new image and delete old one
+          const uploadResult = await this.gcsImageService.updateOrganizationImage(
+            image,
+            currentOrg.imageUrl || undefined
+          );
+          imageUrl = uploadResult.url;
+          
+          console.log('📤 Image updated in Google Cloud Storage:', imageUrl);
+        } catch (imageError) {
+          console.error('❌ Image update failed:', imageError.message);
+          throw new BadRequestException(`Image update failed: ${imageError.message}`);
+        }
+      }
+
+      // Update organization with new image URL if provided
+      const organizationData = {
+        ...updateOrganizationDto,
+        ...(imageUrl && { imageUrl })
+      };
+
+      const result = await this.organizationService.updateOrganization(id, organizationData, user);
+      
+      console.log('✅ Organization updated successfully:', {
+        organizationId: id,
+        organizationName: result.name,
+        imageUrl: result.imageUrl,
+        updatedBy: user?.sub
+      });
+
+      return result;
+    } catch (error) {
+      console.error('❌ Organization update failed:', {
+        error: error.message,
+        stack: error.stack,
+        organizationId: id,
+        updateData: updateOrganizationDto,
+        userId: user?.sub
+      });
+      throw error;
+    }
   }
 
   @Delete(':id')

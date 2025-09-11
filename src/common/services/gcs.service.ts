@@ -1,36 +1,48 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { Storage } from '@google-cloud/storage';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
-export class S3Service {
-  private readonly logger = new Logger(S3Service.name);
-  private readonly s3Client: S3Client;
+export class GCSService {
+  private readonly logger = new Logger('GCSService');
+  private readonly storage: Storage;
   private readonly bucketName: string;
+  private readonly bucket: any;
 
   constructor(private configService: ConfigService) {
-    const region = this.configService.get<string>('AWS_REGION');
-    const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
-    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
-    const bucketName = this.configService.get<string>('AWS_S3_BUCKET_NAME');
+    const projectId = this.configService.get<string>('GCS_PROJECT_ID');
+    const bucketName = this.configService.get<string>('GCS_BUCKET_NAME');
+    const privateKeyId = this.configService.get<string>('GCS_PRIVATE_KEY_ID');
+    const privateKey = this.configService.get<string>('GCS_PRIVATE_KEY');
+    const clientEmail = this.configService.get<string>('GCS_CLIENT_EMAIL');
+    const clientId = this.configService.get<string>('GCS_CLIENT_ID');
 
-    if (!region || !accessKeyId || !secretAccessKey || !bucketName) {
-      throw new Error('Missing required AWS S3 configuration. Please check your environment variables.');
+    if (!projectId || !bucketName || !privateKey || !clientEmail) {
+      throw new Error('Missing required Google Cloud Storage configuration. Please check your environment variables.');
     }
 
-    this.s3Client = new S3Client({
-      region,
+    // Initialize Google Cloud Storage with service account credentials
+    this.storage = new Storage({
+      projectId,
       credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
+        type: 'service_account',
+        project_id: projectId,
+        private_key_id: privateKeyId,
+        private_key: privateKey.replace(/\\n/g, '\n'), // Handle newlines in private key
+        client_email: clientEmail,
+        client_id: clientId,
+      }
     });
+
     this.bucketName = bucketName;
+    this.bucket = this.storage.bucket(bucketName);
+    
+    this.logger.log(`Google Cloud Storage initialized with bucket: ${bucketName}`);
   }
 
   /**
-   * Upload a file to S3
+   * Upload a file to Google Cloud Storage
    */
   async uploadFile(
     file: Express.Multer.File,
@@ -48,25 +60,25 @@ export class S3Service {
       const fileName = `${uuidv4()}.${fileExtension}`;
       const key = `${folder}/${fileName}`;
 
-      // Upload to S3
-      const command = new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-        ContentDisposition: 'inline',
-        Metadata: {
-          originalName: file.originalname,
-          uploadedAt: new Date().toISOString(),
+      // Create file in GCS bucket
+      const gcsFile = this.bucket.file(key);
+
+      // Upload buffer to GCS
+      await gcsFile.save(file.buffer, {
+        metadata: {
+          contentType: file.mimetype,
+          metadata: {
+            originalName: file.originalname,
+            uploadedAt: new Date().toISOString(),
+          },
         },
+        public: true, // Make file publicly accessible
       });
 
-      await this.s3Client.send(command);
-
       // Generate the public URL
-      const url = `https://${this.bucketName}.s3.${this.configService.get('AWS_REGION')}.amazonaws.com/${key}`;
+      const url = `https://storage.googleapis.com/${this.bucketName}/${key}`;
 
-      this.logger.log(`File uploaded successfully: ${key}`);
+      this.logger.log(`File uploaded successfully to GCS: ${key}`);
 
       return {
         url,
@@ -76,13 +88,13 @@ export class S3Service {
         mimeType: file.mimetype,
       };
     } catch (error) {
-      this.logger.error(`Failed to upload file: ${error.message}`);
+      this.logger.error(`Failed to upload file to GCS: ${error.message}`);
       throw new Error(`File upload failed: ${error.message}`);
     }
   }
 
   /**
-   * Upload multiple files to S3
+   * Upload multiple files to Google Cloud Storage
    */
   async uploadMultipleFiles(
     files: Express.Multer.File[],
@@ -99,19 +111,15 @@ export class S3Service {
   }
 
   /**
-   * Delete a file from S3
+   * Delete a file from Google Cloud Storage
    */
   async deleteFile(key: string): Promise<void> {
     try {
-      const command = new DeleteObjectCommand({
-        Bucket: this.bucketName,
-        Key: key,
-      });
-
-      await this.s3Client.send(command);
-      this.logger.log(`File deleted successfully: ${key}`);
+      const gcsFile = this.bucket.file(key);
+      await gcsFile.delete();
+      this.logger.log(`File deleted successfully from GCS: ${key}`);
     } catch (error) {
-      this.logger.error(`Failed to delete file: ${error.message}`);
+      this.logger.error(`Failed to delete file from GCS: ${error.message}`);
       throw new Error(`File deletion failed: ${error.message}`);
     }
   }

@@ -1,12 +1,17 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
+import { CreateCauseWithImageDto, UpdateCauseWithImageDto } from './dto/cause-with-image.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString } from '../auth/organization-access.service';
+import { GCSImageService } from '../common/services/gcs-image.service';
 
 @Injectable()
 export class CauseService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private gcsImageService: GCSImageService,
+  ) {}
 
   /**
    * Create a new cause (SIMPLIFIED - no authentication required)
@@ -31,6 +36,66 @@ export class CauseService {
         // Exclude: createdAt, updatedAt
       },
     });
+  }
+
+  /**
+   * Create a new cause with image upload (ENHANCED)
+   * 
+   * Features:
+   * - Image upload to Google Cloud Storage
+   * - Automatic image validation and processing
+   * - Public URL generation for immediate access
+   */
+  async createCauseWithImage(
+    createCauseDto: CreateCauseWithImageDto,
+    userId: string,
+    image?: Express.Multer.File
+  ) {
+    const { organizationId, title, description, introVideoUrl, isPublic } = createCauseDto;
+    const orgBigIntId = convertToBigInt(organizationId);
+
+    let imageUrl: string | undefined;
+
+    // Upload image to GCS if provided
+    if (image) {
+      try {
+        const uploadResult = await this.gcsImageService.uploadImage(image, 'causes');
+        imageUrl = uploadResult.url;
+      } catch (error) {
+        throw new Error(`Image upload failed: ${error.message}`);
+      }
+    }
+
+    const cause = await this.prisma.cause.create({
+      data: {
+        organizationId: orgBigIntId,
+        title,
+        description,
+        introVideoUrl,
+        imageUrl,
+        isPublic: isPublic || false,
+      },
+      select: {
+        causeId: true,
+        title: true,
+        description: true,
+        introVideoUrl: true,
+        imageUrl: true,
+        isPublic: true,
+        organizationId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return {
+      message: 'Cause created successfully',
+      data: {
+        ...cause,
+        causeId: convertToString(cause.causeId),
+        organizationId: convertToString(cause.organizationId),
+      },
+    };
   }
 
   /**
@@ -118,9 +183,12 @@ export class CauseService {
         causeId: true,
         title: true,
         description: true,
+        introVideoUrl: true,
+        imageUrl: true,
         isPublic: true,
         organizationId: true,
-        // Exclude: createdAt, updatedAt
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -138,9 +206,12 @@ export class CauseService {
         causeId: true,
         title: true,
         description: true,
+        introVideoUrl: true,
+        imageUrl: true,
         isPublic: true,
         organizationId: true,
-        // Exclude: createdAt, updatedAt, and related data
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -172,11 +243,103 @@ export class CauseService {
         causeId: true,
         title: true,
         description: true,
+        introVideoUrl: true,
+        imageUrl: true,
         isPublic: true,
         organizationId: true,
-        // Exclude: createdAt, updatedAt
+        createdAt: true,
+        updatedAt: true,
       },
     });
+  }
+
+  /**
+   * Update cause with image upload (ENHANCED)
+   * 
+   * Features:
+   * - Optional image replacement with GCS upload
+   * - Automatic cleanup of old image when replaced
+   * - Comprehensive data update support
+   */
+  async updateCauseWithImage(
+    causeId: string,
+    updateCauseDto: UpdateCauseWithImageDto,
+    userId: string,
+    image?: Express.Multer.File
+  ) {
+    const causeBigIntId = convertToBigInt(causeId);
+    
+    // Check if cause exists and get current data
+    const existingCause = await this.prisma.cause.findUnique({
+      where: { causeId: causeBigIntId },
+      select: { 
+        organizationId: true,
+        imageUrl: true,
+        title: true,
+      },
+    });
+
+    if (!existingCause) {
+      throw new NotFoundException('Cause not found');
+    }
+
+    let imageUrl = existingCause.imageUrl;
+
+    // Handle image upload if provided
+    if (image) {
+      try {
+        // Upload new image to GCS
+        const uploadResult = await this.gcsImageService.uploadImage(image, 'causes');
+        
+        // Delete old image if it exists
+        if (existingCause.imageUrl) {
+          try {
+            await this.gcsImageService.deleteImage(existingCause.imageUrl);
+          } catch (error) {
+            console.warn('Failed to delete old cause image:', error.message);
+          }
+        }
+        
+        imageUrl = uploadResult.url;
+      } catch (error) {
+        throw new Error(`Image upload failed: ${error.message}`);
+      }
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      ...updateCauseDto,
+    };
+
+    // Only include imageUrl if it's being updated
+    if (image) {
+      updateData.imageUrl = imageUrl;
+    }
+
+    const updatedCause = await this.prisma.cause.update({
+      where: { causeId: causeBigIntId },
+      data: updateData,
+      select: {
+        causeId: true,
+        title: true,
+        description: true,
+        introVideoUrl: true,
+        imageUrl: true,
+        isPublic: true,
+        organizationId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return {
+      message: 'Cause updated successfully',
+      data: {
+        ...updatedCause,
+        causeId: convertToString(updatedCause.causeId),
+        organizationId: convertToString(updatedCause.organizationId),
+      },
+    };
   }
 
   /**

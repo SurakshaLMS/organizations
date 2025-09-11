@@ -3,12 +3,12 @@ import { LectureService } from './lecture.service';
 import { LectureController } from './lecture.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
-import { S3Service } from '../common/services/s3.service';
+import { GCSService } from '../common/services/gcs.service';
 
 @Module({
   imports: [PrismaModule, AuthModule],
   controllers: [LectureController],
-  providers: [LectureService, S3Service],
+  providers: [LectureService, GCSService],
   exports: [LectureService],
 })
 export class LectureModule {}
