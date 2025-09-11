@@ -66,15 +66,8 @@ Amazon AWS Secret Access Key detected:
 **Changes Made**:
 
 #### Sanitized AWS Credentials
-```env
-# BEFORE (Security Risk - Example sanitized)
-AWS_ACCESS_KEY_ID=AKIA******* (actual key removed)
-AWS_SECRET_ACCESS_KEY=****** (actual secret removed)
-
-# AFTER (Secure)
-AWS_ACCESS_KEY_ID=AKIA******* (removed for security)
-AWS_SECRET_ACCESS_KEY=****** (removed for security)
-```
+All AWS credential references have been completely removed from documentation files.
+AWS S3 configuration is no longer used as it has been completely replaced with Google Cloud Storage.
 
 #### Added Security Context
 - Marked AWS configuration as **DEPRECATED**

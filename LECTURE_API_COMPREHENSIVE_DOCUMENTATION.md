@@ -471,11 +471,8 @@ org_documentation (
 # Database
 DATABASE_URL="mysql://user:password@localhost:3306/db"
 
-# AWS S3 (DEPRECATED - Replaced with Google Cloud Storage)
-AWS_ACCESS_KEY_ID="AKIA******* (removed for security)"
-AWS_SECRET_ACCESS_KEY="****** (removed for security)"
-AWS_REGION="us-east-1"
-AWS_S3_BUCKET="mysurakshabucket"
+# AWS S3 (DEPRECATED - Completely replaced with Google Cloud Storage)
+# AWS S3 is no longer used in this implementation
 
 # Server
 PORT=3001
