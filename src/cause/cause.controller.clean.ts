@@ -26,7 +26,7 @@ export class CauseController {
    */
   @Post()
   async createCause(@Body() createCauseDto: CreateCauseDto) {
-    return this.causeService.createCause(createCauseDto, "1");
+    return this.causeService.createCause(createCauseDto);
   }
 
   /**
@@ -47,7 +47,7 @@ export class CauseController {
     paginationDto.sortOrder = sortOrder;
     paginationDto.search = search;
 
-    return this.causeService.getCauses("1", paginationDto);
+    return this.causeService.getCauses(undefined, paginationDto);
   }
 
   /**
@@ -55,7 +55,7 @@ export class CauseController {
    */
   @Get(':id')
   async getCauseById(@Param('id') causeId: string) {
-    return this.causeService.getCauseById(causeId, "1");
+    return this.causeService.getCauseById(causeId, undefined);
   }
 
   /**
@@ -66,7 +66,7 @@ export class CauseController {
     @Param('id') causeId: string,
     @Body() updateCauseDto: UpdateCauseDto,
   ) {
-    return this.causeService.updateCause(causeId, updateCauseDto, "1");
+    return this.causeService.updateCause(causeId, updateCauseDto);
   }
 
   /**
@@ -74,7 +74,8 @@ export class CauseController {
    */
   @Delete(':id')
   async deleteCause(@Param('id') causeId: string) {
-    return this.causeService.deleteCause(causeId, "1");
+    const mockUser = this.getMockUser();
+    return this.causeService.deleteCause(causeId, mockUser.sub);
   }
 
   /**
@@ -82,6 +83,6 @@ export class CauseController {
    */
   @Get('organization/:organizationId')
   async getCausesByOrganization(@Param('organizationId') organizationId: string) {
-    return this.causeService.getCausesByOrganization(organizationId, "1");
+    return this.causeService.getCausesByOrganization(organizationId, undefined);
   }
 }
