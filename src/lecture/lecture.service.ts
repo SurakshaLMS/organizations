@@ -190,11 +190,21 @@ export class LectureService {
 
         for (const file of files) {
           try {
+            this.logger.log(`📄 Processing file: ${file.originalname} (${file.size} bytes)`);
+            
+            // Validate file
+            if (!file.buffer || file.buffer.length === 0) {
+              this.logger.warn(`⚠️ Skipping empty file: ${file.originalname}`);
+              continue;
+            }
+
             // Upload to GCS
             const uploadResult = await this.gcsService.uploadFile(
               file,
               `lectures/${lecture.lectureId}/documents`
             );
+
+            this.logger.log(`✅ GCS upload successful: ${uploadResult.url}`);
 
             // Create documentation record
             const documentation = await this.prisma.documentation.create({
@@ -208,6 +218,8 @@ export class LectureService {
                 updatedAt: new Date(),
               },
             });
+
+            this.logger.log(`📋 Documentation record created: ${documentation.documentationId}`);
 
             uploadedDocuments.push({
               documentationId: convertToString(documentation.documentationId),
@@ -223,6 +235,8 @@ export class LectureService {
             // Continue with other files, don't fail the entire operation
           }
         }
+      } else {
+        this.logger.log(`📁 No documents provided for lecture ${lecture.lectureId}`);
       }
 
       const result: LectureWithDocumentsResponseDto = {

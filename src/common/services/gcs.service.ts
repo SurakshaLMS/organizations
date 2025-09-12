@@ -19,26 +19,36 @@ export class GCSService {
     const clientId = this.configService.get<string>('GCS_CLIENT_ID');
 
     if (!projectId || !bucketName || !privateKey || !clientEmail) {
+      this.logger.error('Missing required Google Cloud Storage configuration');
+      this.logger.error(`Project ID: ${projectId ? 'SET' : 'MISSING'}`);
+      this.logger.error(`Bucket Name: ${bucketName ? 'SET' : 'MISSING'}`);
+      this.logger.error(`Private Key: ${privateKey ? 'SET' : 'MISSING'}`);
+      this.logger.error(`Client Email: ${clientEmail ? 'SET' : 'MISSING'}`);
       throw new Error('Missing required Google Cloud Storage configuration. Please check your environment variables.');
     }
 
-    // Initialize Google Cloud Storage with service account credentials
-    this.storage = new Storage({
-      projectId,
-      credentials: {
-        type: 'service_account',
-        project_id: projectId,
-        private_key_id: privateKeyId,
-        private_key: privateKey.replace(/\\n/g, '\n'), // Handle newlines in private key
-        client_email: clientEmail,
-        client_id: clientId,
-      }
-    });
+    try {
+      // Initialize Google Cloud Storage with service account credentials
+      this.storage = new Storage({
+        projectId,
+        credentials: {
+          type: 'service_account',
+          project_id: projectId,
+          private_key_id: privateKeyId,
+          private_key: privateKey.replace(/\\n/g, '\n'), // Handle newlines in private key
+          client_email: clientEmail,
+          client_id: clientId,
+        }
+      });
 
-    this.bucketName = bucketName;
-    this.bucket = this.storage.bucket(bucketName);
-    
-    this.logger.log(`Google Cloud Storage initialized with bucket: ${bucketName}`);
+      this.bucketName = bucketName;
+      this.bucket = this.storage.bucket(bucketName);
+      
+      this.logger.log(`Google Cloud Storage initialized with bucket: ${bucketName}`);
+    } catch (error) {
+      this.logger.error('Failed to initialize Google Cloud Storage:', error);
+      throw new Error(`GCS initialization failed: ${error.message}`);
+    }
   }
 
   /**
@@ -55,10 +65,22 @@ export class GCSService {
     mimeType: string;
   }> {
     try {
+      if (!file) {
+        throw new Error('No file provided for upload');
+      }
+
+      if (!file.buffer || file.buffer.length === 0) {
+        throw new Error('File buffer is empty or invalid');
+      }
+
+      this.logger.log(`Starting file upload: ${file.originalname} (${file.size} bytes, ${file.mimetype})`);
+
       // Generate unique filename
-      const fileExtension = file.originalname.split('.').pop();
+      const fileExtension = file.originalname.split('.').pop() || 'bin';
       const fileName = `${uuidv4()}.${fileExtension}`;
       const key = `${folder}/${fileName}`;
+
+      this.logger.log(`Generated GCS key: ${key}`);
 
       // Create file in GCS bucket
       const gcsFile = this.bucket.file(key);
@@ -78,7 +100,7 @@ export class GCSService {
       // Generate the public URL
       const url = `https://storage.googleapis.com/${this.bucketName}/${key}`;
 
-      this.logger.log(`File uploaded successfully to GCS: ${key}`);
+      this.logger.log(`File uploaded successfully to GCS: ${key} -> ${url}`);
 
       return {
         url,
@@ -88,7 +110,7 @@ export class GCSService {
         mimeType: file.mimetype,
       };
     } catch (error) {
-      this.logger.error(`Failed to upload file to GCS: ${error.message}`);
+      this.logger.error(`Failed to upload file to GCS: ${error.message}`, error.stack);
       throw new Error(`File upload failed: ${error.message}`);
     }
   }
