@@ -1,4 +1,5 @@
 import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, Matches } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -48,6 +49,12 @@ export class CreateCauseWithImageDto {
   })
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+    return value;
+  })
   isPublic?: boolean = false;
 
   @ApiPropertyOptional({
@@ -55,6 +62,7 @@ export class CreateCauseWithImageDto {
     type: 'string',
     format: 'binary'
   })
+  @IsOptional()
   image?: Express.Multer.File;
 }
 
@@ -95,6 +103,12 @@ export class UpdateCauseWithImageDto {
   })
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+    return value;
+  })
   isPublic?: boolean;
 
   @ApiPropertyOptional({
@@ -102,6 +116,7 @@ export class UpdateCauseWithImageDto {
     type: 'string',
     format: 'binary'
   })
+  @IsOptional()
   image?: Express.Multer.File;
 }
 
