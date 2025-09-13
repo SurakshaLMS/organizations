@@ -56,14 +56,6 @@ export class CreateCauseWithImageDto {
     return value;
   })
   isPublic?: boolean = false;
-
-  @ApiPropertyOptional({
-    description: 'Cause image file to upload',
-    type: 'string',
-    format: 'binary'
-  })
-  @IsOptional()
-  image?: Express.Multer.File;
 }
 
 /**
@@ -110,14 +102,6 @@ export class UpdateCauseWithImageDto {
     return value;
   })
   isPublic?: boolean;
-
-  @ApiPropertyOptional({
-    description: 'Updated cause image file to upload',
-    type: 'string',
-    format: 'binary'
-  })
-  @IsOptional()
-  image?: Express.Multer.File;
 }
 
 /**
