@@ -196,7 +196,11 @@ export class EnhancedOrganizationSecurityGuard implements CanActivate {
     }
 
     // 3. ORGANIZATION MEMBERSHIP CHECK
-    const membershipEntry = user.orgAccess.find(entry => entry.endsWith(organizationId));
+    const membershipEntry = user.orgAccess.find(entry => {
+      // Extract organization ID from the entry (skip first character which is role code)
+      const entryOrgId = entry.substring(1);
+      return entryOrgId === organizationId;
+    });
     
     if (!membershipEntry) {
       return {

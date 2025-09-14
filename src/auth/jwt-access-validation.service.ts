@@ -115,7 +115,11 @@ export class JwtAccessValidationService {
       }
 
       // 6. ORGANIZATION MEMBERSHIP CHECK
-      const membershipEntry = user.orgAccess.find(entry => entry.endsWith(organizationId));
+      const membershipEntry = user.orgAccess.find(entry => {
+        // Extract organization ID from the entry (skip first character which is role code)
+        const entryOrgId = entry.substring(1);
+        return entryOrgId === organizationId;
+      });
       
       if (!membershipEntry) {
         this.logAccessEvent('MEMBERSHIP_DENIED', {
@@ -252,7 +256,13 @@ export class JwtAccessValidationService {
       return null;
     }
 
-    const membershipEntry = user.orgAccess.find(entry => entry.endsWith(organizationId));
+    // Find the membership entry - format is "P123" where P=role code, 123=organizationId
+    const membershipEntry = user.orgAccess.find(entry => {
+      // Extract organization ID from the entry (skip first character which is role code)
+      const entryOrgId = entry.substring(1);
+      return entryOrgId === organizationId;
+    });
+    
     if (!membershipEntry) {
       return null;
     }

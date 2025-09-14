@@ -812,11 +812,49 @@ export class OrganizationService {
     const orgBigIntId = BigInt(organizationId);
     const userBigIntId = BigInt(user.sub);
     
+    // Debug logging to check JWT token format
+    this.logger.log(`🔍 Debug Leave Organization: User ${user.sub}, Org ${organizationId}`);
+    this.logger.log(`🔍 JWT orgAccess: ${JSON.stringify(user.orgAccess)}`);
+    
     // Verify user is a member of the organization using JWT token (no DB query)
     const userRole = this.jwtAccessValidation.getUserRoleInOrganization(user, organizationId);
     
+    this.logger.log(`🔍 JWT Role Found: ${userRole || 'null'}`);
+    
     if (!userRole) {
-      throw new NotFoundException('You are not a member of this organization');
+      // Fallback: Check database directly for troubleshooting
+      const dbMembership = await this.prisma.organizationUser.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId: orgBigIntId,
+            userId: userBigIntId,
+          },
+        },
+        select: { role: true, isVerified: true },
+      });
+      
+      this.logger.log(`🔍 DB Membership: ${JSON.stringify(dbMembership)}`);
+      
+      if (!dbMembership) {
+        throw new NotFoundException('You are not a member of this organization');
+      }
+      
+      if (!dbMembership.isVerified) {
+        throw new BadRequestException('Your membership is not verified yet');
+      }
+      
+      // Use the database role if JWT verification failed
+      const dbUserRole = dbMembership.role;
+      this.logger.warn(`⚠️ JWT verification failed, using DB role: ${dbUserRole}`);
+      
+      // Prevent PRESIDENT from leaving without transferring role first
+      if (dbUserRole === 'PRESIDENT') {
+        throw new BadRequestException('President cannot leave organization. You must transfer the presidency to another member first.');
+      }
+      
+      // Continue with database-verified role
+      await this.performLeaveOperation(organizationId, user, dbUserRole);
+      return;
     }
 
     // Prevent PRESIDENT from leaving without transferring role first
@@ -824,8 +862,19 @@ export class OrganizationService {
       throw new BadRequestException('President cannot leave organization. You must transfer the presidency to another member first.');
     }
 
-    // Log the leave action with JWT-verified role
-    this.logger.log(`User ${user.sub} (${userRole}) leaving organization ${organizationId} via JWT token verification`);
+    // Continue with JWT-verified role
+    await this.performLeaveOperation(organizationId, user, userRole);
+  }
+
+  /**
+   * Perform the actual leave operation
+   */
+  private async performLeaveOperation(organizationId: string, user: EnhancedJwtPayload, userRole: string) {
+    const orgBigIntId = BigInt(organizationId);
+    const userBigIntId = BigInt(user.sub);
+
+    // Log the leave action
+    this.logger.log(`User ${user.sub} (${userRole}) leaving organization ${organizationId}`);
 
     // Get minimal organization and user details for response (single optimized query)
     const organizationDetails = await this.prisma.organizationUser.findUnique({
