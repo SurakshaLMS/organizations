@@ -6,6 +6,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import helmet from 'helmet';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import * as express from 'express';
 
 async function bootstrap() {
   // Global BigInt serialization fix
@@ -82,6 +83,11 @@ async function bootstrap() {
     preflightContinue: false,
     maxAge: 86400, // 24 hours for preflight cache
   });
+
+  // Enhanced request size limits for file uploads
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.raw({ limit: '10mb' }));
 
   // Trust proxy settings for load balancers and reverse proxies
   // Set specific trust proxy configuration to avoid rate limiting validation errors
