@@ -784,13 +784,23 @@ export class OrganizationService {
         causeId: true,
         title: true,
         description: true,
+        imageUrl: true,
+        introVideoUrl: true,
         isPublic: true,
         organizationId: true,
-        // Exclude: createdAt, updatedAt
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
-    return createPaginatedResponse(causes, total, paginationDto);
+    // Transform causes to convert BigInt IDs to strings
+    const transformedCauses = causes.map(cause => ({
+      ...cause,
+      causeId: cause.causeId.toString(),
+      organizationId: cause.organizationId.toString(),
+    }));
+
+    return createPaginatedResponse(transformedCauses, total, paginationDto);
   }
 
   /**
