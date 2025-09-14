@@ -794,13 +794,56 @@ export class OrganizationService {
   }
 
   /**
-   * Leave organization
+   * Leave organization (Self-leave only using JWT token verification)
+   * Members can only leave organization by themselves
+   * Uses JWT token to verify membership without database queries
    */
-  async leaveOrganization(organizationId: string, userId: string) {
+  async leaveOrganization(organizationId: string, user: EnhancedJwtPayload) {
     const orgBigIntId = BigInt(organizationId);
-    const userBigIntId = BigInt(userId);
+    const userBigIntId = BigInt(user.sub);
     
-    const organizationUser = await this.prisma.organizationUser.findUnique({
+    // Verify user is a member of the organization using JWT token (no DB query)
+    const userRole = this.jwtAccessValidation.getUserRoleInOrganization(user, organizationId);
+    
+    if (!userRole) {
+      throw new NotFoundException('You are not a member of this organization');
+    }
+
+    // Prevent PRESIDENT from leaving without transferring role first
+    if (userRole === 'PRESIDENT') {
+      throw new BadRequestException('President cannot leave organization. You must transfer the presidency to another member first.');
+    }
+
+    // Log the leave action with JWT-verified role
+    this.logger.log(`User ${user.sub} (${userRole}) leaving organization ${organizationId} via JWT token verification`);
+
+    // Get minimal organization and user details for response (single optimized query)
+    const organizationDetails = await this.prisma.organizationUser.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: orgBigIntId,
+          userId: userBigIntId,
+        },
+      },
+      select: {
+        organization: {
+          select: {
+            name: true,
+            organizationId: true,
+          },
+        },
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Remove user from organization
+    await this.prisma.organizationUser.delete({
       where: {
         organizationId_userId: {
           organizationId: orgBigIntId,
@@ -809,22 +852,25 @@ export class OrganizationService {
       },
     });
 
-    if (!organizationUser) {
-      throw new NotFoundException('User not found in organization');
-    }
+    // Trigger token refresh to update user's organization access
+    await this.triggerTokenRefresh(user.sub);
 
-    if (organizationUser.role === 'PRESIDENT') {
-      throw new BadRequestException('President cannot leave organization. Transfer role first.');
-    }
-
-    return this.prisma.organizationUser.delete({
-      where: {
-        organizationId_userId: {
-          organizationId: orgBigIntId,
-          userId: userBigIntId,
-        },
+    // Return success response with organization details
+    return {
+      message: 'Successfully left the organization',
+      organization: {
+        organizationId: organizationDetails?.organization.organizationId.toString() || organizationId,
+        name: organizationDetails?.organization.name || 'Unknown Organization',
+        leftAt: new Date().toISOString(),
       },
-    });
+      user: {
+        name: organizationDetails?.user 
+          ? `${organizationDetails.user.firstName} ${organizationDetails.user.lastName}` 
+          : user.name || 'Unknown User',
+        email: organizationDetails?.user?.email || user.email,
+        previousRole: userRole,
+      },
+    };
   }
 
   /**

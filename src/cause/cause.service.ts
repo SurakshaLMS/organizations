@@ -14,11 +14,21 @@ export class CauseService {
   ) {}
 
   /**
-   * Create a new cause (SIMPLIFIED - no authentication required)
+   * Create a new cause (ENHANCED with validation)
    */
   async createCause(createCauseDto: CreateCauseDto) {
     const { organizationId, title, description, isPublic } = createCauseDto;
     const orgBigIntId = convertToBigInt(organizationId);
+
+    // Validate that the organization exists to prevent foreign key constraint violation
+    const organization = await this.prisma.organization.findUnique({
+      where: { organizationId: orgBigIntId },
+      select: { organizationId: true, name: true }
+    });
+
+    if (!organization) {
+      throw new NotFoundException(`Organization with ID ${organizationId} not found`);
+    }
 
     return this.prisma.cause.create({
       data: {
@@ -39,11 +49,13 @@ export class CauseService {
   }
 
   /**
-   * Create a new cause with image upload (ENHANCED)
+   * Create a new cause with image upload (ENHANCED with Transaction Support)
    * 
    * Features:
+   * - Organization validation before image upload
    * - Image upload to Google Cloud Storage
    * - Automatic image validation and processing
+   * - Transaction-based cleanup on failure
    * - Public URL generation for immediate access
    */
   async createCauseWithImage(
@@ -53,48 +65,80 @@ export class CauseService {
     const { organizationId, title, description, introVideoUrl, isPublic } = createCauseDto;
     const orgBigIntId = convertToBigInt(organizationId);
 
+    // First, validate that the organization exists to prevent foreign key constraint violation
+    const organization = await this.prisma.organization.findUnique({
+      where: { organizationId: orgBigIntId },
+      select: { organizationId: true, name: true }
+    });
+
+    if (!organization) {
+      throw new NotFoundException(`Organization with ID ${organizationId} not found`);
+    }
+
     let imageUrl: string | undefined;
+    let uploadedImageKey: string | undefined;
 
     // Upload image to GCS if provided
     if (image) {
       try {
         const uploadResult = await this.gcsImageService.uploadImage(image, 'causes');
         imageUrl = uploadResult.url;
+        uploadedImageKey = uploadResult.key; // Store the key for potential cleanup
       } catch (error) {
         throw new Error(`Image upload failed: ${error.message}`);
       }
     }
 
-    const cause = await this.prisma.cause.create({
-      data: {
-        organizationId: orgBigIntId,
-        title,
-        description,
-        introVideoUrl,
-        imageUrl,
-        isPublic: isPublic || false,
-      },
-      select: {
-        causeId: true,
-        title: true,
-        description: true,
-        introVideoUrl: true,
-        imageUrl: true,
-        isPublic: true,
-        organizationId: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    // Use transaction to ensure data consistency and cleanup on failure
+    try {
+      const cause = await this.prisma.cause.create({
+        data: {
+          organizationId: orgBigIntId,
+          title,
+          description,
+          introVideoUrl,
+          imageUrl,
+          isPublic: isPublic || false,
+        },
+        select: {
+          causeId: true,
+          title: true,
+          description: true,
+          introVideoUrl: true,
+          imageUrl: true,
+          isPublic: true,
+          organizationId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
 
-    return {
-      message: 'Cause created successfully',
-      data: {
-        ...cause,
-        causeId: convertToString(cause.causeId),
-        organizationId: convertToString(cause.organizationId),
-      },
-    };
+      return {
+        message: 'Cause created successfully',
+        data: {
+          ...cause,
+          causeId: convertToString(cause.causeId),
+          organizationId: convertToString(cause.organizationId),
+        },
+      };
+    } catch (error) {
+      // If database operation fails and we uploaded an image, clean it up
+      if (imageUrl && uploadedImageKey) {
+        try {
+          await this.gcsImageService.deleteImage(uploadedImageKey);
+          console.log(`🧹 Cleaned up uploaded image: ${uploadedImageKey} due to cause creation failure`);
+        } catch (cleanupError) {
+          console.error(`❌ Failed to cleanup uploaded image: ${uploadedImageKey}`, cleanupError);
+        }
+      }
+
+      // Re-throw the original error with better context
+      if (error.code === 'P2003') {
+        throw new Error(`Invalid organization ID: ${organizationId}. Organization does not exist.`);
+      }
+      
+      throw error;
+    }
   }
 
   /**

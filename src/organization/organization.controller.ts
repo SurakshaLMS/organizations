@@ -339,15 +339,74 @@ export class OrganizationController {
 
   @Delete(':id/leave')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Leave organization - Requires Authentication' })
-  @ApiParam({ name: 'id', description: 'Organization ID' })
-  @ApiResponse({ status: 200, description: 'User left organization successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiOperation({ 
+    summary: 'Leave organization (Self-leave only)',
+    description: 'Allows authenticated members to leave an organization. Only the member themselves can leave. Presidents must transfer their role before leaving.'
+  })
+  @ApiParam({ 
+    name: 'id', 
+    description: 'Organization ID to leave',
+    example: '1'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Successfully left the organization',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Successfully left the organization' },
+        organization: {
+          type: 'object',
+          properties: {
+            organizationId: { type: 'string', example: '1' },
+            name: { type: 'string', example: 'Computer Science Student Association' },
+            leftAt: { type: 'string', example: '2025-09-14T11:45:10.450Z' }
+          }
+        },
+        user: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', example: 'John Doe' },
+            email: { type: 'string', example: 'john@example.com' },
+            previousRole: { type: 'string', example: 'MEMBER' }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Bad request - President cannot leave without transferring role',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: { type: 'string', example: 'President cannot leave organization. You must transfer the presidency to another member first.' },
+        error: { type: 'string', example: 'Bad Request' }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - JWT token required' 
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Not found - User is not a member of this organization',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 404 },
+        message: { type: 'string', example: 'You are not a member of this organization' },
+        error: { type: 'string', example: 'Not Found' }
+      }
+    }
+  })
   async leaveOrganization(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    return this.organizationService.leaveOrganization(organizationId, user.sub);
+    return this.organizationService.leaveOrganization(organizationId, user);
   }
 
   @Put(':id/assign-institute')
