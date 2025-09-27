@@ -336,7 +336,10 @@ export class CauseService {
         // Delete old image if it exists
         if (existingCause.imageUrl) {
           try {
-            await this.gcsImageService.deleteImage(existingCause.imageUrl);
+            // Extract the GCS key from the URL
+            const urlParts = existingCause.imageUrl.split('/');
+            const key = urlParts.slice(-2).join('/'); // Get folder/filename
+            await this.gcsImageService.deleteImage(key);
           } catch (error) {
             console.warn('Failed to delete old cause image:', error.message);
           }

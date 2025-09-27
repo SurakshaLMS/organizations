@@ -22,23 +22,48 @@ export class GCSImageService {
       throw new Error('Missing required Google Cloud Storage configuration. Please check your environment variables.');
     }
 
-    // Initialize Google Cloud Storage with service account credentials
-    this.storage = new Storage({
-      projectId,
-      credentials: {
-        type: 'service_account',
-        project_id: projectId,
-        private_key_id: privateKeyId,
-        private_key: privateKey.replace(/\\n/g, '\n'), // Handle newlines in private key
-        client_email: clientEmail,
-        client_id: clientId,
-      }
-    });
+    try {
+      // Initialize Google Cloud Storage with service account credentials
+      this.storage = new Storage({
+        projectId,
+        credentials: {
+          type: 'service_account',
+          project_id: projectId,
+          private_key_id: privateKeyId,
+          private_key: privateKey.replace(/\\n/g, '\n'), // Handle newlines in private key
+          client_email: clientEmail,
+          client_id: clientId,
+        }
+      });
 
-    this.bucketName = bucketName;
-    this.bucket = this.storage.bucket(bucketName);
-    
-    this.logger.log(`GCS Image Service initialized with bucket: ${bucketName}`);
+      this.bucketName = bucketName;
+      this.bucket = this.storage.bucket(bucketName);
+      
+      this.logger.log(`GCS Image Service initialized with bucket: ${bucketName}`);
+      
+      // Test connection by checking if bucket exists (optional validation)
+      this.validateBucketAccess().catch(error => {
+        this.logger.warn(`Bucket access validation failed: ${error.message}. Service will continue but uploads may fail.`);
+      });
+    } catch (error) {
+      this.logger.error(`Failed to initialize GCS service: ${error.message}`);
+      throw new Error(`GCS initialization failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Validate bucket access (optional validation during startup)
+   */
+  private async validateBucketAccess(): Promise<void> {
+    try {
+      const [exists] = await this.bucket.exists();
+      if (!exists) {
+        throw new Error(`Bucket ${this.bucketName} does not exist or is not accessible`);
+      }
+      this.logger.log(`Bucket access validated: ${this.bucketName}`);
+    } catch (error) {
+      throw new Error(`Bucket validation failed: ${error.message}`);
+    }
   }
 
   /**
@@ -67,24 +92,103 @@ export class GCSImageService {
 
       this.logger.log(`Generated GCS key: ${key}`);
 
+      // Validate buffer one more time before upload
+      if (!file.buffer || file.buffer.length === 0) {
+        throw new Error('File buffer is empty before upload');
+      }
+
+      this.logger.log(`Buffer validation passed, size: ${file.buffer.length} bytes`);
+
+      // Additional buffer validation - ensure it's not corrupted
+      if (!Buffer.isBuffer(file.buffer)) {
+        throw new Error('File buffer is not a valid Buffer object');
+      }
+
+      // Create a fresh buffer copy to avoid potential reference issues
+      const bufferCopy = Buffer.from(file.buffer);
+      this.logger.log(`Created buffer copy, original size: ${file.buffer.length}, copy size: ${bufferCopy.length}`);
+
       // Create file in GCS bucket
       const gcsFile = this.bucket.file(key);
 
-      // Upload buffer to GCS with image optimization
-      await gcsFile.save(file.buffer, {
-        metadata: {
-          contentType: file.mimetype,
-          cacheControl: 'public, max-age=31536000', // Cache for 1 year
+      // Upload buffer to GCS using stream for better error handling
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const uploadTimeout = setTimeout(() => {
+            reject(new Error('Upload timeout - stream took too long to complete'));
+          }, 30000); // 30 second timeout
+
+          const stream = gcsFile.createWriteStream({
+            metadata: {
+              contentType: file.mimetype,
+              cacheControl: 'public, max-age=31536000', // Cache for 1 year
+              metadata: {
+                originalName: file.originalname,
+                uploadedAt: new Date().toISOString(),
+                folder: folder,
+                fileType: 'organization-image'
+              },
+            },
+            public: true, // Make file publicly accessible
+            resumable: false, // Use simple upload for better error handling
+          });
+
+          // Handle stream events
+          stream.on('error', (error) => {
+            clearTimeout(uploadTimeout);
+            this.logger.error(`GCS stream error: ${error.message}`);
+            this.logger.error(`GCS stream error stack: ${error.stack}`);
+            reject(new Error(`Upload stream failed: ${error.message}`));
+          });
+
+          stream.on('finish', () => {
+            clearTimeout(uploadTimeout);
+            this.logger.log(`GCS stream finished successfully for: ${key}`);
+            resolve();
+          });
+
+          // Add additional event listeners for debugging
+          stream.on('pipe', () => {
+            this.logger.log(`GCS stream piped for: ${key}`);
+          });
+
+          stream.on('unpipe', () => {
+            this.logger.log(`GCS stream unpiped for: ${key}`);
+          });
+
+          // Write buffer to stream and end it
+          try {
+            // Use the buffer copy to avoid any reference issues
+            stream.end(bufferCopy);
+            this.logger.log(`Buffer written to GCS stream for: ${key}`);
+          } catch (streamError) {
+            clearTimeout(uploadTimeout);
+            this.logger.error(`Error writing to stream: ${streamError.message}`);
+            this.logger.error(`Stream error stack: ${streamError.stack}`);
+            reject(new Error(`Failed to write buffer to stream: ${streamError.message}`));
+          }
+        });
+      } catch (streamError) {
+        this.logger.warn(`Stream upload failed, attempting fallback with gcsFile.save(): ${streamError.message}`);
+        
+        // Fallback to using gcsFile.save() if stream fails
+        await gcsFile.save(bufferCopy, {
           metadata: {
-            originalName: file.originalname,
-            uploadedAt: new Date().toISOString(),
-            folder: folder,
-            fileType: 'organization-image'
+            contentType: file.mimetype,
+            cacheControl: 'public, max-age=31536000',
+            metadata: {
+              originalName: file.originalname,
+              uploadedAt: new Date().toISOString(),
+              folder: folder,
+              fileType: 'organization-image'
+            },
           },
-        },
-        public: true, // Make file publicly accessible
-        resumable: false, // Use simple upload for better error handling
-      });
+          public: true,
+          resumable: false,
+        });
+        
+        this.logger.log(`Fallback upload successful for: ${key}`);
+      }
 
       // Generate the public URL
       const url = `https://storage.googleapis.com/${this.bucketName}/${key}`;
@@ -100,12 +204,15 @@ export class GCSImageService {
       };
     } catch (error) {
       this.logger.error(`Failed to upload image to GCS: ${error.message}`);
+      this.logger.error(`Error stack: ${error.stack}`);
       
       // Provide more specific error messages
       if (error.message.includes('DECODER')) {
         throw new Error(`Image processing failed: The uploaded file appears to be corrupted or in an unsupported format. Please try uploading a different image file.`);
       } else if (error.message.includes('buffer')) {
         throw new Error(`Image upload failed: Invalid file data. Please try uploading the image again.`);
+      } else if (error.message.includes('stream')) {
+        throw new Error(`Image upload failed: Stream processing error. Please try uploading the image again.`);
       } else if (error.message.includes('signature')) {
         throw new Error(`Image upload failed: ${error.message}`);
       } else if (error.message.includes('size')) {
