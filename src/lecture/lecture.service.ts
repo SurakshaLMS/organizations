@@ -5,7 +5,7 @@ import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lectu
 import { CreateLectureWithDocumentsDto, LectureWithDocumentsResponseDto } from './dto/create-lecture-with-documents.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
-import { GCSService } from '../common/services/gcs.service';
+import { GCSService, SecureUploadResult } from '../common/services/gcs.service';
 
 /**
  * Document upload result interface
@@ -16,6 +16,8 @@ export interface DocumentUploadResult {
   url: string;
   fileName: string;
   size: number;
+  fileId: string;
+  uploadedAt: string;
 }
 
 /**
@@ -27,6 +29,8 @@ export interface DocumentUploadResult {
  * - Minimal database joins
  * - Enhanced performance and security
  * - Comprehensive error handling
+ * - Secure GCS file storage (serverless-ready)
+ * - File type restrictions: Images (jpg, jpeg, png, gif, heic, heif) and PDFs only
  */
 @Injectable()
 export class LectureService {
@@ -198,13 +202,13 @@ export class LectureService {
               continue;
             }
 
-            // Upload to GCS
-            const uploadResult = await this.gcsService.uploadFile(
+            // Upload to GCS with security validation
+            const uploadResult: SecureUploadResult = await this.gcsService.uploadFile(
               file,
               `lectures/${lecture.lectureId}/documents`
             );
 
-            this.logger.log(`✅ GCS upload successful: ${uploadResult.url}`);
+            this.logger.log(`✅ Secure GCS upload successful: ${uploadResult.url}`);
 
             // Create documentation record
             const documentation = await this.prisma.documentation.create({
@@ -225,8 +229,10 @@ export class LectureService {
               documentationId: convertToString(documentation.documentationId),
               title: documentation.title,
               url: documentation.docUrl || '',
-              fileName: file.originalname,
-              size: file.size,
+              fileName: uploadResult.originalName,
+              size: uploadResult.size,
+              fileId: uploadResult.fileId,
+              uploadedAt: uploadResult.uploadedAt,
             });
 
             this.logger.log(`✅ Document uploaded: ${file.originalname} -> ${uploadResult.url}`);
@@ -628,8 +634,8 @@ export class LectureService {
 
         for (const file of files) {
           try {
-            // Upload to GCS
-            const uploadResult = await this.gcsService.uploadFile(
+            // Upload to GCS with security validation
+            const uploadResult: SecureUploadResult = await this.gcsService.uploadFile(
               file,
               `lectures/${lectureId}/documents`
             );
@@ -652,6 +658,8 @@ export class LectureService {
               url: document.docUrl || uploadResult.url,
               fileName: uploadResult.originalName,
               size: uploadResult.size,
+              fileId: uploadResult.fileId,
+              uploadedAt: uploadResult.uploadedAt,
             });
 
             this.logger.log(`📄 Document uploaded: ${file.originalname} for lecture ${lectureId}`);

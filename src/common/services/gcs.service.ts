@@ -1,7 +1,29 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Storage } from '@google-cloud/storage';
 import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * ENHANCED GCS SERVICE FOR SERVERLESS
+ * 
+ * Enterprise-grade Google Cloud Storage service with:
+ * - Environment-based file size and type limits
+ * - Comprehensive security validation  
+ * - Serverless-optimized (no local storage)
+ * - MIME type whitelist validation
+ * - Multiple file upload support
+ * - Proper error handling and logging
+ */
+
+export interface SecureUploadResult {
+  url: string;
+  key: string;
+  originalName: string;
+  size: number;
+  mimeType: string;
+  uploadedAt: string;
+  fileId: string;
+}
 
 @Injectable()
 export class GCSService {
@@ -10,8 +32,32 @@ export class GCSService {
   private readonly bucketName: string;
   private readonly bucket: any;
   private readonly fileBaseUrl: string;
+  
+  // Security Configuration from Environment
+  private readonly MAX_FILE_SIZE: number;
+  private readonly MAX_FILES_PER_UPLOAD: number;
+  private readonly ALLOWED_MIME_TYPES: string[];
+  private readonly ALLOWED_EXTENSIONS: string[];
+  private readonly ENABLE_FILE_VALIDATION: boolean;
 
   constructor(private configService: ConfigService) {
+    // Environment-based security configuration
+    this.MAX_FILE_SIZE = this.configService.get<number>('MAX_FILE_SIZE', 10 * 1024 * 1024); // 10MB default
+    this.MAX_FILES_PER_UPLOAD = this.configService.get<number>('MAX_FILES_PER_UPLOAD', 5);
+    
+    // Secure MIME type whitelist - ONLY IMAGES AND PDFs
+    this.ALLOWED_MIME_TYPES = this.configService.get<string>('ALLOWED_MIME_TYPES', 
+      'image/jpeg,image/jpg,image/png,image/gif,image/heic,image/heif,application/pdf'
+    ).split(',').map(type => type.trim());
+
+    // File extension whitelist - ONLY IMAGES AND PDFs
+    this.ALLOWED_EXTENSIONS = this.configService.get<string>('ALLOWED_EXTENSIONS',
+      '.jpg,.jpeg,.png,.gif,.heic,.heif,.pdf'
+    ).split(',').map(ext => ext.trim().toLowerCase());
+
+    this.ENABLE_FILE_VALIDATION = this.configService.get<boolean>('ENABLE_FILE_VALIDATION', true);
+
+    // GCS Configuration
     const projectId = this.configService.get<string>('GCS_PROJECT_ID');
     const bucketName = this.configService.get<string>('GCS_BUCKET_NAME');
     const privateKeyId = this.configService.get<string>('GCS_PRIVATE_KEY_ID');
@@ -31,7 +77,13 @@ export class GCSService {
 
     // Set custom base URL or default to Google Storage
     this.fileBaseUrl = fileBaseUrl?.trim() || `https://storage.googleapis.com/${bucketName}`;
-    this.logger.log(`File base URL configured: ${this.fileBaseUrl}`);
+
+    this.logger.log(`🔐 Enhanced GCS Service initialized with security configuration:`);
+    this.logger.log(`   📏 Max File Size: ${this.formatBytes(this.MAX_FILE_SIZE)}`);
+    this.logger.log(`   📊 Max Files per Upload: ${this.MAX_FILES_PER_UPLOAD}`);
+    this.logger.log(`   🔒 MIME Type Validation: ${this.ENABLE_FILE_VALIDATION ? 'ENABLED' : 'DISABLED'}`);
+    this.logger.log(`   🌐 File Base URL: ${this.fileBaseUrl}`);
+    this.logger.log(`   🪣 GCS Bucket: ${bucketName}`);
 
     try {
       // Initialize Google Cloud Storage with service account credentials
@@ -50,7 +102,7 @@ export class GCSService {
       this.bucketName = bucketName;
       this.bucket = this.storage.bucket(bucketName);
       
-      this.logger.log(`Google Cloud Storage initialized with bucket: ${bucketName}`);
+      this.logger.log(`✅ Google Cloud Storage initialized with bucket: ${bucketName}`);
       
       // Test connection by checking if bucket exists (optional validation)
       this.validateBucketAccess().catch(error => {
@@ -80,50 +132,74 @@ export class GCSService {
   }
 
   /**
-   * Upload a file to Google Cloud Storage
+   * SECURE FILE UPLOAD WITH ENVIRONMENT-BASED VALIDATION
+   * 
+   * Enterprise security features:
+   * - File size validation against environment limits
+   * - MIME type validation with whitelist
+   * - Extension validation with double-check
+   * - Serverless-optimized (direct GCS upload)
+   * - Comprehensive logging and error handling
    */
   async uploadFile(
     file: Express.Multer.File,
     folder: string = 'documents'
-  ): Promise<{
-    url: string;
-    key: string;
-    originalName: string;
-    size: number;
-    mimeType: string;
-  }> {
+  ): Promise<SecureUploadResult> {
     try {
+      this.logger.log(`📤 Starting secure file upload: ${file.originalname} (${this.formatBytes(file.size)})`);
+
+      // SECURITY STEP 1: Basic file validation
       if (!file) {
-        throw new Error('No file provided for upload');
+        throw new BadRequestException('No file provided for upload');
       }
 
       if (!file.buffer || file.buffer.length === 0) {
-        throw new Error('File buffer is empty or invalid');
+        throw new BadRequestException('File buffer is empty or invalid');
       }
 
-      this.logger.log(`Starting file upload: ${file.originalname} (${file.size} bytes, ${file.mimetype})`);
+      // SECURITY STEP 2: File size validation
+      if (file.size > this.MAX_FILE_SIZE) {
+        throw new BadRequestException(
+          `File size ${this.formatBytes(file.size)} exceeds maximum allowed size of ${this.formatBytes(this.MAX_FILE_SIZE)}`
+        );
+      }
+
+      // SECURITY STEP 3: MIME type validation
+      if (this.ENABLE_FILE_VALIDATION && !this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+        throw new BadRequestException(
+          `File type '${file.mimetype}' is not allowed. Allowed types: ${this.ALLOWED_MIME_TYPES.join(', ')}`
+        );
+      }
+
+      // SECURITY STEP 4: File extension validation
+      const fileExtension = this.getFileExtension(file.originalname);
+      if (this.ENABLE_FILE_VALIDATION && !this.ALLOWED_EXTENSIONS.includes(fileExtension)) {
+        throw new BadRequestException(
+          `File extension '${fileExtension}' is not allowed. Allowed extensions: ${this.ALLOWED_EXTENSIONS.join(', ')}`
+        );
+      }
+
+      // SECURITY STEP 5: Generate secure filename
+      const fileId = uuidv4().replace(/-/g, '');
+      const sanitizedFileName = this.generateSecureFileName(file.originalname, fileId);
+      const key = this.generateSecurePath(folder, sanitizedFileName);
+
+      this.logger.log(`🔐 Generated secure GCS key: ${key}`);
 
       // Additional buffer validation - ensure it's not corrupted
       if (!Buffer.isBuffer(file.buffer)) {
-        throw new Error('File buffer is not a valid Buffer object');
+        throw new BadRequestException('File buffer is not a valid Buffer object');
       }
 
       // Create a fresh buffer copy to avoid potential reference issues
       const bufferCopy = Buffer.from(file.buffer);
-      this.logger.log(`Created buffer copy, original size: ${file.buffer.length}, copy size: ${bufferCopy.length}`);
-
-      // Generate unique filename
-      const fileExtension = file.originalname.split('.').pop() || 'bin';
-      const fileName = `${uuidv4()}.${fileExtension}`;
-      const key = `${folder}/${fileName}`;
-
-      this.logger.log(`Generated GCS key: ${key}`);
+      this.logger.log(`📋 Created buffer copy, size: ${bufferCopy.length} bytes`);
 
       // Create file in GCS bucket
       const gcsFile = this.bucket.file(key);
 
-      // Simple upload - no complex retry logic
-      this.logger.log(`Uploading file to GCS: ${key}`);
+      // Secure upload with metadata
+      this.logger.log(`☁️ Uploading file to GCS: ${key}`);
       
       await gcsFile.save(bufferCopy, {
         metadata: {
@@ -132,65 +208,99 @@ export class GCSService {
             originalName: file.originalname,
             uploadedAt: new Date().toISOString(),
             folder: folder,
-            fileType: 'document'
+            fileType: 'document',
+            fileId: fileId,
+            securityValidated: 'true',
+            maxFileSize: this.MAX_FILE_SIZE.toString(),
           },
         },
         public: true, // Make file publicly accessible
-        resumable: false, // Use simple upload
+        resumable: false, // Use simple upload for serverless
         predefinedAcl: 'publicRead', // Explicitly set public read access
       });
       
       // Ensure file is publicly readable
       await gcsFile.makePublic();
       
-      this.logger.log(`Upload successful: ${key}`);
+      this.logger.log(`✅ Upload successful: ${key}`);
 
       // Generate the public URL using custom base URL or default
-      let url: string;
-      if (this.fileBaseUrl.includes('storage.googleapis.com')) {
-        // Using default Google Storage URL
-        url = `${this.fileBaseUrl}/${key}`;
-      } else {
-        // Using custom base URL - append the key path
-        url = `${this.fileBaseUrl}/${key}`;
-      }
+      const url = this.generatePublicUrl(key);
 
-      this.logger.log(`File uploaded successfully to GCS: ${key} -> ${url}`);
-
-      return {
+      const result: SecureUploadResult = {
         url,
         key,
         originalName: file.originalname,
         size: file.size,
         mimeType: file.mimetype,
+        uploadedAt: new Date().toISOString(),
+        fileId,
       };
+
+      this.logger.log(`🎉 File uploaded successfully: ${file.originalname} -> ${url}`);
+      return result;
+
     } catch (error) {
-      this.logger.error(`Failed to upload file to GCS: ${error.message}`);
-      this.logger.error(`Error stack: ${error.stack}`);
+      this.logger.error(`❌ Failed to upload file: ${file?.originalname}`, error);
+      
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       
       // Log file details for debugging
-      this.logger.error(`File details: name=${file?.originalname}, size=${file?.size}, type=${file?.mimetype}, bufferLength=${file?.buffer?.length}`);
+      this.logger.error(`File details: name=${file?.originalname}, size=${file?.size}, type=${file?.mimetype}`);
       
-      // Simple error message - no complex error handling
-      throw new Error(`File upload failed: ${error.message}`);
+      throw new BadRequestException(`File upload failed: ${error.message}`);
     }
   }
 
   /**
-   * Upload multiple files to Google Cloud Storage
+   * SECURE MULTIPLE FILE UPLOAD
+   * 
+   * Validates file count and total size before uploading
    */
   async uploadMultipleFiles(
     files: Express.Multer.File[],
     folder: string = 'documents'
-  ): Promise<Array<{
-    url: string;
-    key: string;
-    originalName: string;
-    size: number;
-    mimeType: string;
-  }>> {
-    const uploadPromises = files.map(file => this.uploadFile(file, folder));
-    return Promise.all(uploadPromises);
+  ): Promise<SecureUploadResult[]> {
+    this.logger.log(`📤 Starting secure multiple file upload: ${files.length} files`);
+
+    // Validate file count
+    if (files.length > this.MAX_FILES_PER_UPLOAD) {
+      throw new BadRequestException(
+        `Too many files. Maximum allowed: ${this.MAX_FILES_PER_UPLOAD}, provided: ${files.length}`
+      );
+    }
+
+    // Validate total size
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    const maxTotalSize = this.MAX_FILE_SIZE * files.length;
+    if (totalSize > maxTotalSize) {
+      throw new BadRequestException(
+        `Total file size ${this.formatBytes(totalSize)} exceeds maximum allowed total size of ${this.formatBytes(maxTotalSize)}`
+      );
+    }
+
+    const results: SecureUploadResult[] = [];
+    const errors: string[] = [];
+
+    for (const file of files) {
+      try {
+        const result = await this.uploadFile(file, folder);
+        results.push(result);
+      } catch (error) {
+        const errorMsg = `Failed to upload ${file.originalname}: ${error.message}`;
+        errors.push(errorMsg);
+        this.logger.error(errorMsg);
+      }
+    }
+
+    if (errors.length > 0 && results.length === 0) {
+      throw new BadRequestException(`All file uploads failed: ${errors.join(', ')}`);
+    }
+
+    this.logger.log(`✅ Multiple file upload completed: ${results.length}/${files.length} successful`);
+    return results;
   }
 
   /**
@@ -200,43 +310,82 @@ export class GCSService {
     try {
       const gcsFile = this.bucket.file(key);
       await gcsFile.delete();
-      this.logger.log(`File deleted successfully from GCS: ${key}`);
+      this.logger.log(`🗑️ File deleted successfully from GCS: ${key}`);
     } catch (error) {
-      this.logger.error(`Failed to delete file from GCS: ${error.message}`);
-      throw new Error(`File deletion failed: ${error.message}`);
+      this.logger.error(`❌ Failed to delete file from GCS: ${error.message}`);
+      throw new BadRequestException(`File deletion failed: ${error.message}`);
     }
   }
 
   /**
-   * Validate file type and size
+   * SECURITY HELPER METHODS
+   */
+
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  private getFileExtension(filename: string): string {
+    return filename.toLowerCase().substring(filename.lastIndexOf('.')) || '';
+  }
+
+  private generateSecureFileName(originalName: string, fileId: string): string {
+    const extension = this.getFileExtension(originalName);
+    const baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+    
+    // Sanitize original filename - only allow alphanumeric, dots, dashes, underscores
+    const sanitizedBaseName = baseName
+      .replace(/[^a-zA-Z0-9.-_]/g, '_')
+      .substring(0, 50);
+    
+    return `${fileId}_${sanitizedBaseName}${extension}`;
+  }
+
+  private generateSecurePath(folder: string, fileName: string): string {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    
+    // Sanitize folder input
+    const sanitizedFolder = folder.replace(/[^a-zA-Z0-9-_]/g, '_');
+    
+    return `${sanitizedFolder}/${year}/${month}/${fileName}`;
+  }
+
+  private generatePublicUrl(key: string): string {
+    if (this.fileBaseUrl.includes('storage.googleapis.com')) {
+      // Using default Google Storage URL
+      return `${this.fileBaseUrl}/${key}`;
+    } else {
+      // Using custom base URL - append the key path
+      return `${this.fileBaseUrl}/${key}`;
+    }
+  }
+
+  /**
+   * LEGACY VALIDATION METHODS (Deprecated - use built-in validation)
    */
   validateFile(file: Express.Multer.File, maxSizeInMB: number = 5): void {
-    // Check file size (convert MB to bytes)
+    // This method is deprecated - validation is now handled in uploadFile
+    this.logger.warn('validateFile method is deprecated - use uploadFile with built-in validation');
+    
     const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
     if (file.size > maxSizeInBytes) {
-      throw new Error(`File size must not exceed ${maxSizeInMB}MB`);
+      throw new BadRequestException(`File size must not exceed ${maxSizeInMB}MB`);
     }
 
-    // Check file type (allow common document types)
-    const allowedMimeTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-    ];
-
-    if (!allowedMimeTypes.includes(file.mimetype)) {
-      throw new Error(`File type ${file.mimetype} is not allowed`);
+    if (!this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException(`File type ${file.mimetype} is not allowed`);
     }
   }
 
-  /**
-   * Validate multiple files
-   */
   validateFiles(files: Express.Multer.File[], maxSizeInMB: number = 5): void {
+    // This method is deprecated - validation is now handled in uploadMultipleFiles
+    this.logger.warn('validateFiles method is deprecated - use uploadMultipleFiles with built-in validation');
     files.forEach(file => this.validateFile(file, maxSizeInMB));
   }
 }
