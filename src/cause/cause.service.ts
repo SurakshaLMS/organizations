@@ -407,6 +407,13 @@ export class CauseService {
   }
 
   /**
+   * Test GCS connection
+   */
+  async testGCSConnection() {
+    return this.gcsImageService.testGCSConnection();
+  }
+
+  /**
    * Get causes by organization
    */
   async getCausesByOrganization(organizationId: string, userId?: string) {

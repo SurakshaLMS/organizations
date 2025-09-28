@@ -9,6 +9,7 @@ export class GCSImageService {
   private readonly storage: Storage;
   private readonly bucketName: string;
   private readonly bucket: any;
+  private readonly fileBaseUrl: string;
 
   constructor(private configService: ConfigService) {
     const projectId = this.configService.get<string>('GCS_PROJECT_ID');
@@ -17,10 +18,15 @@ export class GCSImageService {
     const privateKey = this.configService.get<string>('GCS_PRIVATE_KEY');
     const clientEmail = this.configService.get<string>('GCS_CLIENT_EMAIL');
     const clientId = this.configService.get<string>('GCS_CLIENT_ID');
+    const fileBaseUrl = this.configService.get<string>('FILE_BASE_URL');
 
     if (!projectId || !bucketName || !privateKey || !clientEmail) {
       throw new Error('Missing required Google Cloud Storage configuration. Please check your environment variables.');
     }
+
+    // Set custom base URL or default to Google Storage
+    this.fileBaseUrl = fileBaseUrl?.trim() || `https://storage.googleapis.com/${bucketName}`;
+    this.logger.log(`File base URL configured: ${this.fileBaseUrl}`);
 
     try {
       // Initialize Google Cloud Storage with service account credentials
@@ -111,71 +117,14 @@ export class GCSImageService {
       // Create file in GCS bucket
       const gcsFile = this.bucket.file(key);
 
-      // Upload buffer to GCS using stream for better error handling
+      // Use simple approach with better error handling
       try {
-        await new Promise<void>((resolve, reject) => {
-          const uploadTimeout = setTimeout(() => {
-            reject(new Error('Upload timeout - stream took too long to complete'));
-          }, 30000); // 30 second timeout
-
-          const stream = gcsFile.createWriteStream({
-            metadata: {
-              contentType: file.mimetype,
-              cacheControl: 'public, max-age=31536000', // Cache for 1 year
-              metadata: {
-                originalName: file.originalname,
-                uploadedAt: new Date().toISOString(),
-                folder: folder,
-                fileType: 'organization-image'
-              },
-            },
-            public: true, // Make file publicly accessible
-            resumable: false, // Use simple upload for better error handling
-          });
-
-          // Handle stream events
-          stream.on('error', (error) => {
-            clearTimeout(uploadTimeout);
-            this.logger.error(`GCS stream error: ${error.message}`);
-            this.logger.error(`GCS stream error stack: ${error.stack}`);
-            reject(new Error(`Upload stream failed: ${error.message}`));
-          });
-
-          stream.on('finish', () => {
-            clearTimeout(uploadTimeout);
-            this.logger.log(`GCS stream finished successfully for: ${key}`);
-            resolve();
-          });
-
-          // Add additional event listeners for debugging
-          stream.on('pipe', () => {
-            this.logger.log(`GCS stream piped for: ${key}`);
-          });
-
-          stream.on('unpipe', () => {
-            this.logger.log(`GCS stream unpiped for: ${key}`);
-          });
-
-          // Write buffer to stream and end it
-          try {
-            // Use the buffer copy to avoid any reference issues
-            stream.end(bufferCopy);
-            this.logger.log(`Buffer written to GCS stream for: ${key}`);
-          } catch (streamError) {
-            clearTimeout(uploadTimeout);
-            this.logger.error(`Error writing to stream: ${streamError.message}`);
-            this.logger.error(`Stream error stack: ${streamError.stack}`);
-            reject(new Error(`Failed to write buffer to stream: ${streamError.message}`));
-          }
-        });
-      } catch (streamError) {
-        this.logger.warn(`Stream upload failed, attempting fallback with gcsFile.save(): ${streamError.message}`);
+        this.logger.log(`Attempting direct upload with gcsFile.save() for: ${key}`);
         
-        // Fallback to using gcsFile.save() if stream fails
         await gcsFile.save(bufferCopy, {
           metadata: {
             contentType: file.mimetype,
-            cacheControl: 'public, max-age=31536000',
+            cacheControl: 'public, max-age=31536000', // Cache for 1 year
             metadata: {
               originalName: file.originalname,
               uploadedAt: new Date().toISOString(),
@@ -183,15 +132,50 @@ export class GCSImageService {
               fileType: 'organization-image'
             },
           },
-          public: true,
-          resumable: false,
+          public: true, // Make file publicly accessible
+          resumable: false, // Use simple upload for better reliability
+          timeout: 30000, // 30 second timeout
+          retry: {
+            retries: 2,
+            factor: 2,
+            minTimeout: 1000,
+            maxTimeout: 3000
+          }
         });
         
-        this.logger.log(`Fallback upload successful for: ${key}`);
+        this.logger.log(`Direct upload successful for: ${key}`);
+      } catch (saveError) {
+        this.logger.error(`Direct upload failed, trying with different settings: ${saveError.message}`);
+        
+        // Try with different settings
+        await gcsFile.save(bufferCopy, {
+          metadata: {
+            contentType: file.mimetype || 'application/octet-stream',
+          },
+          public: true,
+          resumable: true, // Try resumable if simple fails
+          validation: false, // Disable validation that might cause issues
+          timeout: 60000, // Longer timeout for fallback
+          retry: {
+            retries: 1,
+            factor: 2,
+            minTimeout: 2000,
+            maxTimeout: 5000
+          }
+        });
+        
+        this.logger.log(`Resumable upload successful for: ${key}`);
       }
 
-      // Generate the public URL
-      const url = `https://storage.googleapis.com/${this.bucketName}/${key}`;
+      // Generate the public URL using custom base URL or default
+      let url: string;
+      if (this.fileBaseUrl.includes('storage.googleapis.com')) {
+        // Using default Google Storage URL
+        url = `${this.fileBaseUrl}/${key}`;
+      } else {
+        // Using custom base URL - append the key path
+        url = `${this.fileBaseUrl}/${key}`;
+      }
 
       this.logger.log(`Image uploaded successfully to GCS: ${key} -> ${url}`);
 
@@ -205,6 +189,10 @@ export class GCSImageService {
     } catch (error) {
       this.logger.error(`Failed to upload image to GCS: ${error.message}`);
       this.logger.error(`Error stack: ${error.stack}`);
+      this.logger.error(`Error details: ${JSON.stringify(error, null, 2)}`);
+      
+      // Log more details about the file
+      this.logger.error(`File details: name=${file?.originalname}, size=${file?.size}, type=${file?.mimetype}, bufferLength=${file?.buffer?.length}`);
       
       // Provide more specific error messages
       if (error.message.includes('DECODER')) {
@@ -219,6 +207,10 @@ export class GCSImageService {
         throw new Error(`Image upload failed: ${error.message}`);
       } else if (error.message.includes('type') || error.message.includes('format')) {
         throw new Error(`Image upload failed: ${error.message}`);
+      } else if (error.message.includes('forbidden') || error.message.includes('permission') || error.message.includes('unauthorized')) {
+        throw new Error(`Image upload failed: Permission denied. Please check GCS bucket permissions.`);
+      } else if (error.message.includes('network') || error.message.includes('timeout')) {
+        throw new Error(`Image upload failed: Network error. Please try again.`);
       } else {
         throw new Error(`Image upload failed: ${error.message}`);
       }
@@ -273,12 +265,19 @@ export class GCSImageService {
   }
 
   /**
-   * Extract GCS key from public URL
+   * Extract GCS key from public URL (handles both custom and default URLs)
    */
   private extractKeyFromUrl(url: string): string | null {
     try {
-      const urlParts = url.split(`https://storage.googleapis.com/${this.bucketName}/`);
-      return urlParts.length > 1 ? urlParts[1] : null;
+      if (url.includes('storage.googleapis.com')) {
+        // Default Google Storage URL
+        const urlParts = url.split(`https://storage.googleapis.com/${this.bucketName}/`);
+        return urlParts.length > 1 ? urlParts[1] : null;
+      } else {
+        // Custom base URL - extract everything after the base URL
+        const urlParts = url.split(this.fileBaseUrl + '/');
+        return urlParts.length > 1 ? urlParts[1] : null;
+      }
     } catch (error) {
       this.logger.warn(`Failed to extract key from URL: ${url}`);
       return null;
@@ -420,16 +419,56 @@ export class GCSImageService {
   }
 
   /**
-   * Check if image exists in GCS
+   * Test GCS connection with a simple text file upload
    */
-  async imageExists(key: string): Promise<boolean> {
+  async testGCSConnection(): Promise<{ success: boolean; message: string; url?: string }> {
     try {
+      this.logger.log('Testing GCS connection...');
+      
+      const testContent = `GCS Test Upload - ${new Date().toISOString()}`;
+      const testBuffer = Buffer.from(testContent, 'utf8');
+      const fileName = `test-${Date.now()}.txt`;
+      const key = `tests/${fileName}`;
+      
       const gcsFile = this.bucket.file(key);
-      const [exists] = await gcsFile.exists();
-      return exists;
+      
+      await gcsFile.save(testBuffer, {
+        metadata: {
+          contentType: 'text/plain',
+        },
+        public: true,
+        resumable: false,
+        timeout: 30000,
+        retry: {
+          retries: 2,
+          factor: 2,
+          minTimeout: 1000,
+          maxTimeout: 3000
+        }
+      });
+      
+      // Generate URL using custom base URL or default
+      let url: string;
+      if (this.fileBaseUrl.includes('storage.googleapis.com')) {
+        url = `${this.fileBaseUrl}/${key}`;
+      } else {
+        url = `${this.fileBaseUrl}/${key}`;
+      }
+      
+      this.logger.log(`GCS test successful: ${url}`);
+      
+      return {
+        success: true,
+        message: 'GCS connection test successful',
+        url,
+      };
     } catch (error) {
-      this.logger.error(`Failed to check image existence: ${error.message}`);
-      return false;
+      this.logger.error(`GCS connection test failed: ${error.message}`);
+      this.logger.error(`Error stack: ${error.stack}`);
+      return {
+        success: false,
+        message: `GCS connection test failed: ${error.message}`,
+      };
     }
   }
 }

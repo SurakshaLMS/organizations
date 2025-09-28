@@ -9,6 +9,7 @@ export class GCSService {
   private readonly storage: Storage;
   private readonly bucketName: string;
   private readonly bucket: any;
+  private readonly fileBaseUrl: string;
 
   constructor(private configService: ConfigService) {
     const projectId = this.configService.get<string>('GCS_PROJECT_ID');
@@ -17,6 +18,7 @@ export class GCSService {
     const privateKey = this.configService.get<string>('GCS_PRIVATE_KEY');
     const clientEmail = this.configService.get<string>('GCS_CLIENT_EMAIL');
     const clientId = this.configService.get<string>('GCS_CLIENT_ID');
+    const fileBaseUrl = this.configService.get<string>('FILE_BASE_URL');
 
     if (!projectId || !bucketName || !privateKey || !clientEmail) {
       this.logger.error('Missing required Google Cloud Storage configuration');
@@ -26,6 +28,10 @@ export class GCSService {
       this.logger.error(`Client Email: ${clientEmail ? 'SET' : 'MISSING'}`);
       throw new Error('Missing required Google Cloud Storage configuration. Please check your environment variables.');
     }
+
+    // Set custom base URL or default to Google Storage
+    this.fileBaseUrl = fileBaseUrl?.trim() || `https://storage.googleapis.com/${bucketName}`;
+    this.logger.log(`File base URL configured: ${this.fileBaseUrl}`);
 
     try {
       // Initialize Google Cloud Storage with service account credentials
@@ -114,66 +120,10 @@ export class GCSService {
       // Create file in GCS bucket
       const gcsFile = this.bucket.file(key);
 
-      // Upload buffer to GCS using stream for better error handling
+      // Use simple approach with better error handling
       try {
-        await new Promise<void>((resolve, reject) => {
-          const uploadTimeout = setTimeout(() => {
-            reject(new Error('Upload timeout - stream took too long to complete'));
-          }, 30000); // 30 second timeout
-
-          const stream = gcsFile.createWriteStream({
-            metadata: {
-              contentType: file.mimetype,
-              metadata: {
-                originalName: file.originalname,
-                uploadedAt: new Date().toISOString(),
-                folder: folder,
-                fileType: 'document'
-              },
-            },
-            public: true, // Make file publicly accessible
-            resumable: false, // Use simple upload for better error handling
-          });
-
-          // Handle stream events
-          stream.on('error', (error) => {
-            clearTimeout(uploadTimeout);
-            this.logger.error(`GCS stream error: ${error.message}`);
-            this.logger.error(`GCS stream error stack: ${error.stack}`);
-            reject(new Error(`Upload stream failed: ${error.message}`));
-          });
-
-          stream.on('finish', () => {
-            clearTimeout(uploadTimeout);
-            this.logger.log(`GCS stream finished successfully for: ${key}`);
-            resolve();
-          });
-
-          // Add additional event listeners for debugging
-          stream.on('pipe', () => {
-            this.logger.log(`GCS stream piped for: ${key}`);
-          });
-
-          stream.on('unpipe', () => {
-            this.logger.log(`GCS stream unpiped for: ${key}`);
-          });
-
-          // Write buffer to stream and end it
-          try {
-            // Use the buffer copy to avoid any reference issues
-            stream.end(bufferCopy);
-            this.logger.log(`Buffer written to GCS stream for: ${key}`);
-          } catch (streamError) {
-            clearTimeout(uploadTimeout);
-            this.logger.error(`Error writing to stream: ${streamError.message}`);
-            this.logger.error(`Stream error stack: ${streamError.stack}`);
-            reject(new Error(`Failed to write buffer to stream: ${streamError.message}`));
-          }
-        });
-      } catch (streamError) {
-        this.logger.warn(`Stream upload failed, attempting fallback with gcsFile.save(): ${streamError.message}`);
+        this.logger.log(`Attempting direct upload with gcsFile.save() for: ${key}`);
         
-        // Fallback to using gcsFile.save() if stream fails
         await gcsFile.save(bufferCopy, {
           metadata: {
             contentType: file.mimetype,
@@ -184,15 +134,50 @@ export class GCSService {
               fileType: 'document'
             },
           },
-          public: true,
-          resumable: false,
+          public: true, // Make file publicly accessible
+          resumable: false, // Use simple upload for better reliability
+          timeout: 30000, // 30 second timeout
+          retry: {
+            retries: 2,
+            factor: 2,
+            minTimeout: 1000,
+            maxTimeout: 3000
+          }
         });
         
-        this.logger.log(`Fallback upload successful for: ${key}`);
+        this.logger.log(`Direct upload successful for: ${key}`);
+      } catch (saveError) {
+        this.logger.error(`Direct upload failed, trying with different settings: ${saveError.message}`);
+        
+        // Try with different settings
+        await gcsFile.save(bufferCopy, {
+          metadata: {
+            contentType: file.mimetype || 'application/octet-stream',
+          },
+          public: true,
+          resumable: true, // Try resumable if simple fails
+          validation: false, // Disable validation that might cause issues
+          timeout: 60000, // Longer timeout for fallback
+          retry: {
+            retries: 1,
+            factor: 2,
+            minTimeout: 2000,
+            maxTimeout: 5000
+          }
+        });
+        
+        this.logger.log(`Resumable upload successful for: ${key}`);
       }
 
-      // Generate the public URL
-      const url = `https://storage.googleapis.com/${this.bucketName}/${key}`;
+      // Generate the public URL using custom base URL or default
+      let url: string;
+      if (this.fileBaseUrl.includes('storage.googleapis.com')) {
+        // Using default Google Storage URL
+        url = `${this.fileBaseUrl}/${key}`;
+      } else {
+        // Using custom base URL - append the key path
+        url = `${this.fileBaseUrl}/${key}`;
+      }
 
       this.logger.log(`File uploaded successfully to GCS: ${key} -> ${url}`);
 
@@ -205,12 +190,20 @@ export class GCSService {
       };
     } catch (error) {
       this.logger.error(`Failed to upload file to GCS: ${error.message}`, error.stack);
+      this.logger.error(`Error details: ${JSON.stringify(error, null, 2)}`);
+      
+      // Log more details about the file
+      this.logger.error(`File details: name=${file?.originalname}, size=${file?.size}, type=${file?.mimetype}, bufferLength=${file?.buffer?.length}`);
       
       // Provide more specific error messages
       if (error.message.includes('stream')) {
         throw new Error(`File upload failed: Stream processing error. Please try uploading the file again.`);
       } else if (error.message.includes('buffer')) {
         throw new Error(`File upload failed: Invalid file data. Please try uploading the file again.`);
+      } else if (error.message.includes('forbidden') || error.message.includes('permission') || error.message.includes('unauthorized')) {
+        throw new Error(`File upload failed: Permission denied. Please check GCS bucket permissions.`);
+      } else if (error.message.includes('network') || error.message.includes('timeout')) {
+        throw new Error(`File upload failed: Network error. Please try again.`);
       } else {
         throw new Error(`File upload failed: ${error.message}`);
       }

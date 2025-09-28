@@ -101,6 +101,17 @@ export class CauseController {
   }
 
   /**
+   * Test GCS connection (Debug endpoint)
+   */
+  @Get('test-gcs')
+  @ApiOperation({ summary: 'Test GCS connection (Debug)' })
+  @ApiResponse({ status: 200, description: 'GCS connection test result' })
+  async testGCSConnection() {
+    this.logger.log('🧪 Testing GCS connection...');
+    return this.causeService.testGCSConnection();
+  }
+
+  /**
    * Get cause by ID
    */
   @Get(':id')
