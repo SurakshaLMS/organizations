@@ -5,7 +5,7 @@ import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lectu
 import { CreateLectureWithDocumentsDto, LectureWithDocumentsResponseDto } from './dto/create-lecture-with-documents.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
-import { GCSService, SecureUploadResult } from '../common/services/gcs.service';
+import { GCSService, SecureUploadResult, SingleFileUploadResult } from '../common/services/gcs.service';
 
 /**
  * Document upload result interface
@@ -203,7 +203,7 @@ export class LectureService {
             }
 
             // Upload to GCS with security validation
-            const uploadResult: SecureUploadResult = await this.gcsService.uploadFile(
+            const uploadResult: SingleFileUploadResult = await this.gcsService.uploadFile(
               file,
               `lectures/${lecture.lectureId}/documents`
             );
@@ -635,7 +635,7 @@ export class LectureService {
         for (const file of files) {
           try {
             // Upload to GCS with security validation
-            const uploadResult: SecureUploadResult = await this.gcsService.uploadFile(
+            const uploadResult: SingleFileUploadResult = await this.gcsService.uploadFile(
               file,
               `lectures/${lectureId}/documents`
             );

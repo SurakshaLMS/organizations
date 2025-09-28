@@ -17,11 +17,12 @@ This system provides enterprise-grade file upload security for a serverless Nest
 ## Security Features
 
 ### Environment-Based Configuration
-All security limits are configurable via environment variables:
+All security limits are configurable via environment variables with separate limits for documents and images:
 
 ```bash
-# File size limits
-MAX_FILE_SIZE=10485760              # 10MB per file (configurable)
+# Separate file size limits for different file types
+MaxDocSizeCanUpload=10485760        # 10MB per document (PDFs)
+MaxImgSizeCanUpload=10485760        # 10MB per image (jpg, png, gif, heic, heif)
 MAX_FILES_PER_UPLOAD=5              # Max 5 files per request
 
 # Strict file type restrictions
@@ -33,7 +34,7 @@ ENABLE_FILE_VALIDATION=true         # Enable strict validation (recommended)
 ```
 
 ### Multi-Layer Validation
-1. **File Size Validation** - Configurable per-file and total size limits
+1. **File Size Validation** - Separate configurable limits for documents (PDFs) and images
 2. **MIME Type Validation** - Whitelist-based validation against allowed types
 3. **File Extension Validation** - Double-check security layer
 4. **Buffer Validation** - Ensures file integrity
@@ -118,7 +119,15 @@ curl -X POST "http://localhost:3000/lectures/with-files" \
 ```json
 {
   "statusCode": 400,
-  "message": "File size 15.2 MB exceeds maximum allowed size of 10 MB",
+  "message": "document size 15.2 MB exceeds maximum allowed size of 10 MB",
+  "error": "Bad Request"
+}
+```
+
+```json
+{
+  "statusCode": 400,
+  "message": "image size 12.5 MB exceeds maximum allowed size of 10 MB", 
   "error": "Bad Request"
 }
 ```
@@ -259,9 +268,10 @@ File details: name=invalid-file.exe, size=1024, type=application/octet-stream
 
 ### Production Configuration
 ```bash
-# Production limits
-MAX_FILE_SIZE=10485760        # 10MB for production
-MAX_FILES_PER_UPLOAD=3        # Conservative limit
+# Production limits with separate document and image sizes
+MaxDocSizeCanUpload=10485760      # 10MB for PDFs in production
+MaxImgSizeCanUpload=5242880       # 5MB for images in production (more restrictive)
+MAX_FILES_PER_UPLOAD=3            # Conservative limit
 
 # Enable all security features
 ENABLE_FILE_VALIDATION=true
