@@ -7,7 +7,11 @@ import { CreateLectureWithFilesDto, UpdateLectureWithFilesDto } from './dto/lect
 import { CreateLectureWithDocumentsDto } from './dto/create-lecture-with-documents.dto';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
+import { OrganizationAccessGuard } from '../auth/guards/organization-access.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
+import { RequireMember, RequireModerator, RequireAdmin } from '../auth/decorators/roles.decorator';
+import { RequireOrganizationMember, RequireOrganizationModerator, RequireOrganizationAdmin } from '../auth/decorators/organization-access.decorator';
 import { EnhancedJwtPayload } from '../auth/organization-access.service';
 
 /**
@@ -34,16 +38,25 @@ export class LectureController {
 
   /**
    * CREATE LECTURE (Basic - No File Upload)
+   * Requires MODERATOR role or higher in the organization
    */
   @Post()
-  @ApiOperation({ summary: 'Create a new lecture (without file upload)' })
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationModerator('organizationId')
+  @ApiOperation({ 
+    summary: 'Create a new lecture (without file upload)',
+    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization'
+  })
   @ApiBody({ type: CreateLectureDto })
   @ApiResponse({ status: 201, description: 'Lecture created successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   async createLecture(
-    @Body() createLectureDto: CreateLectureDto
+    @Body() createLectureDto: CreateLectureDto,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Creating lecture "${createLectureDto.title}"`);
-    return this.lectureService.createLecture(createLectureDto, undefined);
+    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" by user ${user.sub} (${user.userType || 'USER'})`);
+    return this.lectureService.createLecture(createLectureDto, user);
   }
 
   /**
@@ -52,10 +65,16 @@ export class LectureController {
    * Enhanced endpoint that allows creating a lecture with multiple document uploads to GCS
    * Uses multipart/form-data to handle file uploads with Multer
    * Supports up to 10 document files per lecture
+   * Requires MODERATOR role or higher in the organization
    */
   @Post('with-files')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationModerator('organizationId')
   @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files with field name 'documents'
-  @ApiOperation({ summary: 'Create lecture with document uploads to Google Cloud Storage' })
+  @ApiOperation({ 
+    summary: 'Create lecture with document uploads to Google Cloud Storage',
+    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization'
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ 
     type: CreateLectureWithFilesDto,
@@ -63,17 +82,20 @@ export class LectureController {
   })
   @ApiResponse({ status: 201, description: 'Lecture created with documents successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   @ApiResponse({ status: 413, description: 'File too large or too many files' })
   async createLectureWithFiles(
     @Body() createLectureDto: CreateLectureWithFilesDto,
-    @UploadedFiles() files?: Express.Multer.File[]
+    @UploadedFiles() files: Express.Multer.File[],
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents`);
+    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents by user ${user.sub} (${user.userType || 'USER'})`);
     
     return this.lectureService.createLectureWithDocuments(
       createLectureDto,
       createLectureDto.causeId,
-      undefined,
+      user,
       files
     );
   }
@@ -84,12 +106,16 @@ export class LectureController {
    * Legacy endpoint that requires causeId in URL path
    * Maintained for backward compatibility
    * Use POST /lectures/with-files for new implementations
+   * Requires MODERATOR role or higher in the organization
    */
   @Post('with-documents/:causeId')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationModerator('organizationId')
   @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files
   @ApiOperation({ 
     summary: 'Create lecture with document uploads (Legacy - use /with-files instead)',
-    deprecated: true 
+    deprecated: true,
+    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization'
   })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'causeId', description: 'ID of the cause to create lecture for' })
@@ -100,67 +126,85 @@ export class LectureController {
   @ApiResponse({ status: 201, description: 'Lecture created with documents successfully' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   async createLectureWithDocuments(
     @Param('causeId') causeId: string,
     @Body() createLectureDto: CreateLectureDto,
-    @UploadedFiles() files?: Express.Multer.File[]
+    @UploadedFiles() files: Express.Multer.File[],
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 [LEGACY] Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents for cause ${causeId}`);
+    this.logger.log(`📚 [LEGACY] Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents for cause ${causeId} by user ${user.sub} (${user.userType || 'USER'})`);
     
     return this.lectureService.createLectureWithDocuments(
       createLectureDto,
       causeId,
-      undefined,
+      user,
       files
     );
   }
 
   /**
    * GET LECTURES WITH FILTERING
+   * Public access with optional authentication
    */
   @Get()
-  @ApiOperation({ summary: 'Get lectures with filtering' })
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Get lectures with filtering (public access)' })
   @ApiQuery({ name: 'causeId', required: false, description: 'Filter by cause ID' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page' })
   @ApiResponse({ status: 200, description: 'Lectures retrieved successfully' })
   async getLectures(
-    @Query() queryDto: LectureQueryDto
+    @Query() queryDto: LectureQueryDto,
+    @GetUser() user?: EnhancedJwtPayload
   ) {
     this.logger.log(`📚 Fetching lectures with filters: ${JSON.stringify(queryDto)}`);
-    return this.lectureService.getLectures(undefined, queryDto);
+    return this.lectureService.getLectures(user, queryDto);
   }
 
   /**
    * GET LECTURE BY ID
+   * Public access with optional authentication
    */
   @Get(':id')
-  @ApiOperation({ summary: 'Get lecture by ID' })
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Get lecture by ID (public access)' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   async getLectureById(
-    @Param('id') id: string
+    @Param('id') id: string,
+    @GetUser() user?: EnhancedJwtPayload
   ) {
     this.logger.log(`📚 Fetching lecture with ID: ${id}`);
-    return this.lectureService.getLectureById(id, undefined);
+    return this.lectureService.getLectureById(id, user);
   }
 
   /**
    * UPDATE LECTURE (Basic - No File Upload)
+   * Requires MODERATOR role or higher in the organization
    */
   @Put(':id')
-  @ApiOperation({ summary: 'Update lecture (without file upload)' })
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationModerator('organizationId')
+  @ApiOperation({ 
+    summary: 'Update lecture (without file upload)',
+    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization'
+  })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiBody({ type: UpdateLectureDto })
   @ApiResponse({ status: 200, description: 'Lecture updated successfully' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   async updateLecture(
     @Param('id') id: string,
-    @Body() updateLectureDto: UpdateLectureDto
+    @Body() updateLectureDto: UpdateLectureDto,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Updating lecture ${id}`);
-    return this.lectureService.updateLecture(id, updateLectureDto, undefined);
+    this.logger.log(`📚 Updating lecture ${id} by user ${user.sub} (${user.userType || 'USER'})`);
+    return this.lectureService.updateLecture(id, updateLectureDto, user);
   }
 
   /**
@@ -169,10 +213,16 @@ export class LectureController {
    * Enhanced endpoint for updating lecture with new document uploads
    * Supports both updating lecture details and adding new documents
    * Uses multipart/form-data with FilesInterceptor for better file handling
+   * Requires MODERATOR role or higher in the organization
    */
   @Put(':id/with-files')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationModerator('organizationId')
   @UseInterceptors(FilesInterceptor('documents', 10)) // Accept up to 10 files with field name 'documents'
-  @ApiOperation({ summary: 'Update lecture with document uploads to Google Cloud Storage' })
+  @ApiOperation({ 
+    summary: 'Update lecture with document uploads to Google Cloud Storage',
+    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization'
+  })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Lecture ID to update' })
   @ApiBody({ 
@@ -182,14 +232,17 @@ export class LectureController {
   @ApiResponse({ status: 200, description: 'Lecture updated with documents successfully' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   @ApiResponse({ status: 413, description: 'File too large or too many files' })
   async updateLectureWithFiles(
     @Param('id') id: string,
     @Body() updateLectureDto: UpdateLectureWithFilesDto,
-    @UploadedFiles() files?: Express.Multer.File[]
+    @UploadedFiles() files: Express.Multer.File[],
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Updating lecture ${id} with ${files?.length || 0} documents`);
-    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, undefined);
+    this.logger.log(`📚 Updating lecture ${id} with ${files?.length || 0} documents by user ${user.sub} (${user.userType || 'USER'})`);
+    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, user);
   }
 
   /**
@@ -199,12 +252,16 @@ export class LectureController {
    * Maintained for backward compatibility
    * Use PUT /:id/with-files for new implementations
    * Accepts files from any field name (documents, files, file, etc.)
+   * Requires MODERATOR role or higher in the organization
    */
   @Put(':id/with-documents')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationModerator('organizationId')
   @UseInterceptors(AnyFilesInterceptor()) // Accept files from any field name
   @ApiOperation({ 
     summary: 'Update lecture with document uploads (Legacy - use /:id/with-files instead)',
-    deprecated: true 
+    deprecated: true,
+    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization'
   })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Lecture ID to update' })
@@ -215,13 +272,16 @@ export class LectureController {
   @ApiResponse({ status: 200, description: 'Lecture updated with documents successfully' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   async updateLectureWithDocuments(
     @Param('id') id: string,
     @Body() updateLectureDto: UpdateLectureDto,
-    @UploadedFiles() files?: Express.Multer.File[]
+    @UploadedFiles() files: Express.Multer.File[],
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 [LEGACY] Updating lecture ${id} with ${files?.length || 0} documents`);
-    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, undefined);
+    this.logger.log(`📚 [LEGACY] Updating lecture ${id} with ${files?.length || 0} documents by user ${user.sub} (${user.userType || 'USER'})`);
+    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, user);
   }
 
   /**
@@ -232,32 +292,40 @@ export class LectureController {
    * Implements cascade deletion of all related documents from S3 and database
    */
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Delete lecture (Admin/Moderator only)' })
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('organizationId')
+  @ApiOperation({ 
+    summary: 'Delete lecture (Admin/President only)',
+    description: 'Requires ADMIN or PRESIDENT role in the organization'
+  })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture deleted successfully' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
-  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires ADMIN+)' })
   async deleteLecture(
     @Param('id') id: string,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Deleting lecture ${id} requested by user ${user.sub}`);
+    this.logger.log(`📚 Deleting lecture ${id} requested by user ${user.sub} (${user.userType || 'USER'})`);
     return this.lectureService.deleteLecture(id, user);
   }
 
   /**
    * GET LECTURE DOCUMENTS
+   * Public access with optional authentication
    */
   @Get(':id/documents')
-  @ApiOperation({ summary: 'Get lecture documents' })
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Get lecture documents (public access)' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture documents retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   async getLectureDocuments(
-    @Param('id') id: string
+    @Param('id') id: string,
+    @GetUser() user?: EnhancedJwtPayload
   ) {
     this.logger.log(`📚 Fetching documents for lecture ${id}`);
-    return this.lectureService.getLectureDocuments(id, undefined);
+    return this.lectureService.getLectureDocuments(id, user);
   }
 }

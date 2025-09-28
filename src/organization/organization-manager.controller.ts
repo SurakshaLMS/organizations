@@ -28,6 +28,8 @@ import { RateLimit } from '../auth/guards/rate-limit.guard';
 import { EnhancedJwtPayload } from '../auth/organization-access.service';
 import { ParseOrganizationIdPipe } from '../common/pipes/parse-numeric-id.pipe';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OrganizationAccessGuard } from '../auth/guards/organization-access.guard';
+import { RequireOrganizationAdmin, RequireOrganizationPresident } from '../auth/decorators/organization-access.decorator';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import {
   CreateOrganizationDto,
@@ -60,6 +62,8 @@ export class OrganizationManagerController {
    * Update Organization
    */
   @Put()
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   @RateLimit(20, 60000) // 20 updates per minute
   @ApiOperation({
     summary: 'Update organization - Requires Authentication',
@@ -84,7 +88,7 @@ export class OrganizationManagerController {
   async updateOrganization(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Body() updateOrganizationDto: UpdateOrganizationDto,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<OrganizationDto> {
     return this.organizationService.updateOrganization(organizationId, updateOrganizationDto, user);
   }
@@ -93,6 +97,8 @@ export class OrganizationManagerController {
    * Patch Organization (Alternative to PUT)
    */
   @Patch()
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   @RateLimit(20, 60000) // 20 updates per minute
   @ApiOperation({
     summary: 'Patch organization - Requires Authentication',
@@ -117,7 +123,7 @@ export class OrganizationManagerController {
   async patchOrganization(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Body() updateOrganizationDto: UpdateOrganizationDto,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<OrganizationDto> {
     return this.organizationService.updateOrganization(organizationId, updateOrganizationDto, user);
   }
@@ -126,6 +132,8 @@ export class OrganizationManagerController {
    * Delete Organization
    */
   @Delete()
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationPresident('id')
   @RateLimit(3, 60000) // 3 deletions per minute
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
@@ -144,7 +152,7 @@ export class OrganizationManagerController {
   @ApiResponse({ status: 404, description: 'Organization not found' })
   async deleteOrganization(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<void> {
     await this.organizationService.deleteOrganization(organizationId, user);
   }
@@ -153,6 +161,8 @@ export class OrganizationManagerController {
    * Get Organization Members
    */
   @Get('/members')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   @RateLimit(50, 60000) // 50 requests per minute
   @ApiOperation({
     summary: 'Get organization members - Requires Authentication',
@@ -189,7 +199,7 @@ export class OrganizationManagerController {
   async getOrganizationMembers(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Query() pagination: PaginationDto,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<OrganizationMembersResponseDto> {
     return this.organizationService.getOrganizationMembers(organizationId, pagination, user);
   }
@@ -198,6 +208,8 @@ export class OrganizationManagerController {
    * Assign User Role
    */
   @Post('/assign-role')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   @RateLimit(30, 60000) // 30 role assignments per minute
   @ApiOperation({
     summary: 'Assign role to user - Requires Authentication',
@@ -222,7 +234,7 @@ export class OrganizationManagerController {
   async assignUserRole(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Body() assignUserRoleDto: AssignUserRoleDto,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<RoleAssignmentResponseDto> {
     return this.organizationService.assignUserRole(organizationId, assignUserRoleDto, user);
   }
@@ -231,6 +243,8 @@ export class OrganizationManagerController {
    * Change User Role
    */
   @Put('/change-role')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   @RateLimit(20, 60000) // 20 role changes per minute
   @ApiOperation({
     summary: 'Change user role - Requires Authentication',
@@ -255,7 +269,7 @@ export class OrganizationManagerController {
   async changeUserRole(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Body() changeUserRoleDto: ChangeUserRoleDto,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<RoleAssignmentResponseDto> {
     return this.organizationService.changeUserRole(organizationId, changeUserRoleDto, user);
   }
@@ -264,6 +278,8 @@ export class OrganizationManagerController {
    * Remove User from Organization
    */
   @Delete('/remove-user')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationAdmin('id')
   @RateLimit(15, 60000) // 15 removals per minute
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
@@ -285,7 +301,7 @@ export class OrganizationManagerController {
   async removeUserFromOrganization(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Body() removeUserDto: RemoveUserDto,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ): Promise<void> {
     await this.organizationService.removeUserFromOrganization(organizationId, removeUserDto, user);
   }
@@ -294,6 +310,8 @@ export class OrganizationManagerController {
    * Transfer Presidency
    */
   @Put('/transfer-presidency')
+  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
+  @RequireOrganizationPresident('id')
   @RateLimit(5, 60000) // 5 transfers per minute
   @ApiOperation({
     summary: 'Transfer presidency - Requires Authentication',
@@ -338,7 +356,7 @@ export class OrganizationManagerController {
   async transferPresidency(
     @Param('id', ParseOrganizationIdPipe()) organizationId: string,
     @Body('newPresidentUserId') newPresidentUserId: string,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ) {
     return this.organizationService.transferPresidency(organizationId, newPresidentUserId, user);
   }
