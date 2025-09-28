@@ -117,55 +117,25 @@ export class GCSImageService {
       // Create file in GCS bucket
       const gcsFile = this.bucket.file(key);
 
-      // Use simple approach with better error handling
-      try {
-        this.logger.log(`Attempting direct upload with gcsFile.save() for: ${key}`);
-        
-        await gcsFile.save(bufferCopy, {
+      // Simple upload - no complex retry logic
+      this.logger.log(`Uploading file to GCS: ${key}`);
+      
+      await gcsFile.save(bufferCopy, {
+        metadata: {
+          contentType: file.mimetype,
+          cacheControl: 'public, max-age=31536000', // Cache for 1 year
           metadata: {
-            contentType: file.mimetype,
-            cacheControl: 'public, max-age=31536000', // Cache for 1 year
-            metadata: {
-              originalName: file.originalname,
-              uploadedAt: new Date().toISOString(),
-              folder: folder,
-              fileType: 'organization-image'
-            },
+            originalName: file.originalname,
+            uploadedAt: new Date().toISOString(),
+            folder: folder,
+            fileType: 'organization-image'
           },
-          public: true, // Make file publicly accessible
-          resumable: false, // Use simple upload for better reliability
-          timeout: 30000, // 30 second timeout
-          retry: {
-            retries: 2,
-            factor: 2,
-            minTimeout: 1000,
-            maxTimeout: 3000
-          }
-        });
-        
-        this.logger.log(`Direct upload successful for: ${key}`);
-      } catch (saveError) {
-        this.logger.error(`Direct upload failed, trying with different settings: ${saveError.message}`);
-        
-        // Try with different settings
-        await gcsFile.save(bufferCopy, {
-          metadata: {
-            contentType: file.mimetype || 'application/octet-stream',
-          },
-          public: true,
-          resumable: true, // Try resumable if simple fails
-          validation: false, // Disable validation that might cause issues
-          timeout: 60000, // Longer timeout for fallback
-          retry: {
-            retries: 1,
-            factor: 2,
-            minTimeout: 2000,
-            maxTimeout: 5000
-          }
-        });
-        
-        this.logger.log(`Resumable upload successful for: ${key}`);
-      }
+        },
+        public: true, // Make file publicly accessible
+        resumable: false, // Use simple upload
+      });
+      
+      this.logger.log(`Upload successful: ${key}`);
 
       // Generate the public URL using custom base URL or default
       let url: string;
@@ -189,31 +159,12 @@ export class GCSImageService {
     } catch (error) {
       this.logger.error(`Failed to upload image to GCS: ${error.message}`);
       this.logger.error(`Error stack: ${error.stack}`);
-      this.logger.error(`Error details: ${JSON.stringify(error, null, 2)}`);
       
-      // Log more details about the file
+      // Log file details for debugging
       this.logger.error(`File details: name=${file?.originalname}, size=${file?.size}, type=${file?.mimetype}, bufferLength=${file?.buffer?.length}`);
       
-      // Provide more specific error messages
-      if (error.message.includes('DECODER')) {
-        throw new Error(`Image processing failed: The uploaded file appears to be corrupted or in an unsupported format. Please try uploading a different image file.`);
-      } else if (error.message.includes('buffer')) {
-        throw new Error(`Image upload failed: Invalid file data. Please try uploading the image again.`);
-      } else if (error.message.includes('stream')) {
-        throw new Error(`Image upload failed: Stream processing error. Please try uploading the image again.`);
-      } else if (error.message.includes('signature')) {
-        throw new Error(`Image upload failed: ${error.message}`);
-      } else if (error.message.includes('size')) {
-        throw new Error(`Image upload failed: ${error.message}`);
-      } else if (error.message.includes('type') || error.message.includes('format')) {
-        throw new Error(`Image upload failed: ${error.message}`);
-      } else if (error.message.includes('forbidden') || error.message.includes('permission') || error.message.includes('unauthorized')) {
-        throw new Error(`Image upload failed: Permission denied. Please check GCS bucket permissions.`);
-      } else if (error.message.includes('network') || error.message.includes('timeout')) {
-        throw new Error(`Image upload failed: Network error. Please try again.`);
-      } else {
-        throw new Error(`Image upload failed: ${error.message}`);
-      }
+      // Simple error message - no complex error handling
+      throw new Error(`Image upload failed: ${error.message}`);
     }
   }
 
@@ -438,13 +389,6 @@ export class GCSImageService {
         },
         public: true,
         resumable: false,
-        timeout: 30000,
-        retry: {
-          retries: 2,
-          factor: 2,
-          minTimeout: 1000,
-          maxTimeout: 3000
-        }
       });
       
       // Generate URL using custom base URL or default
