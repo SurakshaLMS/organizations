@@ -51,6 +51,8 @@ export class GCSImageService {
       this.validateBucketAccess().catch(error => {
         this.logger.warn(`Bucket access validation failed: ${error.message}. Service will continue but uploads may fail.`);
       });
+
+      // Note: Bucket is kept private - only individual files are made public
     } catch (error) {
       this.logger.error(`Failed to initialize GCS service: ${error.message}`);
       throw new Error(`GCS initialization failed: ${error.message}`);
@@ -133,7 +135,11 @@ export class GCSImageService {
         },
         public: true, // Make file publicly accessible
         resumable: false, // Use simple upload
+        predefinedAcl: 'publicRead', // Explicitly set public read access
       });
+      
+      // Ensure file is publicly readable
+      await gcsFile.makePublic();
       
       this.logger.log(`Upload successful: ${key}`);
 
@@ -389,7 +395,11 @@ export class GCSImageService {
         },
         public: true,
         resumable: false,
+        predefinedAcl: 'publicRead', // Explicitly set public read access
       });
+      
+      // Ensure test file is publicly readable
+      await gcsFile.makePublic();
       
       // Generate URL using custom base URL or default
       let url: string;
