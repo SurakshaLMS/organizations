@@ -6,8 +6,8 @@ import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lectu
 import { CreateLectureWithFilesDto, UpdateLectureWithFilesDto } from './dto/lecture-with-files.dto';
 import { CreateLectureWithDocumentsDto } from './dto/create-lecture-with-documents.dto';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
+import { EnhancedJwtAuthGuard, EnhancedOptionalJwtAuthGuard } from '../auth/guards/enhanced-jwt-auth.guard';
+import { EnhancedJwtValidationInterceptor } from '../auth/interceptors/enhanced-jwt-validation.interceptor';
 import { OrganizationAccessGuard } from '../auth/guards/organization-access.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { RequireMember, RequireModerator, RequireAdmin } from '../auth/decorators/roles.decorator';
@@ -30,7 +30,7 @@ import { EnhancedJwtPayload } from '../auth/organization-access.service';
  */
 @ApiTags('Lectures')
 @Controller('lectures')
-@UseInterceptors(SecurityHeadersInterceptor)
+@UseInterceptors(SecurityHeadersInterceptor, EnhancedJwtValidationInterceptor)
 export class LectureController {
   private readonly logger = new Logger(LectureController.name);
 
@@ -164,7 +164,7 @@ export class LectureController {
    * Public access with optional authentication
    */
   @Get()
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(EnhancedOptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get lectures with filtering (public access)' })
   @ApiQuery({ name: 'causeId', required: false, description: 'Filter by cause ID' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
@@ -183,7 +183,7 @@ export class LectureController {
    * Public access with optional authentication
    */
   @Get(':id')
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(EnhancedOptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get lecture by ID (public access)' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture retrieved successfully' })
@@ -354,7 +354,7 @@ export class LectureController {
    * Public access with optional authentication
    */
   @Get(':id/documents')
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(EnhancedOptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get lecture documents (public access)' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture documents retrieved successfully' })

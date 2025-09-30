@@ -6,8 +6,8 @@ import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
 import { CreateCauseWithImageDto, UpdateCauseWithImageDto, CauseResponseDto } from './dto/cause-with-image.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
+import { EnhancedJwtAuthGuard, EnhancedOptionalJwtAuthGuard } from '../auth/guards/enhanced-jwt-auth.guard';
+import { EnhancedJwtValidationInterceptor } from '../auth/interceptors/enhanced-jwt-validation.interceptor';
 import { OrganizationAccessGuard } from '../auth/guards/organization-access.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { RequireMember, RequireModerator, RequireAdmin } from '../auth/decorators/roles.decorator';
@@ -29,7 +29,7 @@ import { EnhancedJwtPayload } from '../auth/organization-access.service';
  */
 @ApiTags('Causes')
 @Controller('causes')
-@UseInterceptors(SecurityHeadersInterceptor)
+@UseInterceptors(SecurityHeadersInterceptor, EnhancedJwtValidationInterceptor)
 export class CauseController {
   private readonly logger = new Logger(CauseController.name);
 
@@ -88,7 +88,7 @@ export class CauseController {
    * Get all causes with pagination
    */
   @Get()
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(EnhancedOptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get all causes with pagination (public access)' })
   @ApiResponse({ status: 200, description: 'Causes retrieved successfully' })
   async getCauses(
@@ -129,7 +129,7 @@ export class CauseController {
    * Get cause by ID
    */
   @Get(':id')
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(EnhancedOptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get cause by ID (public access)' })
   @ApiParam({ name: 'id', description: 'Cause ID' })
   @ApiResponse({ status: 200, description: 'Cause retrieved successfully' })
@@ -219,7 +219,7 @@ export class CauseController {
    * Get causes by organization
    */
   @Get('organization/:organizationId')
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(EnhancedOptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get causes by organization (public access)' })
   @ApiParam({ name: 'organizationId', description: 'Organization ID' })
   @ApiResponse({ status: 200, description: 'Causes retrieved successfully' })
