@@ -45,8 +45,12 @@ async function testDocumentUpload() {
           if (parsed.documents && parsed.documents.length > 0) {
             console.log('\n📄 Document URLs:');
             parsed.documents.forEach((doc, index) => {
-              console.log(`${index + 1}. ${doc.title}: ${doc.url || 'NO URL GENERATED'}`);
+              console.log(`Debug - doc object:`, JSON.stringify(doc, null, 2));
+              const url = doc.docUrl || doc.url || 'NO URL GENERATED';
+              console.log(`${index + 1}. ${doc.title || doc.originalFileName}: ${url}`);
             });
+          } else {
+            console.log('\n❌ No documents found in response');
           }
         } catch (e) {
           console.log('Could not parse response as JSON');

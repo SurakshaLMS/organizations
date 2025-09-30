@@ -119,22 +119,13 @@ export class GCSImageService {
       this.logger.log(`Uploading file to GCS: ${key}`);
       
       try {
-        // Try stream-based upload first
-        this.logger.log(`🚀 Attempting stream upload for: ${key}`);
-        await this.uploadWithStream(gcsFile, file, folder);
-        this.logger.log(`✅ Stream upload successful for: ${key}`);
-      } catch (streamError) {
-        this.logger.error(`❌ Stream upload failed for ${key}: ${streamError.message}`);
-        this.logger.warn(`🔄 Trying direct save method as fallback`);
-        
-        // Fallback to direct save method
-        try {
-          await this.uploadWithSave(gcsFile, file, folder);
-          this.logger.log(`Direct save upload successful for: ${key}`);
-        } catch (saveError) {
-          this.logger.error(`Both upload methods failed: Stream: ${streamError.message}, Save: ${saveError.message}`);
-          throw new Error(`Upload failed: ${saveError.message}`);
-        }
+        // Use direct save method only (more reliable than stream-based)
+        this.logger.log(`🚀 Attempting direct upload for: ${key}`);
+        await this.uploadWithSave(gcsFile, file, folder);
+        this.logger.log(`✅ Direct upload successful for: ${key}`);
+      } catch (uploadError) {
+        this.logger.error(`❌ Upload failed for ${key}: ${uploadError.message}`);
+        throw new Error(`Upload failed: ${uploadError.message}`);
       }
       
       this.logger.log(`Upload successful: ${key}`);
@@ -288,30 +279,46 @@ export class GCSImageService {
   }
 
   /**
-   * Upload using direct save method (fallback)
+   * Upload using direct save method (more reliable than streams)
    */
   private async uploadWithSave(gcsFile: any, file: Express.Multer.File, folder: string): Promise<void> {
+    // Validate that we have a valid file and buffer
+    if (!file || !file.buffer || file.buffer.length === 0) {
+      throw new Error('Invalid file data provided for upload');
+    }
+
     // Create a fresh buffer copy to avoid potential reference issues
     const bufferCopy = Buffer.from(file.buffer);
+    this.logger.log(`📦 Uploading buffer of size: ${bufferCopy.length} bytes`);
     
-    await gcsFile.save(bufferCopy, {
-      metadata: {
-        contentType: file.mimetype,
-        cacheControl: 'public, max-age=31536000',
+    try {
+      await gcsFile.save(bufferCopy, {
         metadata: {
-          originalName: file.originalname,
-          uploadedAt: new Date().toISOString(),
-          folder: folder,
-          fileType: 'organization-image'
+          contentType: file.mimetype,
+          cacheControl: 'public, max-age=31536000',
+          metadata: {
+            originalName: file.originalname,
+            uploadedAt: new Date().toISOString(),
+            folder: folder,
+            fileType: 'organization-image'
+          },
         },
-      },
-      public: true,
-      resumable: false,
-      predefinedAcl: 'publicRead',
-    });
-    
-    // Ensure file is publicly readable
-    await gcsFile.makePublic();
+        public: true,
+        resumable: false,
+        predefinedAcl: 'publicRead',
+        validation: 'crc32c' // Add validation for data integrity
+      });
+      
+      this.logger.log(`✅ File save completed, making public...`);
+      
+      // Ensure file is publicly readable
+      await gcsFile.makePublic();
+      this.logger.log(`🌐 File made public successfully`);
+      
+    } catch (error) {
+      this.logger.error(`❌ Upload save error: ${error.message}`);
+      throw new Error(`Failed to save file: ${error.message}`);
+    }
   }
 
   /**

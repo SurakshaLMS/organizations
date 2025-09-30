@@ -5,6 +5,7 @@ import { LectureService } from './lecture.service';
 import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lecture.dto';
 import { CreateLectureWithFilesDto, UpdateLectureWithFilesDto } from './dto/lecture-with-files.dto';
 import { CreateLectureWithDocumentsDto } from './dto/create-lecture-with-documents.dto';
+import { CreateLectureWithDocumentsBodyDto } from './dto/create-lecture-documents-body.dto';
 import { SecurityHeadersInterceptor } from '../common/interceptors/security-headers.interceptor';
 import { EnhancedJwtAuthGuard, EnhancedOptionalJwtAuthGuard } from '../auth/guards/enhanced-jwt-auth.guard';
 import { EnhancedJwtValidationInterceptor } from '../auth/interceptors/enhanced-jwt-validation.interceptor';
@@ -116,7 +117,7 @@ export class LectureController {
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'causeId', description: 'ID of the cause to create lecture for' })
   @ApiBody({ 
-    type: CreateLectureDto,
+    type: CreateLectureWithDocumentsBodyDto,
     description: 'Lecture data with optional file uploads (use form-data)' 
   })
   @ApiResponse({ status: 201, description: 'Lecture created with documents successfully' })
@@ -125,14 +126,20 @@ export class LectureController {
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
   async createLectureWithDocuments(
     @Param('causeId') causeId: string,
-    @Body() createLectureDto: CreateLectureDto,
+    @Body() createLectureDto: CreateLectureWithDocumentsBodyDto,
     @UploadedFiles() files: Express.Multer.File[],
     @GetUser() user: EnhancedJwtPayload
   ) {
     this.logger.log(`📚 [LEGACY] Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents for cause ${causeId} - User: ${user.email}`);
     
+    // Create full DTO with causeId from URL parameter
+    const fullLectureDto: CreateLectureDto = {
+      ...createLectureDto,
+      causeId: causeId
+    };
+    
     return this.lectureService.createLectureWithDocuments(
-      createLectureDto,
+      fullLectureDto,
       causeId,
       user,
       files
