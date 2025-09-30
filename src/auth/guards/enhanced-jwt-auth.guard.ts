@@ -106,16 +106,19 @@ export class EnhancedJwtAuthGuard implements CanActivate {
         }
       }
 
-      // Validate required fields for enhanced payload
-      if (!payload.sub || !payload.email) {
-        throw new UnauthorizedException('Token missing required fields');
+      // Validate required fields for enhanced payload (support both formats)
+      const userId = payload.sub || payload.s;
+      const email = payload.email || payload.e;
+      
+      if (!userId || !email) {
+        throw new UnauthorizedException('Token missing required fields (sub/s and email/e)');
       }
 
       // Enhanced payload validation
       const enhancedPayload: EnhancedJwtPayload = {
-        sub: payload.sub,
-        email: payload.email,
-        name: payload.name || payload.email.split('@')[0],
+        sub: userId,
+        email: email,
+        name: payload.name || email.split('@')[0],
         userType: payload.userType || 'USER',
         orgAccess: payload.orgAccess || payload.o || [],
         isGlobalAdmin: payload.isGlobalAdmin || false,

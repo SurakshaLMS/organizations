@@ -37,20 +37,23 @@ export class CauseController {
 
   /**
    * Create a new cause (Basic - No Image Upload)
-   * No authentication required for testing
+   * Authentication required
    */
   @Post()
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Create a new cause (without image upload)', 
-    description: 'No authentication required' 
+    description: 'Authentication required' 
   })
   @ApiBody({ type: CreateCauseDto })
   @ApiResponse({ status: 201, description: 'Cause created successfully', type: CauseResponseDto })
   @ApiResponse({ status: 400, description: 'Invalid request data' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   async createCause(
-    @Body() createCauseDto: CreateCauseDto
+    @Body() createCauseDto: CreateCauseDto,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📋 Creating cause "${createCauseDto.title}" - No auth required`);
+    this.logger.log(`📋 Creating cause "${createCauseDto.title}" - User: ${user.email}`);
     return this.causeService.createCause(createCauseDto);
   }
 
@@ -60,13 +63,14 @@ export class CauseController {
    * Enhanced endpoint that allows creating a cause with optional image upload to GCS
    * Uses multipart/form-data to handle image uploads with Multer
    * Supports image validation and automatic resizing
-   * No authentication required
+   * Authentication required
    */
   @Post('with-image')
   @UseInterceptors(FileInterceptor('image'))
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Create cause with image upload to Google Cloud Storage',
-    description: 'No authentication required'
+    description: 'Authentication required'
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ 
@@ -75,12 +79,14 @@ export class CauseController {
   })
   @ApiResponse({ status: 201, description: 'Cause created with image successfully', type: CauseResponseDto })
   @ApiResponse({ status: 400, description: 'Invalid request data or image format' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 413, description: 'Image file too large' })
   async createCauseWithImage(
     @Body() createCauseDto: CreateCauseWithImageDto,
-    @UploadedFile() image: Express.Multer.File
+    @UploadedFile() image: Express.Multer.File,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📋 Creating cause "${createCauseDto.title}" with ${image ? 'image' : 'no image'} - No auth required`);
+    this.logger.log(`📋 Creating cause "${createCauseDto.title}" with ${image ? 'image' : 'no image'} - User: ${user.email}`);
     return this.causeService.createCauseWithImage(createCauseDto, image);
   }
 
@@ -88,16 +94,17 @@ export class CauseController {
    * Get all causes with pagination
    */
   @Get()
-  @UseGuards(EnhancedOptionalJwtAuthGuard)
-  @ApiOperation({ summary: 'Get all causes with pagination (public access)' })
+  @UseGuards(EnhancedJwtAuthGuard)
+  @ApiOperation({ summary: 'Get all causes with pagination (authentication required)' })
   @ApiResponse({ status: 200, description: 'Causes retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   async getCauses(
+    @GetUser() user: EnhancedJwtPayload,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'asc' | 'desc',
     @Query('search') search?: string,
-    @GetUser() user?: EnhancedJwtPayload,
   ) {
     const paginationDto = new PaginationDto();
     paginationDto.page = page;
@@ -106,7 +113,7 @@ export class CauseController {
     paginationDto.sortOrder = sortOrder;
     paginationDto.search = search;
 
-    const userId = user?.sub || undefined;
+    const userId = user.sub;
     return this.causeService.getCauses(userId, paginationDto);
   }
 
@@ -129,37 +136,41 @@ export class CauseController {
    * Get cause by ID
    */
   @Get(':id')
-  @UseGuards(EnhancedOptionalJwtAuthGuard)
-  @ApiOperation({ summary: 'Get cause by ID (public access)' })
+  @UseGuards(EnhancedJwtAuthGuard)
+  @ApiOperation({ summary: 'Get cause by ID (authentication required)' })
   @ApiParam({ name: 'id', description: 'Cause ID' })
   @ApiResponse({ status: 200, description: 'Cause retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
   async getCauseById(
     @Param('id') causeId: string,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    const userId = user?.sub || undefined;
+    const userId = user.sub;
     return this.causeService.getCauseById(causeId, userId);
   }
 
   /**
    * Update cause (Basic - No Image Upload)
-   * No authentication required for testing
+   * Authentication required
    */
   @Put(':id')
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Update cause (without image upload)',
-    description: 'No authentication required'
+    description: 'Authentication required'
   })
   @ApiParam({ name: 'id', description: 'Cause ID' })
   @ApiBody({ type: UpdateCauseDto })
   @ApiResponse({ status: 200, description: 'Cause updated successfully', type: CauseResponseDto })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
   async updateCause(
     @Param('id') causeId: string,
     @Body() updateCauseDto: UpdateCauseDto,
+    @GetUser() user: EnhancedJwtPayload,
   ) {
-    this.logger.log(`📋 Updating cause ${causeId} - No auth required`);
+    this.logger.log(`📋 Updating cause ${causeId} - User: ${user.email}`);
     return this.causeService.updateCause(causeId, updateCauseDto);
   }
 
@@ -169,13 +180,14 @@ export class CauseController {
    * Enhanced endpoint for updating cause with optional image upload
    * Supports both updating cause details and replacing/adding image
    * Uses multipart/form-data with FileInterceptor for image handling
-   * No authentication required for testing
+   * Authentication required
    */
   @Put(':id/with-image')
   @UseInterceptors(FileInterceptor('image'))
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Update cause with image upload to Google Cloud Storage',
-    description: 'No authentication required'
+    description: 'Authentication required'
   })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Cause ID to update' })
@@ -185,49 +197,55 @@ export class CauseController {
   })
   @ApiResponse({ status: 200, description: 'Cause updated with image successfully', type: CauseResponseDto })
   @ApiResponse({ status: 404, description: 'Cause not found' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 400, description: 'Invalid request data or image format' })
   @ApiResponse({ status: 413, description: 'Image file too large' })
   async updateCauseWithImage(
     @Param('id') causeId: string,
     @Body() updateCauseDto: UpdateCauseWithImageDto,
-    @UploadedFile() image: Express.Multer.File
+    @UploadedFile() image: Express.Multer.File,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📋 Updating cause ${causeId} with ${image ? 'new image' : 'no image change'} - No auth required`);
+    this.logger.log(`📋 Updating cause ${causeId} with ${image ? 'new image' : 'no image change'} - User: ${user.email}`);
     return this.causeService.updateCauseWithImage(causeId, updateCauseDto, image);
   }
 
   /**
    * Delete cause
-   * No authentication required for testing
+   * Authentication required
    */
   @Delete(':id')
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Delete cause (No auth required)',
-    description: 'Delete cause without authentication'
+    summary: 'Delete cause (Authentication required)',
+    description: 'Delete cause with authentication'
   })
   @ApiParam({ name: 'id', description: 'Cause ID' })
   @ApiResponse({ status: 200, description: 'Cause deleted successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
   async deleteCause(
-    @Param('id') causeId: string
+    @Param('id') causeId: string,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📋 Deleting cause ${causeId} - No auth required`);
-    return this.causeService.deleteCause(causeId, 'anonymous-user');
+    this.logger.log(`📋 Deleting cause ${causeId} - User: ${user.email}`);
+    return this.causeService.deleteCause(causeId, user.sub);
   }
 
   /**
    * Get causes by organization
    */
   @Get('organization/:organizationId')
-  @UseGuards(EnhancedOptionalJwtAuthGuard)
-  @ApiOperation({ summary: 'Get causes by organization (public access)' })
+  @UseGuards(EnhancedJwtAuthGuard)
+  @ApiOperation({ summary: 'Get causes by organization (authentication required)' })
   @ApiParam({ name: 'organizationId', description: 'Organization ID' })
   @ApiResponse({ status: 200, description: 'Causes retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   async getCausesByOrganization(
     @Param('organizationId') organizationId: string,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    const userId = user?.sub || undefined;
+    const userId = user.sub;
     return this.causeService.getCausesByOrganization(organizationId, userId);
   }
 }

@@ -38,30 +38,24 @@ export class LectureController {
 
   /**
    * CREATE LECTURE (Basic - No File Upload)
-   * No authentication required for testing
+   * Authentication required
    */
   @Post()
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Create a new lecture (without file upload)',
-    description: 'No authentication required'
+    description: 'Authentication required'
   })
   @ApiBody({ type: CreateLectureDto })
   @ApiResponse({ status: 201, description: 'Lecture created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request data' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   async createLecture(
-    @Body() createLectureDto: CreateLectureDto
+    @Body() createLectureDto: CreateLectureDto,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" - No auth required`);
-    // Create a mock user for the service call
-    const mockUser = { 
-      sub: 'anonymous-user',
-      email: 'anonymous@example.com',
-      name: 'Anonymous User',
-      userType: 'USER', 
-      orgAccess: [], // Compact format array
-      isGlobalAdmin: false
-    } as EnhancedJwtPayload;
-    return this.lectureService.createLecture(createLectureDto, mockUser);
+    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" - User: ${user.email}`);
+    return this.lectureService.createLecture(createLectureDto, user);
   }
 
   /**
@@ -70,13 +64,14 @@ export class LectureController {
    * Enhanced endpoint that allows creating a lecture with multiple document uploads to GCS
    * Uses multipart/form-data to handle file uploads with Multer
    * Supports up to 10 document files per lecture
-   * No authentication required for testing
+   * Authentication required
    */
   @Post('with-files')
   @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files with field name 'documents'
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Create lecture with document uploads to Google Cloud Storage',
-    description: 'No authentication required'
+    description: 'Authentication required'
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ 
@@ -85,27 +80,19 @@ export class LectureController {
   })
   @ApiResponse({ status: 201, description: 'Lecture created with documents successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 413, description: 'File too large or too many files' })
   async createLectureWithFiles(
     @Body() createLectureDto: CreateLectureWithFilesDto,
-    @UploadedFiles() files: Express.Multer.File[]
+    @UploadedFiles() files: Express.Multer.File[],
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents - No auth required`);
-    
-    // Create a mock user for the service call
-    const mockUser = { 
-      sub: 'anonymous-user',
-      email: 'anonymous@example.com',
-      name: 'Anonymous User',
-      userType: 'USER', 
-      orgAccess: [],
-      isGlobalAdmin: false
-    } as EnhancedJwtPayload;
+    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents - User: ${user.email}`);
     
     return this.lectureService.createLectureWithDocuments(
       createLectureDto,
       createLectureDto.causeId,
-      mockUser,
+      user,
       files
     );
   }
@@ -116,14 +103,15 @@ export class LectureController {
    * Legacy endpoint that requires causeId in URL path
    * Maintained for backward compatibility
    * Use POST /lectures/with-files for new implementations
-   * No authentication required for testing
+   * Authentication required
    */
   @Post('with-documents/:causeId')
   @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Create lecture with document uploads (Legacy - use /with-files instead)',
     deprecated: true,
-    description: 'No authentication required'
+    description: 'Authentication required'
   })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'causeId', description: 'ID of the cause to create lecture for' })
@@ -133,99 +121,85 @@ export class LectureController {
   })
   @ApiResponse({ status: 201, description: 'Lecture created with documents successfully' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
   async createLectureWithDocuments(
     @Param('causeId') causeId: string,
     @Body() createLectureDto: CreateLectureDto,
-    @UploadedFiles() files: Express.Multer.File[]
+    @UploadedFiles() files: Express.Multer.File[],
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 [LEGACY] Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents for cause ${causeId} - No auth required`);
-    
-    // Create a mock user for the service call
-    const mockUser = { 
-      sub: 'anonymous-user',
-      email: 'anonymous@example.com',
-      name: 'Anonymous User',
-      userType: 'USER', 
-      orgAccess: [],
-      isGlobalAdmin: false
-    } as EnhancedJwtPayload;
+    this.logger.log(`📚 [LEGACY] Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents for cause ${causeId} - User: ${user.email}`);
     
     return this.lectureService.createLectureWithDocuments(
       createLectureDto,
       causeId,
-      mockUser,
+      user,
       files
     );
   }
 
   /**
    * GET LECTURES WITH FILTERING
-   * Public access with optional authentication
+   * Authentication required
    */
   @Get()
-  @UseGuards(EnhancedOptionalJwtAuthGuard)
-  @ApiOperation({ summary: 'Get lectures with filtering (public access)' })
+  @UseGuards(EnhancedJwtAuthGuard)
+  @ApiOperation({ summary: 'Get lectures with filtering (authentication required)' })
   @ApiQuery({ name: 'causeId', required: false, description: 'Filter by cause ID' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page' })
   @ApiResponse({ status: 200, description: 'Lectures retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   async getLectures(
+    @GetUser() user: EnhancedJwtPayload,
     @Query() queryDto: LectureQueryDto,
-    @GetUser() user?: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Fetching lectures with filters: ${JSON.stringify(queryDto)}`);
+    this.logger.log(`📚 Fetching lectures with filters: ${JSON.stringify(queryDto)} - User: ${user.email}`);
     return this.lectureService.getLectures(user, queryDto);
   }
 
   /**
    * GET LECTURE BY ID
-   * Public access with optional authentication
+   * Authentication required
    */
   @Get(':id')
-  @UseGuards(EnhancedOptionalJwtAuthGuard)
-  @ApiOperation({ summary: 'Get lecture by ID (public access)' })
+  @UseGuards(EnhancedJwtAuthGuard)
+  @ApiOperation({ summary: 'Get lecture by ID (authentication required)' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   async getLectureById(
     @Param('id') id: string,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Fetching lecture with ID: ${id}`);
+    this.logger.log(`📚 Fetching lecture with ID: ${id} - User: ${user.email}`);
     return this.lectureService.getLectureById(id, user);
   }
 
   /**
    * UPDATE LECTURE (Basic - No File Upload)
-   * No authentication required for testing
+   * Authentication required
    */
   @Put(':id')
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Update lecture (without file upload)',
-    description: 'No authentication required'
+    description: 'Authentication required'
   })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiBody({ type: UpdateLectureDto })
   @ApiResponse({ status: 200, description: 'Lecture updated successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   async updateLecture(
     @Param('id') id: string,
-    @Body() updateLectureDto: UpdateLectureDto
+    @Body() updateLectureDto: UpdateLectureDto,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Updating lecture ${id} - No auth required`);
-    
-    // Create a mock user for the service call
-    const mockUser = { 
-      sub: 'anonymous-user',
-      email: 'anonymous@example.com',
-      name: 'Anonymous User',
-      userType: 'USER', 
-      orgAccess: [],
-      isGlobalAdmin: false
-    } as EnhancedJwtPayload;
-    
-    return this.lectureService.updateLecture(id, updateLectureDto, mockUser);
+    this.logger.log(`📚 Updating lecture ${id} - User: ${user.email}`);
+    return this.lectureService.updateLecture(id, updateLectureDto, user);
   }
 
   /**
@@ -320,50 +294,43 @@ export class LectureController {
   /**
    * DELETE LECTURE
    * 
-   * No authentication required for testing
+   * Authentication required
    * Implements cascade deletion of all related documents from S3 and database
    */
   @Delete(':id')
+  @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Delete lecture (No auth required)',
-    description: 'Delete lecture without authentication'
+    summary: 'Delete lecture (Authentication required)',
+    description: 'Delete lecture with authentication'
   })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture deleted successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   async deleteLecture(
-    @Param('id') id: string
+    @Param('id') id: string,
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Deleting lecture ${id} - No auth required`);
-    
-    // Create a mock user for the service call
-    const mockUser = { 
-      sub: 'anonymous-user',
-      email: 'anonymous@example.com',
-      name: 'Anonymous User',
-      userType: 'USER', 
-      orgAccess: [],
-      isGlobalAdmin: false
-    } as EnhancedJwtPayload;
-    
-    return this.lectureService.deleteLecture(id, mockUser);
+    this.logger.log(`📚 Deleting lecture ${id} - User: ${user.email}`);
+    return this.lectureService.deleteLecture(id, user);
   }
 
   /**
    * GET LECTURE DOCUMENTS
-   * Public access with optional authentication
+   * Authentication required
    */
   @Get(':id/documents')
-  @UseGuards(EnhancedOptionalJwtAuthGuard)
-  @ApiOperation({ summary: 'Get lecture documents (public access)' })
+  @UseGuards(EnhancedJwtAuthGuard)
+  @ApiOperation({ summary: 'Get lecture documents (authentication required)' })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
   @ApiResponse({ status: 200, description: 'Lecture documents retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   async getLectureDocuments(
     @Param('id') id: string,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Fetching documents for lecture ${id}`);
+    this.logger.log(`📚 Fetching documents for lecture ${id} - User: ${user.email}`);
     return this.lectureService.getLectureDocuments(id, user);
   }
 }

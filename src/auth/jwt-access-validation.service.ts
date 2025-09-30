@@ -118,19 +118,31 @@ export class JwtAccessValidationService {
       const membershipEntry = user.orgAccess.find(entry => {
         // Extract organization ID from the entry (skip first character which is role code)
         const entryOrgId = entry.substring(1);
+        
+        // LOG DEBUGGING INFO
+        this.logger.debug(`🔍 Checking entry: "${entry}" -> orgId: "${entryOrgId}" vs target: "${organizationId}"`);
+        
         return entryOrgId === organizationId;
       });
+      
+      // LOG DEBUGGING INFO
+      this.logger.debug(`👤 User ${user.sub} orgAccess: ${JSON.stringify(user.orgAccess)}`);
+      this.logger.debug(`🎯 Looking for organizationId: "${organizationId}" (type: ${typeof organizationId})`);
+      this.logger.debug(`✅ Found membership: ${membershipEntry ? `"${membershipEntry}"` : 'NONE'}`);
       
       if (!membershipEntry) {
         this.logAccessEvent('MEMBERSHIP_DENIED', {
           userId: user.sub,
           organizationId,
-          reason: 'Not a member of organization'
+          reason: 'Not a member of organization',
+          userOrgAccess: user.orgAccess,
+          searchedOrgId: organizationId,
+          searchedOrgIdType: typeof organizationId
         });
         
         return {
           hasAccess: false,
-          error: `Access denied: User is not a member of organization ${organizationId}`
+          error: `Access denied: User is not a member of organization ${organizationId}. User has access to: ${user.orgAccess.join(', ')}`
         };
       }
 

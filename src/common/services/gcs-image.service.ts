@@ -120,10 +120,12 @@ export class GCSImageService {
       
       try {
         // Try stream-based upload first
+        this.logger.log(`🚀 Attempting stream upload for: ${key}`);
         await this.uploadWithStream(gcsFile, file, folder);
-        this.logger.log(`Stream upload successful for: ${key}`);
+        this.logger.log(`✅ Stream upload successful for: ${key}`);
       } catch (streamError) {
-        this.logger.warn(`Stream upload failed, trying direct save method: ${streamError.message}`);
+        this.logger.error(`❌ Stream upload failed for ${key}: ${streamError.message}`);
+        this.logger.warn(`🔄 Trying direct save method as fallback`);
         
         // Fallback to direct save method
         try {
