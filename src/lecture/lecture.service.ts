@@ -208,6 +208,12 @@ export class LectureService {
               `lectures/${lecture.lectureId}/documents`
             );
 
+            // Check if upload was successful
+            if (!uploadResult.success || !uploadResult.url) {
+              this.logger.error(`❌ GCS upload failed for ${file.originalname}: ${uploadResult.error || 'No URL returned'}`);
+              throw new Error(`Failed to upload file ${file.originalname}: ${uploadResult.error || 'Upload failed'}`);
+            }
+
             this.logger.log(`✅ Secure GCS upload successful: ${uploadResult.url}`);
 
             // Create documentation record
@@ -639,6 +645,14 @@ export class LectureService {
               file,
               `lectures/${lectureId}/documents`
             );
+
+            // Check if upload was successful
+            if (!uploadResult.success || !uploadResult.url) {
+              this.logger.error(`❌ GCS upload failed for ${file.originalname}: ${uploadResult.error || 'No URL returned'}`);
+              throw new Error(`Failed to upload file ${file.originalname}: ${uploadResult.error || 'Upload failed'}`);
+            }
+
+            this.logger.log(`✅ Document upload successful: ${uploadResult.url}`);
 
             // Create database record for the document
             const document = await this.prisma.documentation.create({
