@@ -304,9 +304,7 @@ export class GCSImageService {
           },
         },
         public: true,
-        resumable: false,
-        predefinedAcl: 'publicRead',
-        validation: 'crc32c' // Add validation for data integrity
+        resumable: false
       });
       
       this.logger.log(`✅ File save completed, making public...`);
