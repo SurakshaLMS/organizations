@@ -54,6 +54,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           email: payload.e,
           name: payload.n || 'User',
           organizations,
+          orgAccess: payload.o, // Keep the compact format for JWT Access Validation Service
           instituteIds: payload.ins || [],
           userType: payload.t ? this.expandUserType(payload.t) : undefined,
           isGlobalAdmin: payload.g === 1,
@@ -70,11 +71,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           role: 'ORGANIZATION_MANAGER' // OM tokens get ORGANIZATION_MANAGER role
         }));
         
+        // Convert organizations to compact format for orgAccess
+        const orgAccess = organizations.map(org => {
+          const roleCodeMap: Record<string, string> = {
+            'PRESIDENT': 'P',
+            'ADMIN': 'A', 
+            'MODERATOR': 'O',
+            'MEMBER': 'M'
+          };
+          const roleCode = roleCodeMap[org.role] || 'M';
+          return `${roleCode}${org.organizationId}`;
+        });
+        
         normalizedPayload = {
           sub: payload.s,
           email: payload.e || `om-${payload.s}@system.local`,
           name: payload.n || 'Organization Manager',
           organizations,
+          orgAccess, // Add compact format
           instituteIds: payload.ins || [],
           userType: 'ORGANIZATION_MANAGER',
           isGlobalAdmin: false, // OM is not global admin
@@ -92,11 +106,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           role: 'ADMIN' // Users with admin access get ADMIN role
         }));
         
+        // Convert organizations to compact format for orgAccess
+        const orgAccess = organizations.map(org => {
+          const roleCodeMap: Record<string, string> = {
+            'PRESIDENT': 'P',
+            'ADMIN': 'A', 
+            'MODERATOR': 'O',
+            'MEMBER': 'M'
+          };
+          const roleCode = roleCodeMap[org.role] || 'A'; // Default to ADMIN for admin access
+          return `${roleCode}${org.organizationId}`;
+        });
+        
         normalizedPayload = {
           sub: payload.s,
           email: payload.e || `user-${payload.s}@system.local`,
           name: payload.n || 'User',
           organizations,
+          orgAccess, // Add compact format
           instituteIds: payload.ins || [],
           userType: this.expandUserType(payload.ut),
           isGlobalAdmin: payload.ut === 'SA' || payload.ut === 'GA',
@@ -106,7 +133,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // Handle standard format (sub, email, organizations fields)
       else if (payload.sub && payload.email && payload.organizations) {
         console.log('✅ Detected standard JWT format');
-        normalizedPayload = payload;
+        
+        // Convert standard organizations to compact format for orgAccess
+        const orgAccess = (payload.organizations || []).map((org: any) => {
+          const roleCodeMap: Record<string, string> = {
+            'PRESIDENT': 'P',
+            'ADMIN': 'A', 
+            'MODERATOR': 'O',
+            'MEMBER': 'M'
+          };
+          const roleCode = roleCodeMap[org.role] || 'M';
+          return `${roleCode}${org.organizationId}`;
+        });
+        
+        normalizedPayload = {
+          ...payload,
+          orgAccess, // Add compact format
+        };
       }
       // Handle SUPER_ADMIN/compact format (s, ut fields) 
       else if (payload.s && payload.ut) {
@@ -119,11 +162,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           role: 'ADMIN' // Users with admin access get ADMIN role
         }));
         
+        // Convert organizations to compact format for orgAccess
+        const orgAccess = organizations.map(org => {
+          const roleCodeMap: Record<string, string> = {
+            'PRESIDENT': 'P',
+            'ADMIN': 'A', 
+            'MODERATOR': 'O',
+            'MEMBER': 'M'
+          };
+          const roleCode = roleCodeMap[org.role] || 'A'; // Default to ADMIN for admin access
+          return `${roleCode}${org.organizationId}`;
+        });
+        
         normalizedPayload = {
           sub: payload.s,
           email: payload.e || `user-${payload.s}@system.local`,
           name: payload.n || 'User',
           organizations,
+          orgAccess, // Add compact format
           instituteIds: payload.ins || [],
           userType: this.expandUserType(payload.ut),
           isGlobalAdmin: payload.ut === 'SA' || payload.ut === 'GA',
@@ -133,7 +189,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // Legacy format fallback
       else if (payload.sub && payload.email) {
         console.log('✅ Detected legacy JWT format');
-        normalizedPayload = payload;
+        
+        // Convert legacy organizations to compact format for orgAccess
+        const orgAccess = (payload.organizations || []).map((org: any) => {
+          const roleCodeMap: Record<string, string> = {
+            'PRESIDENT': 'P',
+            'ADMIN': 'A', 
+            'MODERATOR': 'O',
+            'MEMBER': 'M'
+          };
+          const roleCode = roleCodeMap[org.role] || 'M';
+          return `${roleCode}${org.organizationId}`;
+        });
+        
+        normalizedPayload = {
+          ...payload,
+          orgAccess, // Add compact format
+        };
       }
       else {
         console.log('❌ Unrecognized JWT payload format');
@@ -157,6 +229,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         name: normalizedPayload.name,
         userType: normalizedPayload.userType,
         organizations: normalizedPayload.organizations || [],
+        orgAccess: normalizedPayload.orgAccess || [], // Include compact format for JWT Access Validation
         instituteIds: normalizedPayload.instituteIds || [],
         isGlobalAdmin: normalizedPayload.isGlobalAdmin || false,
         adminAccess: normalizedPayload.adminAccess || {},
