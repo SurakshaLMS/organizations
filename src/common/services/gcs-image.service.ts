@@ -112,34 +112,28 @@ export class GCSImageService {
         throw new Error('File buffer is not a valid Buffer object');
       }
 
-      // Create a fresh buffer copy to avoid potential reference issues
-      const bufferCopy = Buffer.from(file.buffer);
-      this.logger.log(`Created buffer copy, original size: ${file.buffer.length}, copy size: ${bufferCopy.length}`);
-
       // Create file in GCS bucket
       const gcsFile = this.bucket.file(key);
 
-      // Simple upload - no complex retry logic
+      // Use stream-based upload with proper error handling
       this.logger.log(`Uploading file to GCS: ${key}`);
       
-      await gcsFile.save(bufferCopy, {
-        metadata: {
-          contentType: file.mimetype,
-          cacheControl: 'public, max-age=31536000', // Cache for 1 year
-          metadata: {
-            originalName: file.originalname,
-            uploadedAt: new Date().toISOString(),
-            folder: folder,
-            fileType: 'organization-image'
-          },
-        },
-        public: true, // Make file publicly accessible
-        resumable: false, // Use simple upload
-        predefinedAcl: 'publicRead', // Explicitly set public read access
-      });
-      
-      // Ensure file is publicly readable
-      await gcsFile.makePublic();
+      try {
+        // Try stream-based upload first
+        await this.uploadWithStream(gcsFile, file, folder);
+        this.logger.log(`Stream upload successful for: ${key}`);
+      } catch (streamError) {
+        this.logger.warn(`Stream upload failed, trying direct save method: ${streamError.message}`);
+        
+        // Fallback to direct save method
+        try {
+          await this.uploadWithSave(gcsFile, file, folder);
+          this.logger.log(`Direct save upload successful for: ${key}`);
+        } catch (saveError) {
+          this.logger.error(`Both upload methods failed: Stream: ${streamError.message}, Save: ${saveError.message}`);
+          throw new Error(`Upload failed: ${saveError.message}`);
+        }
+      }
       
       this.logger.log(`Upload successful: ${key}`);
 
@@ -239,6 +233,83 @@ export class GCSImageService {
       this.logger.warn(`Failed to extract key from URL: ${url}`);
       return null;
     }
+  }
+
+  /**
+   * Upload using stream method
+   */
+  private async uploadWithStream(gcsFile: any, file: Express.Multer.File, folder: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const stream = gcsFile.createWriteStream({
+        metadata: {
+          contentType: file.mimetype,
+          cacheControl: 'public, max-age=31536000',
+          metadata: {
+            originalName: file.originalname,
+            uploadedAt: new Date().toISOString(),
+            folder: folder,
+            fileType: 'organization-image'
+          },
+        },
+        public: true,
+        resumable: false,
+        predefinedAcl: 'publicRead',
+      });
+
+      // Handle stream events
+      stream.on('error', (error) => {
+        this.logger.error(`Stream upload error: ${error.message}`);
+        reject(new Error(`Upload stream error: ${error.message}`));
+      });
+
+      stream.on('finish', async () => {
+        try {
+          // Ensure file is publicly readable
+          await gcsFile.makePublic();
+          this.logger.log(`Stream upload and public access completed`);
+          resolve();
+        } catch (publicError) {
+          this.logger.warn(`Upload successful but failed to make public: ${publicError.message}`);
+          resolve(); // Still resolve as upload succeeded
+        }
+      });
+
+      // Write the buffer to the stream
+      try {
+        stream.write(file.buffer);
+        stream.end();
+      } catch (writeError) {
+        this.logger.error(`Stream write error: ${writeError.message}`);
+        reject(new Error(`Stream write failed: ${writeError.message}`));
+      }
+    });
+  }
+
+  /**
+   * Upload using direct save method (fallback)
+   */
+  private async uploadWithSave(gcsFile: any, file: Express.Multer.File, folder: string): Promise<void> {
+    // Create a fresh buffer copy to avoid potential reference issues
+    const bufferCopy = Buffer.from(file.buffer);
+    
+    await gcsFile.save(bufferCopy, {
+      metadata: {
+        contentType: file.mimetype,
+        cacheControl: 'public, max-age=31536000',
+        metadata: {
+          originalName: file.originalname,
+          uploadedAt: new Date().toISOString(),
+          folder: folder,
+          fileType: 'organization-image'
+        },
+      },
+      public: true,
+      resumable: false,
+      predefinedAcl: 'publicRead',
+    });
+    
+    // Ensure file is publicly readable
+    await gcsFile.makePublic();
   }
 
   /**
