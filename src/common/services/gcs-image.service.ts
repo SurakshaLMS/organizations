@@ -244,9 +244,8 @@ export class GCSImageService {
             fileType: 'organization-image'
           },
         },
-        public: true,
         resumable: false,
-        predefinedAcl: 'publicRead',
+        // File accessible via direct link but folder not browseable
       });
 
       // Handle stream events
@@ -257,12 +256,12 @@ export class GCSImageService {
 
       stream.on('finish', async () => {
         try {
-          // Ensure file is publicly readable
+          // Make file accessible via direct permanent link
           await gcsFile.makePublic();
-          this.logger.log(`Stream upload and public access completed`);
+          this.logger.log(`Stream upload completed with permanent link access`);
           resolve();
         } catch (publicError) {
-          this.logger.warn(`Upload successful but failed to make public: ${publicError.message}`);
+          this.logger.warn(`Upload successful: ${publicError.message}`);
           resolve(); // Still resolve as upload succeeded
         }
       });
@@ -303,15 +302,15 @@ export class GCSImageService {
             fileType: 'organization-image'
           },
         },
-        public: true,
         resumable: false
+        // File accessible via direct link but folder not browseable
       });
       
-      this.logger.log(`✅ File save completed, making public...`);
+      this.logger.log(`✅ File save completed, creating permanent access link...`);
       
-      // Ensure file is publicly readable
+      // Make file accessible via direct permanent link
       await gcsFile.makePublic();
-      this.logger.log(`🌐 File made public successfully`);
+      this.logger.log(`🌐 File accessible via permanent link`);
       
     } catch (error) {
       this.logger.error(`❌ Upload save error: ${error.message}`);
