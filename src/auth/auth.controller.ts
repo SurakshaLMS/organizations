@@ -25,23 +25,14 @@ export class AuthController {
   }
 
   @Get('test')
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Test ultra-compact JWT token validation' })
-  @ApiResponse({ status: 200, description: 'Token validation successful' })
-  async testToken(@GetUser() user: any) {
+  @ApiOperation({ summary: 'Test endpoint without authentication' })
+  @ApiResponse({ status: 200, description: 'Test endpoint successful' })
+  async testToken() {
     return {
-      message: 'Ultra-compact JWT token validation successful ✅',
-      user: {
-        id: user.sub,
-        email: user.email,
-        name: user.name,
-        organizations: user.organizations,
-        instituteIds: user.instituteIds || [],
-        userType: user.userType,
-        isGlobalAdmin: user.isGlobalAdmin,
-      },
-      tokenInfo: 'This response validates that ultra-compact JWT format with institute IDs works correctly',
-      performance: 'Token size reduced by 80%+, parsing speed increased by 60%+'
+      message: 'Test endpoint working without authentication ✅',
+      status: 'No JWT token required',
+      timestamp: new Date().toISOString(),
+      info: 'This endpoint tests basic functionality without authentication requirements'
     };
   }
 
@@ -77,21 +68,25 @@ export class AuthController {
   }
 
   @Get('token-stats')
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get ultra-compact JWT token size statistics' })
   @ApiResponse({ status: 200, description: 'Token size comparison and performance metrics' })
-  async getTokenStats(@GetUser() user: any) {
-    const payload = {
-      sub: user.sub,
-      email: user.email,
-      name: user.name,
-      organizations: user.organizations || [],
-      instituteIds: user.instituteIds || [],
-      userType: user.userType,
-      isGlobalAdmin: user.isGlobalAdmin,
+  async getTokenStats() {
+    // Sample payload for demonstration
+    const samplePayload = {
+      sub: 'sample-user-id',
+      email: 'user@example.com',
+      name: 'Sample User',
+      organizations: [
+        { organizationId: '1', role: 'ADMIN' },
+        { organizationId: '2', role: 'MODERATOR' },
+        { organizationId: '3', role: 'USER' }
+      ],
+      instituteIds: [1, 2, 3],
+      userType: 'ADMIN',
+      isGlobalAdmin: false,
     };
     
-    const stats = this.ultraCompactJwtService.getTokenStats(payload);
+    const stats = this.ultraCompactJwtService.getTokenStats(samplePayload);
     
     return {
       message: '📊 Ultra-Compact JWT Token Optimization Statistics',

@@ -37,25 +37,20 @@ export class CauseController {
 
   /**
    * Create a new cause (Basic - No Image Upload)
-   * Requires MODERATOR role or higher in the organization
+   * No authentication required for testing
    */
   @Post()
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
-  @RequireOrganizationModerator('organizationId')
   @ApiOperation({ 
     summary: 'Create a new cause (without image upload)', 
-    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization' 
+    description: 'No authentication required' 
   })
   @ApiBody({ type: CreateCauseDto })
   @ApiResponse({ status: 201, description: 'Cause created successfully', type: CauseResponseDto })
   @ApiResponse({ status: 400, description: 'Invalid request data' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   async createCause(
-    @Body() createCauseDto: CreateCauseDto,
-    @GetUser() user: EnhancedJwtPayload
+    @Body() createCauseDto: CreateCauseDto
   ) {
-    this.logger.log(`📋 Creating cause "${createCauseDto.title}" by user ${user.sub} (${user.userType || 'USER'})`);
+    this.logger.log(`📋 Creating cause "${createCauseDto.title}" - No auth required`);
     return this.causeService.createCause(createCauseDto);
   }
 
@@ -65,15 +60,13 @@ export class CauseController {
    * Enhanced endpoint that allows creating a cause with optional image upload to GCS
    * Uses multipart/form-data to handle image uploads with Multer
    * Supports image validation and automatic resizing
-   * Requires MODERATOR role or higher in the organization
+   * No authentication required
    */
   @Post('with-image')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
-  @RequireOrganizationModerator('organizationId')
   @UseInterceptors(FileInterceptor('image'))
   @ApiOperation({ 
     summary: 'Create cause with image upload to Google Cloud Storage',
-    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization'
+    description: 'No authentication required'
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ 
@@ -82,15 +75,12 @@ export class CauseController {
   })
   @ApiResponse({ status: 201, description: 'Cause created with image successfully', type: CauseResponseDto })
   @ApiResponse({ status: 400, description: 'Invalid request data or image format' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   @ApiResponse({ status: 413, description: 'Image file too large' })
   async createCauseWithImage(
     @Body() createCauseDto: CreateCauseWithImageDto,
-    @UploadedFile() image: Express.Multer.File,
-    @GetUser() user: EnhancedJwtPayload
+    @UploadedFile() image: Express.Multer.File
   ) {
-    this.logger.log(`📋 Creating cause "${createCauseDto.title}" with ${image ? 'image' : 'no image'} by user ${user.sub} (${user.userType || 'USER'})`);
+    this.logger.log(`📋 Creating cause "${createCauseDto.title}" with ${image ? 'image' : 'no image'} - No auth required`);
     return this.causeService.createCauseWithImage(createCauseDto, image);
   }
 
@@ -122,20 +112,16 @@ export class CauseController {
 
   /**
    * Test GCS connection (Debug endpoint)
-   * Only accessible by ADMIN or PRESIDENT
+   * No authentication required for testing
    */
   @Get('test-gcs')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
-  @RequireOrganizationAdmin('organizationId')
   @ApiOperation({ 
-    summary: 'Test GCS connection (Debug - Admin/President only)',
-    description: 'Requires ADMIN or PRESIDENT role in the organization'
+    summary: 'Test GCS connection (Debug - No auth required)',
+    description: 'Test endpoint for GCS connection'
   })
   @ApiResponse({ status: 200, description: 'GCS connection test result' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires ADMIN+)' })
-  async testGCSConnection(@GetUser() user: EnhancedJwtPayload) {
-    this.logger.log(`🧪 Testing GCS connection by user ${user.sub} (${user.userType || 'USER'})...`);
+  async testGCSConnection() {
+    this.logger.log(`🧪 Testing GCS connection - No auth required`);
     return this.causeService.testGCSConnection();
   }
 
@@ -158,27 +144,22 @@ export class CauseController {
 
   /**
    * Update cause (Basic - No Image Upload)
-   * Requires MODERATOR role or higher in the organization
+   * No authentication required for testing
    */
   @Put(':id')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
-  @RequireOrganizationModerator('organizationId')
   @ApiOperation({ 
     summary: 'Update cause (without image upload)',
-    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization'
+    description: 'No authentication required'
   })
   @ApiParam({ name: 'id', description: 'Cause ID' })
   @ApiBody({ type: UpdateCauseDto })
   @ApiResponse({ status: 200, description: 'Cause updated successfully', type: CauseResponseDto })
   @ApiResponse({ status: 404, description: 'Cause not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   async updateCause(
     @Param('id') causeId: string,
     @Body() updateCauseDto: UpdateCauseDto,
-    @GetUser() user: EnhancedJwtPayload,
   ) {
-    this.logger.log(`📋 Updating cause ${causeId} by user ${user.sub} (${user.userType || 'USER'})`);
+    this.logger.log(`📋 Updating cause ${causeId} - No auth required`);
     return this.causeService.updateCause(causeId, updateCauseDto);
   }
 
@@ -188,15 +169,13 @@ export class CauseController {
    * Enhanced endpoint for updating cause with optional image upload
    * Supports both updating cause details and replacing/adding image
    * Uses multipart/form-data with FileInterceptor for image handling
-   * Requires MODERATOR role or higher in the organization
+   * No authentication required for testing
    */
   @Put(':id/with-image')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
-  @RequireOrganizationModerator('organizationId')
   @UseInterceptors(FileInterceptor('image'))
   @ApiOperation({ 
     summary: 'Update cause with image upload to Google Cloud Storage',
-    description: 'Requires MODERATOR, ADMIN, or PRESIDENT role in the organization'
+    description: 'No authentication required'
   })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Cause ID to update' })
@@ -207,41 +186,33 @@ export class CauseController {
   @ApiResponse({ status: 200, description: 'Cause updated with image successfully', type: CauseResponseDto })
   @ApiResponse({ status: 404, description: 'Cause not found' })
   @ApiResponse({ status: 400, description: 'Invalid request data or image format' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires MODERATOR+)' })
   @ApiResponse({ status: 413, description: 'Image file too large' })
   async updateCauseWithImage(
     @Param('id') causeId: string,
     @Body() updateCauseDto: UpdateCauseWithImageDto,
-    @UploadedFile() image: Express.Multer.File,
-    @GetUser() user: EnhancedJwtPayload
+    @UploadedFile() image: Express.Multer.File
   ) {
-    this.logger.log(`📋 Updating cause ${causeId} with ${image ? 'new image' : 'no image change'} by user ${user.sub} (${user.userType || 'USER'})`);
+    this.logger.log(`📋 Updating cause ${causeId} with ${image ? 'new image' : 'no image change'} - No auth required`);
     return this.causeService.updateCauseWithImage(causeId, updateCauseDto, image);
   }
 
   /**
    * Delete cause
-   * Only ADMIN or PRESIDENT can delete causes
+   * No authentication required for testing
    */
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, OrganizationAccessGuard)
-  @RequireOrganizationAdmin('organizationId')
   @ApiOperation({ 
-    summary: 'Delete cause (Admin/President only)',
-    description: 'Requires ADMIN or PRESIDENT role in the organization'
+    summary: 'Delete cause (No auth required)',
+    description: 'Delete cause without authentication'
   })
   @ApiParam({ name: 'id', description: 'Cause ID' })
   @ApiResponse({ status: 200, description: 'Cause deleted successfully' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions (requires ADMIN+)' })
   async deleteCause(
-    @Param('id') causeId: string,
-    @GetUser() user: EnhancedJwtPayload
+    @Param('id') causeId: string
   ) {
-    this.logger.log(`📋 Deleting cause ${causeId} by user ${user.sub} (${user.userType || 'USER'})`);
-    return this.causeService.deleteCause(causeId, user.sub);
+    this.logger.log(`📋 Deleting cause ${causeId} - No auth required`);
+    return this.causeService.deleteCause(causeId, 'anonymous-user');
   }
 
   /**
