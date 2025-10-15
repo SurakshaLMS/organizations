@@ -422,6 +422,92 @@ export class OrganizationService {
   }
 
   /**
+   * Get global organizations that user is NOT enrolled in
+   * Returns public organizations from the entire system that the user hasn't joined yet
+   * Supports pagination and search
+   * Optimized: No expensive count queries, only basic organization fields
+   */
+  async getGlobalOrganizationsNotEnrolled(userId: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any>> {
+    const pagination = paginationDto || new PaginationDto();
+    const userBigIntId = BigInt(userId);
+
+    // Build where clause for public organizations user is NOT enrolled in
+    const where: any = {
+      isPublic: true, // Only public/global organizations
+      NOT: {
+        organizationUsers: {
+          some: {
+            userId: userBigIntId, // Exclude organizations user is already in
+          },
+        },
+      },
+    };
+
+    // Add search functionality
+    if (pagination.search) {
+      where.OR = [
+        {
+          name: {
+            contains: pagination.search,
+          },
+        },
+        {
+          type: {
+            contains: pagination.search,
+          },
+        },
+      ];
+    }
+
+    // Build order by - only allow sorting by actual organization fields
+    const orderBy: any = {};
+    const validSortFields = ['name', 'type', 'createdAt'];
+    const sortBy = validSortFields.includes(pagination.sortBy || '') ? pagination.sortBy : 'name';
+    orderBy[sortBy || 'name'] = pagination.sortOrder || 'asc';
+
+    // Get total count - single optimized query
+    const total = await this.prisma.organization.count({ where });
+
+    // Get paginated data - simple query with only existing fields
+    const organizations = await this.prisma.organization.findMany({
+      where,
+      orderBy,
+      skip: pagination.skip,
+      take: pagination.limitNumber,
+      select: {
+        organizationId: true,
+        name: true,
+        type: true,
+        isPublic: true,
+        needEnrollmentVerification: true,
+        enabledEnrollments: true,
+        imageUrl: true,
+        instituteId: true,
+        createdAt: true,
+      },
+    });
+
+    // Transform data - only basic fields, no counts
+    const transformedOrganizations = organizations.map(org => ({
+      organizationId: org.organizationId.toString(),
+      name: org.name,
+      type: org.type,
+      isPublic: org.isPublic,
+      needEnrollmentVerification: org.needEnrollmentVerification,
+      enabledEnrollments: org.enabledEnrollments,
+      imageUrl: org.imageUrl,
+      instituteId: org.instituteId ? org.instituteId.toString() : null,
+      createdAt: org.createdAt.toISOString(),
+      enrollmentStatus: 'not_enrolled',
+      canEnroll: org.enabledEnrollments,
+    }));
+
+    this.logger.log(`🌍 Found ${total} global organizations user ${userId} is NOT enrolled in`);
+
+    return createPaginatedResponse(transformedOrganizations, total, pagination);
+  }
+
+  /**
    * Get organization by ID
    */
   async getOrganizationById(organizationId: string, userId?: string) {

@@ -11,7 +11,7 @@ import { Request } from 'express';
  * 2. JWT tokens with ultra-compact format where ut: "OM"
  */
 @Injectable()
-export class HybridOrganizationManagerGuard implements CanActivate {
+export class  HybridOrganizationManagerGuard implements CanActivate {
   constructor(
     private configService: ConfigService,
     private jwtService: JwtService

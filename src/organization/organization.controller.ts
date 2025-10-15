@@ -148,6 +148,65 @@ export class OrganizationController {
     return this.organizationService.getUserEnrolledOrganizations(user.sub, paginationDto);
   }
 
+  @Get('user/not-enrolled')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ 
+    summary: 'Get global organizations that user is NOT enrolled in - Requires Authentication',
+    description: 'Returns all public/global organizations that the authenticated user has not joined yet. Supports pagination and search.'
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by organization name or type' })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Sort field (name, memberCount, causeCount, createdAt)' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: 'Sort order (default: asc)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Global organizations user is NOT enrolled in retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              organizationId: { type: 'string', example: '1' },
+              name: { type: 'string', example: 'Computer Science Club' },
+              type: { type: 'string', example: 'Academic' },
+              isPublic: { type: 'boolean', example: true },
+              needEnrollmentVerification: { type: 'boolean', example: false },
+              enabledEnrollments: { type: 'boolean', example: true },
+              imageUrl: { type: 'string', nullable: true },
+              instituteId: { type: 'string', nullable: true },
+              memberCount: { type: 'number', example: 42 },
+              causeCount: { type: 'number', example: 5 },
+              createdAt: { type: 'string', example: '2025-01-15T10:30:00.000Z' },
+              enrollmentStatus: { type: 'string', example: 'not_enrolled' },
+              canEnroll: { type: 'boolean', example: true }
+            }
+          }
+        },
+        meta: {
+          type: 'object',
+          properties: {
+            total: { type: 'number', example: 100 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 10 },
+            totalPages: { type: 'number', example: 10 }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
+  async getGlobalOrganizationsNotEnrolled(
+    @GetUser() user: EnhancedJwtPayload,
+    @Query(new PaginationValidationPipe()) paginationQuery?: any
+  ) {
+    const paginationDto = paginationQuery || new PaginationDto();
+    return this.organizationService.getGlobalOrganizationsNotEnrolled(user.sub, paginationDto);
+  }
+
   @Get('user/dashboard')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get user organization dashboard - Requires Authentication' })
