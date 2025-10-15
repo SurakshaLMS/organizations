@@ -28,7 +28,7 @@ import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { OrganizationManagerTokenGuard } from '../auth/guards/om-token.guard';
 import { HybridOrganizationManagerGuard } from '../auth/guards/hybrid-om.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
-import { GCSImageService } from '../common/services/gcs-image.service';
+import { CloudStorageService } from '../common/services/cloud-storage.service';
 
 @ApiTags('Organizations')
 @Controller('organizations')
@@ -43,7 +43,7 @@ import { GCSImageService } from '../common/services/gcs-image.service';
 export class OrganizationController {
   constructor(
     private readonly organizationService: OrganizationService,
-    private readonly gcsImageService: GCSImageService
+    private readonly cloudStorageService: CloudStorageService
   ) {}
 
   @Post()
@@ -83,10 +83,10 @@ export class OrganizationController {
       // Handle image upload if provided
       if (image) {
         try {
-          // Upload image to Google Cloud Storage
-          const uploadResult = await this.gcsImageService.uploadImage(image, 'organization-images');
+          // Upload image to Cloud Storage (Google/AWS/Local)
+          const uploadResult = await this.cloudStorageService.uploadImage(image, 'organization-images');
           imageUrl = uploadResult.url;
-          console.log('📤 Image uploaded to Google Cloud Storage:', imageUrl);
+          console.log('📤 Image uploaded to Cloud Storage:', imageUrl);
         } catch (imageError) {
           console.error('❌ Image upload failed:', imageError.message);
           throw new BadRequestException(`Image upload failed: ${imageError.message}`);
@@ -278,14 +278,14 @@ export class OrganizationController {
           // Get current organization to check for existing image
           const currentOrg = await this.organizationService.getOrganizationById(id, user.sub);
           
-          // Upload new image and delete old one
-          const uploadResult = await this.gcsImageService.updateOrganizationImage(
+          // Upload new image and delete old one using Cloud Storage
+          const uploadResult = await this.cloudStorageService.updateOrganizationImage(
             image,
             currentOrg.imageUrl || undefined
           );
           imageUrl = uploadResult.url;
           
-          console.log('📤 Image updated in Google Cloud Storage:', imageUrl);
+          console.log('📤 Image updated in Cloud Storage:', imageUrl);
         } catch (imageError) {
           console.error('❌ Image update failed:', imageError.message);
           throw new BadRequestException(`Image update failed: ${imageError.message}`);

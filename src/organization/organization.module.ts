@@ -4,12 +4,12 @@ import { OrganizationController } from './organization.controller';
 import { OrganizationManagerController } from './organization-manager.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
-import { GCSImageService } from '../common/services/gcs-image.service';
+import { CloudStorageService } from '../common/services/cloud-storage.service';
 
 @Module({
   imports: [PrismaModule, forwardRef(() => AuthModule)],
   controllers: [OrganizationController, OrganizationManagerController],
-  providers: [OrganizationService, GCSImageService],
+  providers: [OrganizationService, CloudStorageService],
   exports: [OrganizationService],
 })
 export class OrganizationModule {}
