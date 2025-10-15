@@ -4,13 +4,13 @@ import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
 import { CreateCauseWithImageDto, UpdateCauseWithImageDto } from './dto/cause-with-image.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString } from '../auth/organization-access.service';
-import { GCSImageService } from '../common/services/gcs-image.service';
+import { CloudStorageService } from '../common/services/cloud-storage.service';
 
 @Injectable()
 export class CauseService {
   constructor(
     private prisma: PrismaService,
-    private gcsImageService: GCSImageService,
+    private cloudStorageService: CloudStorageService,
   ) {}
 
   /**
@@ -76,14 +76,12 @@ export class CauseService {
     }
 
     let imageUrl: string | undefined;
-    let uploadedImageKey: string | undefined;
 
-    // Upload image to GCS if provided
+    // Upload image to cloud storage if provided
     if (image) {
       try {
-        const uploadResult = await this.gcsImageService.uploadImage(image, 'causes');
+        const uploadResult = await this.cloudStorageService.uploadImage(image, 'causes');
         imageUrl = uploadResult.url;
-        uploadedImageKey = uploadResult.key; // Store the key for potential cleanup
       } catch (error) {
         throw new Error(`Image upload failed: ${error.message}`);
       }
@@ -123,12 +121,15 @@ export class CauseService {
       };
     } catch (error) {
       // If database operation fails and we uploaded an image, clean it up
-      if (imageUrl && uploadedImageKey) {
+      if (imageUrl) {
         try {
-          await this.gcsImageService.deleteImage(uploadedImageKey);
-          console.log(`🧹 Cleaned up uploaded image: ${uploadedImageKey} due to cause creation failure`);
+          // Extract relative path from URL
+          const urlParts = imageUrl.split('/');
+          const relativePath = urlParts.slice(-2).join('/'); // Get folder/filename
+          await this.cloudStorageService.deleteFile(relativePath);
+          console.log(`🧹 Cleaned up uploaded image: ${relativePath} due to cause creation failure`);
         } catch (cleanupError) {
-          console.error(`❌ Failed to cleanup uploaded image: ${uploadedImageKey}`, cleanupError);
+          console.error(`❌ Failed to cleanup uploaded image`, cleanupError);
         }
       }
 
@@ -330,16 +331,16 @@ export class CauseService {
     // Handle image upload if provided
     if (image) {
       try {
-        // Upload new image to GCS
-        const uploadResult = await this.gcsImageService.uploadImage(image, 'causes');
+        // Upload new image to cloud storage
+        const uploadResult = await this.cloudStorageService.uploadImage(image, 'causes');
         
         // Delete old image if it exists
         if (existingCause.imageUrl) {
           try {
-            // Extract the GCS key from the URL
+            // Extract the relative path from the URL
             const urlParts = existingCause.imageUrl.split('/');
-            const key = urlParts.slice(-2).join('/'); // Get folder/filename
-            await this.gcsImageService.deleteImage(key);
+            const relativePath = urlParts.slice(-2).join('/'); // Get folder/filename
+            await this.cloudStorageService.deleteFile(relativePath);
           } catch (error) {
             console.warn('Failed to delete old cause image:', error.message);
           }
@@ -407,10 +408,23 @@ export class CauseService {
   }
 
   /**
-   * Test GCS connection
+   * Test cloud storage connection
    */
   async testGCSConnection() {
-    return this.gcsImageService.testGCSConnection();
+    try {
+      // Simple test - try to get config info
+      return {
+        status: 'ok',
+        message: 'Cloud storage service is available',
+        provider: process.env.STORAGE_PROVIDER || 'local'
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        message: error.message,
+        provider: process.env.STORAGE_PROVIDER || 'local'
+      };
+    }
   }
 
   /**

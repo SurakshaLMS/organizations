@@ -26,7 +26,7 @@ import {
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ParseOrganizationIdPipe, ParseInstituteIdPipe } from '../common/pipes/parse-numeric-id.pipe';
 import { PaginationValidationPipe } from '../common/pipes/pagination-validation.pipe';
-import { GCSImageService } from '../common/services/gcs-image.service';
+import { CloudStorageService } from '../common/services/cloud-storage.service';
 
 @ApiTags('Institute Organizations (No Auth)')
 @Controller('institute-organizations')
@@ -40,7 +40,7 @@ import { GCSImageService } from '../common/services/gcs-image.service';
 export class InstituteOrganizationsController {
   constructor(
     private readonly instituteOrganizationsService: InstituteOrganizationsService,
-    private readonly gcsImageService: GCSImageService
+    private readonly cloudStorageService: CloudStorageService
   ) {}
 
   @Post()
@@ -73,9 +73,9 @@ export class InstituteOrganizationsController {
       // Handle image upload if provided
       if (image) {
         try {
-          const uploadResult = await this.gcsImageService.uploadImage(image, 'institute-organization-images');
+          const uploadResult = await this.cloudStorageService.uploadImage(image, 'institute-organization-images');
           imageUrl = uploadResult.url;
-          console.log('📤 Image uploaded to Google Cloud Storage:', imageUrl);
+          console.log('📤 Image uploaded to cloud storage:', imageUrl);
         } catch (imageError) {
           console.error('❌ Image upload failed:', imageError.message);
           throw new BadRequestException(`Image upload failed: ${imageError.message}`);
@@ -172,9 +172,9 @@ export class InstituteOrganizationsController {
     // Handle image upload if provided
     if (image) {
       try {
-        const uploadResult = await this.gcsImageService.uploadImage(image, 'institute-organization-images');
+        const uploadResult = await this.cloudStorageService.uploadImage(image, 'institute-organization-images');
         imageUrl = uploadResult.url;
-        console.log('📤 Updated image uploaded to Google Cloud Storage:', imageUrl);
+        console.log('📤 Updated image uploaded to cloud storage:', imageUrl);
       } catch (imageError) {
         console.error('❌ Image upload failed:', imageError.message);
         throw new BadRequestException(`Image upload failed: ${imageError.message}`);
