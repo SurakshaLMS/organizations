@@ -7,36 +7,49 @@ datasource db {
   url      = env("LAAS_DATABASE_URL")
 }
 
+// ============================================================================
+// IMPORTANT: MySQL Configuration for Production
+// ============================================================================
+// Add to your MySQL configuration file (my.cnf or my.ini):
+//
+// [mysqld]
+// sql_mode = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE"
+// 
+// This prevents invalid datetime values like '0000-00-00 00:00:00'
+// All datetime fields use @db.DateTime(0) for proper MySQL compatibility
+// All createdAt/updatedAt fields have @default(now()) to prevent NULL values
+// ============================================================================
+
 model User {
-  userId            BigInt             @id @default(autoincrement()) @map("id")
-  email             String             @unique
-  password          String?            @db.VarChar(500)
-  firstName         String             @map("first_name") @db.VarChar(100)
-  lastName          String?            @map("last_name") @db.VarChar(100)
-  phoneNumber       String?            @map("phone_number") @db.VarChar(20)
-  dateOfBirth       DateTime?          @map("date_of_birth") @db.Date
-  gender            Gender?
-  nic               String?            @unique @db.VarChar(20)
-  birthCertificateNo String?           @unique @map("birth_certificate_no") @db.VarChar(50)
-  addressLine1      String?            @map("address_line1") @db.Text
-  addressLine2      String?            @map("address_line2") @db.Text
-  city              String?            @db.VarChar(100)
-  district          String?            @db.VarChar(100)
-  province          String?            @db.VarChar(100)
-  postalCode        String?            @map("postal_code") @db.VarChar(20)
-  country           String?            @db.VarChar(100)
-  subscriptionPlan  String?            @map("subscription_plan")
-  paymentExpiresAt  DateTime?          @map("payment_expires_at")
-  imageUrl          String?            @map("image_url") @db.VarChar(255)
-  idUrl             String?            @map("id_url") @db.VarChar(500)
-  isActive          Boolean            @map("is_active") @default(true)
-  createdAt         DateTime           @map("created_at") @default(now())
-  updatedAt         DateTime           @map("updated_at") @updatedAt
-  
-  instituteUsers    InstituteUser[]
-  organizationUsers OrganizationUser[]
-  verifiedUsers     OrganizationUser[] @relation("VerifiedBy")
-  verifiedInstituteUsers InstituteUser[] @relation("InstituteVerifiedBy")
+  userId             BigInt    @id @default(autoincrement()) @map("id")
+  email              String    @unique
+  password           String?   @db.VarChar(500)
+  firstName          String    @map("first_name") @db.VarChar(100)
+  lastName           String?   @map("last_name") @db.VarChar(100)
+  phoneNumber        String?   @map("phone_number") @db.VarChar(20)
+  dateOfBirth        DateTime? @map("date_of_birth") @db.Date
+  gender             Gender?
+  nic                String?   @unique @db.VarChar(20)
+  birthCertificateNo String?   @unique @map("birth_certificate_no") @db.VarChar(50)
+  addressLine1       String?   @map("address_line1") @db.Text
+  addressLine2       String?   @map("address_line2") @db.Text
+  city               String?   @db.VarChar(100)
+  district           String?   @db.VarChar(100)
+  province           String?   @db.VarChar(100)
+  postalCode         String?   @map("postal_code") @db.VarChar(20)
+  country            String?   @db.VarChar(100)
+  subscriptionPlan   String?   @map("subscription_plan")
+  paymentExpiresAt   DateTime? @map("payment_expires_at")
+  imageUrl           String?   @map("image_url") @db.VarChar(255)
+  idUrl              String?   @map("id_url") @db.VarChar(500)
+  isActive           Boolean   @default(true) @map("is_active")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+
+  instituteUsers         InstituteUser[]
+  organizationUsers      OrganizationUser[]
+  verifiedUsers          OrganizationUser[] @relation("VerifiedBy")
+  verifiedInstituteUsers InstituteUser[]    @relation("InstituteVerifiedBy")
 
   @@map("users")
 }
@@ -48,22 +61,22 @@ enum Gender {
 }
 
 model Institute {
-  instituteId    BigInt          @id @default(autoincrement()) @map("id")
-  name           String          @db.VarChar(255)
-  code           String          @unique @db.VarChar(50)
-  email          String          @unique @db.VarChar(255)
-  phone          String?         @db.VarChar(20)
-  address        String?         @db.Text
-  city           String?         @db.VarChar(100)
-  state          String?         @db.VarChar(100)
-  country        String?         @db.VarChar(100)
-  pinCode        String?         @map("pin_code") @db.VarChar(20)
-  type           InstituteType   @default(school)
-  imageUrl       String?         @db.VarChar(255)
-  isActive       Boolean         @map("is_active") @default(true)
-  createdAt      DateTime        @map("created_at") @default(now())
-  updatedAt      DateTime        @map("updated_at") @updatedAt
-  
+  instituteId BigInt        @id @default(autoincrement()) @map("id")
+  name        String        @db.VarChar(255)
+  code        String        @unique @db.VarChar(50)
+  email       String        @unique @db.VarChar(255)
+  phone       String?       @db.VarChar(20)
+  address     String?       @db.Text
+  city        String?       @db.VarChar(100)
+  state       String?       @db.VarChar(100)
+  country     String?       @db.VarChar(100)
+  pinCode     String?       @map("pin_code") @db.VarChar(20)
+  type        InstituteType @default(school)
+  imageUrl    String?       @db.VarChar(255)
+  isActive    Boolean       @default(true) @map("is_active")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+
   instituteUsers InstituteUser[]
   organizations  Organization[]
 
@@ -79,18 +92,18 @@ enum InstituteType {
 }
 
 model InstituteUser {
-  instituteId       BigInt @map("institute_id")
-  userId            BigInt @map("user_id")
-  status            InstituteUserStatus @default(PENDING)
-  instituteUserId   String? @map("user_id_institue") @db.VarChar(50)
-  verifiedBy        BigInt? @map("verified_by")
-  verifiedAt        DateTime? @map("verified_at")
-  createdAt         DateTime @map("created_at") @default(now())
-  updatedAt         DateTime @map("updated_at") @updatedAt
-  
-  institute         Institute @relation(fields: [instituteId], references: [instituteId], onDelete: Cascade)
-  user              User      @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  verifier          User?     @relation("InstituteVerifiedBy", fields: [verifiedBy], references: [userId])
+  instituteId     BigInt              @map("institute_id")
+  userId          BigInt              @map("user_id")
+  status          InstituteUserStatus @default(PENDING)
+  instituteUserId String?             @map("user_id_institue") @db.VarChar(50)
+  verifiedBy      BigInt?             @map("verified_by")
+  verifiedAt      DateTime?           @map("verified_at") @db.DateTime(0)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+
+  institute Institute @relation(fields: [instituteId], references: [instituteId], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  verifier  User?     @relation("InstituteVerifiedBy", fields: [verifiedBy], references: [userId])
 
   @@id([instituteId, userId])
   @@index([userId], map: "institute_users_userId_fkey")
@@ -107,18 +120,18 @@ enum InstituteUserStatus {
 }
 
 model Organization {
-  organizationId            BigInt             @id @default(autoincrement())
-  name                      String             @db.VarChar(255)
-  type                      OrganizationType
-  isPublic                  Boolean            @default(false)
-  enrollmentKey             String?            @db.VarChar(255)
-  needEnrollmentVerification Boolean           @default(true)
-  enabledEnrollments        Boolean            @default(true)
-  imageUrl                  String?            @db.VarChar(500)
-  instituteId               BigInt?
-  createdAt                 DateTime           @default(now())
-  updatedAt                 DateTime           @updatedAt
-  
+  organizationId             BigInt           @id @default(autoincrement())
+  name                       String           @db.VarChar(255)
+  type                       OrganizationType
+  isPublic                   Boolean          @default(false)
+  enrollmentKey              String?          @db.VarChar(255)
+  needEnrollmentVerification Boolean          @default(true)
+  enabledEnrollments         Boolean          @default(true)
+  imageUrl                   String?          @db.VarChar(500)
+  instituteId                BigInt?
+  createdAt                  DateTime         @default(now()) @db.DateTime(0)
+  updatedAt                  DateTime         @default(now()) @updatedAt @db.DateTime(0)
+
   causes            Cause[]
   institute         Institute?         @relation(fields: [instituteId], references: [instituteId])
   organizationUsers OrganizationUser[]
@@ -135,13 +148,13 @@ model OrganizationUser {
   role           OrganizationRole @default(MEMBER)
   isVerified     Boolean          @default(false)
   verifiedBy     BigInt?
-  verifiedAt     DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  
-  organization   Organization     @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
-  user           User             @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  verifier       User?            @relation("VerifiedBy", fields: [verifiedBy], references: [userId])
+  verifiedAt     DateTime?        @db.DateTime(0)
+  createdAt      DateTime         @default(now()) @db.DateTime(0)
+  updatedAt      DateTime         @default(now()) @updatedAt @db.DateTime(0)
+
+  organization Organization @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  verifier     User?        @relation("VerifiedBy", fields: [verifiedBy], references: [userId])
 
   @@id([organizationId, userId])
   @@index([role])
@@ -151,19 +164,19 @@ model OrganizationUser {
 }
 
 model Cause {
-  causeId        BigInt       @id @default(autoincrement())
+  causeId        BigInt   @id @default(autoincrement())
   organizationId BigInt
-  title          String       @db.VarChar(255)
-  description    String?      @db.Text
-  isPublic       Boolean      @default(false)
-  introVideoUrl  String?      @db.VarChar(500)
-  imageUrl       String?      @db.VarChar(500)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  
-  assignments    Assignment[]
-  organization   Organization @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
-  lectures       Lecture[]
+  title          String   @db.VarChar(255)
+  description    String?  @db.Text
+  isPublic       Boolean  @default(false)
+  introVideoUrl  String?  @db.VarChar(500)
+  imageUrl       String?  @db.VarChar(500)
+  createdAt      DateTime @default(now()) @db.DateTime(0)
+  updatedAt      DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  assignments  Assignment[]
+  organization Organization @relation(fields: [organizationId], references: [organizationId], onDelete: Cascade)
+  lectures     Lecture[]
 
   @@index([organizationId])
   @@index([isPublic])
@@ -171,22 +184,22 @@ model Cause {
 }
 
 model Lecture {
-  lectureId      BigInt          @id @default(autoincrement())
-  causeId        BigInt
-  title          String          @db.VarChar(255)
-  content        String?         @db.Text
-  description    String?         @db.Text
-  isPublic       Boolean         @default(false)
-  liveLink       String?         @db.VarChar(500)
-  liveMode       String?         @db.VarChar(50)
-  mode           String?         @db.VarChar(50)
-  recordingUrl   String?         @db.VarChar(500)
-  timeEnd        DateTime?
-  timeStart      DateTime?
-  venue          String?         @db.VarChar(255)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  
+  lectureId    BigInt    @id @default(autoincrement())
+  causeId      BigInt
+  title        String    @db.VarChar(255)
+  content      String?   @db.Text
+  description  String?   @db.Text
+  isPublic     Boolean   @default(false)
+  liveLink     String?   @db.VarChar(500)
+  liveMode     String?   @db.VarChar(50)
+  mode         String?   @db.VarChar(50)
+  recordingUrl String?   @db.VarChar(500)
+  timeEnd      DateTime? @db.DateTime(0)
+  timeStart    DateTime? @db.DateTime(0)
+  venue        String?   @db.VarChar(255)
+  createdAt    DateTime  @default(now()) @db.DateTime(0)
+  updatedAt    DateTime  @default(now()) @updatedAt @db.DateTime(0)
+
   documentations Documentation[]
   cause          Cause           @relation(fields: [causeId], references: [causeId], onDelete: Cascade)
 
@@ -202,11 +215,11 @@ model Assignment {
   causeId      BigInt
   title        String    @db.VarChar(255)
   description  String?   @db.Text
-  dueDate      DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  
-  cause        Cause     @relation(fields: [causeId], references: [causeId], onDelete: Cascade)
+  dueDate      DateTime? @db.DateTime(0)
+  createdAt    DateTime  @default(now()) @db.DateTime(0)
+  updatedAt    DateTime  @default(now()) @updatedAt @db.DateTime(0)
+
+  cause Cause @relation(fields: [causeId], references: [causeId], onDelete: Cascade)
 
   @@index([causeId])
   @@index([dueDate])
@@ -220,10 +233,10 @@ model Documentation {
   content         String?  @db.Text
   description     String?  @db.Text
   docUrl          String?  @db.VarChar(500)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  lecture         Lecture  @relation(fields: [lectureId], references: [lectureId], onDelete: Cascade)
+  createdAt       DateTime @default(now()) @db.DateTime(0)
+  updatedAt       DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  lecture Lecture @relation(fields: [lectureId], references: [lectureId], onDelete: Cascade)
 
   @@index([lectureId])
   @@map("org_documentation")
