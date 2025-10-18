@@ -5,7 +5,7 @@ import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lectu
 import { CreateLectureWithDocumentsDto, LectureWithDocumentsResponseDto } from './dto/create-lecture-with-documents.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
-import { GCSService, SecureUploadResult, SingleFileUploadResult } from '../common/services/gcs.service';
+import { CloudStorageService, FileUploadResult } from '../common/services/cloud-storage.service';
 
 /**
  * Document upload result interface
@@ -39,7 +39,7 @@ export class LectureService {
   constructor(
     private prisma: PrismaService,
     private jwtAccessValidation: JwtAccessValidationService,
-    private gcsService: GCSService,
+    private cloudStorage: CloudStorageService,
   ) {}
 
   /**
@@ -202,28 +202,29 @@ export class LectureService {
               continue;
             }
 
-            // Upload to GCS with security validation
-            const uploadResult: SingleFileUploadResult = await this.gcsService.uploadFile(
-              file,
-              `lectures/${lecture.lectureId}/documents`
+            // Upload to Cloud Storage with security validation
+            const uploadResult: FileUploadResult = await this.cloudStorage.uploadFile(
+              file.buffer,
+              `lectures/${lecture.lectureId}/documents/${file.originalname}`,
+              file.mimetype
             );
 
             // Check if upload was successful
-            if (!uploadResult.success || !uploadResult.url) {
-              this.logger.error(`❌ GCS upload failed for ${file.originalname}: ${uploadResult.error || 'No URL returned'}`);
+            if (!uploadResult.success || !uploadResult.fullUrl) {
+              this.logger.error(`❌ Upload failed for ${file.originalname}: ${uploadResult.error || 'No URL returned'}`);
               throw new Error(`Failed to upload file ${file.originalname}: ${uploadResult.error || 'Upload failed'}`);
             }
 
-            this.logger.log(`✅ Secure GCS upload successful: ${uploadResult.url}`);
+            this.logger.log(`✅ Upload successful: ${uploadResult.fullUrl}`);
 
-            // Create documentation record
+            // Create documentation record - store relativePath in database
             const documentation = await this.prisma.documentation.create({
               data: {
                 lectureId: lecture.lectureId,
                 title: file.originalname,
                 content: '', // Can be enhanced later if needed
                 description: `Document uploaded for lecture: ${lecture.title}`,
-                docUrl: uploadResult.url,
+                docUrl: uploadResult.relativePath, // Store relative path in DB
                 createdAt: new Date(),
                 updatedAt: new Date(),
               },
@@ -234,14 +235,14 @@ export class LectureService {
             uploadedDocuments.push({
               documentationId: convertToString(documentation.documentationId),
               title: documentation.title,
-              url: documentation.docUrl || '',
-              fileName: uploadResult.originalName,
-              size: uploadResult.size,
-              fileId: uploadResult.fileId,
-              uploadedAt: uploadResult.uploadedAt,
+              url: uploadResult.fullUrl, // Return full URL to client
+              fileName: uploadResult.fileName,
+              size: uploadResult.fileSize,
+              fileId: convertToString(documentation.documentationId),
+              uploadedAt: new Date().toISOString(),
             });
 
-            this.logger.log(`✅ Document uploaded: ${file.originalname} -> ${uploadResult.url}`);
+            this.logger.log(`✅ Document uploaded: ${file.originalname} -> ${uploadResult.fullUrl}`);
           } catch (docError) {
             this.logger.error(`❌ Failed to upload document ${file.originalname}:`, docError);
             // Continue with other files, don't fail the entire operation
@@ -640,26 +641,27 @@ export class LectureService {
 
         for (const file of files) {
           try {
-            // Upload to GCS with security validation
-            const uploadResult: SingleFileUploadResult = await this.gcsService.uploadFile(
-              file,
-              `lectures/${lectureId}/documents`
+            // Upload to Cloud Storage with security validation
+            const uploadResult: FileUploadResult = await this.cloudStorage.uploadFile(
+              file.buffer,
+              `lectures/${lectureId}/documents/${file.originalname}`,
+              file.mimetype
             );
 
             // Check if upload was successful
-            if (!uploadResult.success || !uploadResult.url) {
-              this.logger.error(`❌ GCS upload failed for ${file.originalname}: ${uploadResult.error || 'No URL returned'}`);
+            if (!uploadResult.success || !uploadResult.fullUrl) {
+              this.logger.error(`❌ Upload failed for ${file.originalname}: ${uploadResult.error || 'No URL returned'}`);
               throw new Error(`Failed to upload file ${file.originalname}: ${uploadResult.error || 'Upload failed'}`);
             }
 
-            this.logger.log(`✅ Document upload successful: ${uploadResult.url}`);
+            this.logger.log(`✅ Document upload successful: ${uploadResult.fullUrl}`);
 
-            // Create database record for the document
+            // Create database record for the document - store relativePath
             const document = await this.prisma.documentation.create({
               data: {
                 title: file.originalname,
                 description: `Document uploaded for lecture ${lectureId}`,
-                docUrl: uploadResult.url,
+                docUrl: uploadResult.relativePath, // Store relative path in DB
                 lectureId: lectureBigIntId,
                 createdAt: new Date(),
                 updatedAt: new Date(),
@@ -669,11 +671,11 @@ export class LectureService {
             uploadedDocuments.push({
               documentationId: convertToString(document.documentationId),
               title: document.title,
-              url: document.docUrl || uploadResult.url,
-              fileName: uploadResult.originalName,
-              size: uploadResult.size,
-              fileId: uploadResult.fileId,
-              uploadedAt: uploadResult.uploadedAt,
+              url: uploadResult.fullUrl, // Return full URL to client
+              fileName: uploadResult.fileName,
+              size: uploadResult.fileSize,
+              fileId: convertToString(document.documentationId),
+              uploadedAt: new Date().toISOString(),
             });
 
             this.logger.log(`📄 Document uploaded: ${file.originalname} for lecture ${lectureId}`);
@@ -803,12 +805,9 @@ export class LectureService {
       for (const document of documents) {
         try {
           if (document.docUrl) {
-            // Extract GCS key from URL for deletion
-            const urlParts = document.docUrl.split('/');
-            const gcsKey = urlParts.slice(-3).join('/'); // Get the last 3 parts: lectures/lectureId/documents/filename
-            
-            await this.gcsService.deleteFile(gcsKey);
-            this.logger.log(`📄 Deleted document from GCS: ${document.title}`);
+            // Delete file from cloud storage using relative path stored in DB
+            await this.cloudStorage.deleteFile(document.docUrl);
+            this.logger.log(`📄 Deleted document from storage: ${document.title}`);
           }
           
           deletedDocuments.push({
@@ -816,14 +815,14 @@ export class LectureService {
             title: document.title,
             url: document.docUrl,
           });
-        } catch (s3Error) {
-          this.logger.error(`Failed to delete document ${document.title} from S3:`, s3Error);
+        } catch (storageError) {
+          this.logger.error(`Failed to delete document ${document.title} from storage:`, storageError);
           failedDeletions.push({
             documentationId: convertToString(document.documentationId),
             title: document.title,
-            error: 'S3 deletion failed',
+            error: 'Storage deletion failed',
           });
-          // Continue with database deletion even if S3 fails
+          // Continue with database deletion even if storage fails
         }
       }
 

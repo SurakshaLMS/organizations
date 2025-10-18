@@ -71,12 +71,18 @@ export class CloudStorageService {
           this.initializeLocalStorage();
           break;
         default:
-          this.logger.warn(`Unknown provider ${provider}, falling back to Google`);
-          this.initializeGoogleStorage();
+          this.logger.warn(`Unknown provider ${provider}, falling back to local storage`);
+          this.initializeLocalStorage();
       }
     } catch (error) {
       this.logger.error(`Failed to initialize ${provider} storage:`, error);
-      throw new InternalServerErrorException(`Storage initialization failed: ${error.message}`);
+      this.logger.warn('⚠️ Falling back to local storage');
+      // Fallback to local storage instead of throwing error
+      try {
+        this.initializeLocalStorage();
+      } catch (localError) {
+        throw new InternalServerErrorException(`All storage initialization failed: ${error.message}`);
+      }
     }
   }
 
@@ -114,7 +120,8 @@ export class CloudStorageService {
       const projectId = this.configService.get<string>('GCS_PROJECT_ID');
       
       if (!this.bucketName || !projectId) {
-        throw new Error('Google Cloud Storage credentials not configured');
+        this.logger.warn('⚠️ Google Cloud Storage credentials not configured - skipping GCS initialization');
+        return; // Don't throw error, just skip initialization
       }
 
       const clientEmail = this.configService.get<string>('GCS_CLIENT_EMAIL') || '';
@@ -142,7 +149,8 @@ export class CloudStorageService {
       this.logger.log(`✅ Google Cloud Storage initialized - Bucket: ${this.bucketName}`);
     } catch (error) {
       this.logger.error('❌ Google Cloud Storage initialization failed:', error);
-      throw error;
+      this.logger.warn('⚠️ Continuing without Google Cloud Storage - ensure STORAGE_PROVIDER is set to local or aws');
+      // Don't throw error, allow service to continue with other providers
     }
   }
 
