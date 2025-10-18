@@ -684,11 +684,39 @@ export class LectureService {
         }
       }
 
-      // Return enhanced response with updated lecture and new documents
+      // Fetch ALL existing documents for this lecture
+      const allDocuments = await this.prisma.documentation.findMany({
+        where: { lectureId: lectureBigIntId },
+        select: {
+          documentationId: true,
+          title: true,
+          description: true,
+          docUrl: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      // Transform documents to proper format
+      const documents = allDocuments.map(doc => ({
+        documentationId: convertToString(doc.documentationId),
+        title: doc.title,
+        description: doc.description,
+        docUrl: doc.docUrl,
+        createdAt: doc.createdAt.toISOString(),
+        updatedAt: doc.updatedAt.toISOString(),
+      }));
+
+      // Return enhanced response with updated lecture, all documents, and upload info
       return {
         ...updatedLecture,
-        uploadedDocuments,
-        documentsCount: uploadedDocuments.length,
+        documents, // All existing documents (including newly uploaded)
+        uploadedDocuments, // Info about newly uploaded files
+        totalDocuments: documents.length,
+        newDocumentsCount: uploadedDocuments.length,
         message: `Lecture updated successfully${uploadedDocuments.length > 0 ? ` with ${uploadedDocuments.length} new documents` : ''}`,
       };
 
