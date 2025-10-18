@@ -587,7 +587,7 @@ export class OrganizationService {
     if (enrollmentKey !== undefined) updateData.enrollmentKey = enrollmentKey || null;
     if (instituteId !== undefined) updateData.instituteId = instituteId ? BigInt(instituteId) : null;
 
-    this.logger.log(`📝 Organization ${organizationId} updated by user ${user?.sub || 'anonymous'}`);
+    this.logger.log(`📝 Organization ${organizationId} updated by user ${user.sub}`);
 
     const updatedOrganization = await this.prisma.organization.update({
       where: { organizationId: orgBigIntId },
@@ -624,7 +624,7 @@ export class OrganizationService {
   async deleteOrganization(organizationId: string, user?: any) {
     const orgBigIntId = BigInt(organizationId);
 
-    this.logger.warn(`🗑️ Organization ${organizationId} deleted by user ${user?.sub || 'anonymous'}`);
+    this.logger.warn(`🗑️ Organization ${organizationId} deleted by user ${user.sub}`);
 
     return this.prisma.organization.delete({
       where: { organizationId: orgBigIntId },
@@ -777,7 +777,7 @@ export class OrganizationService {
       throw new NotFoundException('User not found in organization');
     }
 
-    this.logger.log(`👤 User ${userId} ${isVerified ? 'verified' : 'unverified'} in organization ${organizationId} by ${verifierUser?.sub || 'anonymous'}`);
+    this.logger.log(`👤 User ${userId} ${isVerified ? 'verified' : 'unverified'} in organization ${organizationId} by ${verifierUser.sub}`);
 
     const verifierBigIntId = verifierUser?.sub ? BigInt(verifierUser.sub) : userBigIntId;
 
@@ -1074,7 +1074,7 @@ export class OrganizationService {
       // SECURITY AUDIT LOGGING
       this.logger.log(
         `🏢 INSTITUTE ASSIGNMENT: Organization "${result.organizationName}" (ID: ${organizationId}) ` +
-        `assigned to institute ${instituteId} by user ${user?.sub || 'anonymous'} ` +
+        `assigned to institute ${instituteId} by user ${user.sub} ` +
         `| Action: ASSIGN_INSTITUTE | Timestamp: ${new Date().toISOString()}`
       );
 
@@ -1087,7 +1087,7 @@ export class OrganizationService {
         organizationId,
         instituteId,
         performedBy: {
-          userId: user?.sub || 'anonymous',
+          userId: user.sub,
         },
       };
 
@@ -1095,7 +1095,7 @@ export class OrganizationService {
       // Enhanced error handling with security audit
       this.logger.error(
         `❌ INSTITUTE ASSIGNMENT FAILED: Organization ${organizationId} to institute ${assignInstituteDto.instituteId} ` +
-        `by user ${user?.sub || 'anonymous'} | Error: ${error.message}`
+        `by user ${user.sub} | Error: ${error.message}`
       );
 
       // Re-throw known exceptions
@@ -1130,7 +1130,7 @@ export class OrganizationService {
       throw new BadRequestException('Organization is not assigned to any institute');
     }
 
-    this.logger.log(`🏢 Organization ${organizationId} removed from institute by user ${user?.sub || 'anonymous'}`);
+    this.logger.log(`🏢 Organization ${organizationId} removed from institute by user ${user.sub}`);
 
     // Remove institute assignment
     const updatedOrganization = await this.prisma.organization.update({
@@ -1660,7 +1660,7 @@ export class OrganizationService {
     return {
       message: 'Presidency transferred successfully',
       newPresidentUserId,
-      previousPresidentUserId: user?.sub || 'anonymous',
+      previousPresidentUserId: user.sub,
       transferredAt: new Date().toISOString()
     };
   }

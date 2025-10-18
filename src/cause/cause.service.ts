@@ -408,26 +408,6 @@ export class CauseService {
   }
 
   /**
-   * Test cloud storage connection
-   */
-  async testGCSConnection() {
-    try {
-      // Simple test - try to get config info
-      return {
-        status: 'ok',
-        message: 'Cloud storage service is available',
-        provider: process.env.STORAGE_PROVIDER || 'local'
-      };
-    } catch (error) {
-      return {
-        status: 'error',
-        message: error.message,
-        provider: process.env.STORAGE_PROVIDER || 'local'
-      };
-    }
-  }
-
-  /**
    * Get causes by organization
    */
   async getCausesByOrganization(organizationId: string, userId?: string) {

@@ -118,21 +118,6 @@ export class CauseController {
   }
 
   /**
-   * Test GCS connection (Debug endpoint)
-   * No authentication required for testing
-   */
-  @Get('test-gcs')
-  @ApiOperation({ 
-    summary: 'Test GCS connection (Debug - No auth required)',
-    description: 'Test endpoint for GCS connection'
-  })
-  @ApiResponse({ status: 200, description: 'GCS connection test result' })
-  async testGCSConnection() {
-    this.logger.log(`🧪 Testing GCS connection - No auth required`);
-    return this.causeService.testGCSConnection();
-  }
-
-  /**
    * Get cause by ID
    */
   @Get(':id')

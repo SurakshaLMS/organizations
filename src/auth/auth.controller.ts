@@ -1,4 +1,5 @@
 ﻿import { Controller, Post, Body, Get, HttpCode, UseInterceptors, UseGuards } from '@nestjs/common';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService, LoginResponse } from './auth.service';
 import { UltraCompactJwtService } from './services/ultra-compact-jwt.service';
 import { LoginDto } from './dto/auth.dto';
@@ -16,23 +17,40 @@ export class AuthController {
     private readonly ultraCompactJwtService: UltraCompactJwtService,
   ) {}
 
+  /**
+   * Login endpoint with strict rate limiting
+   * Allows only 5 attempts per 15 minutes to prevent brute force attacks
+   */
   @Post('login')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Login with ultra-compact JWT tokens' })
+  @Throttle({ default: { limit: 5, ttl: 900000 } }) // 5 attempts per 15 minutes (900,000ms)
+  @ApiOperation({ 
+    summary: 'Login with ultra-compact JWT tokens', 
+    description: 'Rate limited: 5 attempts per 15 minutes to prevent brute force attacks' 
+  })
   @ApiResponse({ status: 200, description: 'Login successful with ultra-compact JWT token' })
+  @ApiResponse({ status: 429, description: 'Too many login attempts - Please try again later' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto): Promise<LoginResponse> {
     return this.authService.login(loginDto);
   }
 
+  /**
+   * Test endpoint - No authentication required
+   * Skips throttle for testing purposes only
+   * TODO: Remove this endpoint in production
+   */
   @Get('test')
-  @ApiOperation({ summary: 'Test endpoint without authentication' })
+  @SkipThrottle()
+  @ApiOperation({ summary: 'Test endpoint without authentication (REMOVE IN PRODUCTION)' })
   @ApiResponse({ status: 200, description: 'Test endpoint successful' })
   async testToken() {
     return {
       message: 'Test endpoint working without authentication ✅',
       status: 'No JWT token required',
       timestamp: new Date().toISOString(),
-      info: 'This endpoint tests basic functionality without authentication requirements'
+      info: 'This endpoint tests basic functionality without authentication requirements',
+      warning: 'This endpoint should be removed in production'
     };
   }
 

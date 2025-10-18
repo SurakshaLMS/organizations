@@ -94,11 +94,27 @@ async function bootstrap() {
   // Use only valid IP addresses (localhost resolved to 127.0.0.1)
   app.getHttpAdapter().getInstance().set('trust proxy', ['127.0.0.1', '::1']);
 
-  // Enhanced middleware for proxy and cross-origin compatibility
+  // Enhanced middleware for proxy and cross-origin compatibility with security
   app.use((req: any, res: any, next: any) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
+    const requestOrigin = req.headers.origin;
+
     // Handle preflight requests for any route
     if (req.method === 'OPTIONS') {
-      res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+      // SECURITY: In production, validate origin against whitelist
+      if (isProduction && requestOrigin) {
+        if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
+          console.warn(`[SECURITY] CORS preflight blocked for origin: ${requestOrigin}`);
+          return res.status(403).json({
+            statusCode: 403,
+            message: 'Origin not allowed',
+            error: 'Forbidden',
+          });
+        }
+      }
+
+      res.header('Access-Control-Allow-Origin', requestOrigin || (isProduction ? allowedOrigins[0] || '*' : '*'));
       res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
       res.header('Access-Control-Allow-Headers', [
         'Accept',
@@ -124,18 +140,54 @@ async function bootstrap() {
       res.header('Access-Control-Max-Age', '86400'); // 24 hours
       res.header('Access-Control-Allow-Credentials', 'true');
       res.header('Vary', 'Origin, Access-Control-Request-Headers');
+      
+      // SECURITY: Add security headers to OPTIONS responses
+      if (isProduction) {
+        res.header('X-Content-Type-Options', 'nosniff');
+        res.header('X-Frame-Options', 'DENY');
+        res.header('X-XSS-Protection', '1; mode=block');
+        res.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+      }
+      
       return res.sendStatus(200);
     }
     
-    // Enhanced CORS headers for all requests
-    const origin = req.headers.origin;
-    if (origin) {
-      res.header('Access-Control-Allow-Origin', origin);
+    // Enhanced CORS headers for all requests with production security
+    if (isProduction && requestOrigin) {
+      // SECURITY: In production, only allow whitelisted origins
+      if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
+        console.warn(`[SECURITY] CORS request blocked for origin: ${requestOrigin} on ${req.method} ${req.path}`);
+        return res.status(403).json({
+          statusCode: 403,
+          message: 'Origin not allowed',
+          error: 'Forbidden',
+        });
+      }
+      res.header('Access-Control-Allow-Origin', requestOrigin);
+    } else if (!isProduction) {
+      // Development: Allow any origin
+      if (requestOrigin) {
+        res.header('Access-Control-Allow-Origin', requestOrigin);
+      } else {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
     } else {
-      res.header('Access-Control-Allow-Origin', '*');
+      // Production without specific origin - use first allowed origin or deny
+      res.header('Access-Control-Allow-Origin', allowedOrigins[0] || '*');
     }
+
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Vary', 'Origin, Accept-Encoding');
+    
+    // SECURITY: Add anti-MITM headers in production
+    if (isProduction) {
+      res.header('X-Content-Type-Options', 'nosniff');
+      res.header('X-Frame-Options', 'DENY');
+      res.header('X-XSS-Protection', '1; mode=block');
+      res.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+      res.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+      res.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+    }
     
     // Enhanced proxy-friendly headers
     if (req.headers['x-forwarded-proto']) {

@@ -217,28 +217,27 @@ export class OrganizationController {
     @GetUser() user: EnhancedJwtPayload,
     @Query('search') search?: string
   ) {
-    // Mock dashboard data for testing
-    return {
-      message: 'Dashboard endpoint - functionality available during testing',
-      organizations: [],
-      userId: user.sub,
-      userEmail: user.email,
-      search: search || null
-    };
+    // Retrieve organizations with user context
+    const paginationDto = new PaginationDto();
+    paginationDto.page = '1';
+    paginationDto.limit = '50';
+    paginationDto.search = search;
+    
+    return await this.organizationService.getOrganizations(user.sub, paginationDto, user);
   }
 
   @Get(':id')
-  @UseGuards(OptionalJwtAuthGuard)
-  @ApiOperation({ summary: 'Get organization by ID - Optional Authentication' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get organization by ID - Authentication required' })
   @ApiParam({ name: 'id', description: 'Organization ID' })
   @ApiResponse({ status: 200, description: 'Organization found', type: OrganizationDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Authentication required' })
   @ApiResponse({ status: 404, description: 'Organization not found' })
   async getOrganizationById(
     @Param('id', ParseOrganizationIdPipe()) id: string,
-    @GetUser() user?: EnhancedJwtPayload
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    const userId = user?.sub; // undefined if not authenticated
-    return this.organizationService.getOrganizationById(id, userId);
+    return this.organizationService.getOrganizationById(id, user.sub);
   }
 
   @Put(':id')

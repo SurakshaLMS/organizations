@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAccessValidationService } from '../auth/jwt-access-validation.service';
 import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lecture.dto';
@@ -308,9 +308,14 @@ export class LectureService {
    * - Production-ready pagination
    */
   async getLectures(
-    user: EnhancedJwtPayload | undefined, 
+    user: EnhancedJwtPayload, 
     queryDto: LectureQueryDto = {}
   ): Promise<PaginatedResponse<any>> {
+    
+    // Validate user authentication
+    if (!user || !user.sub) {
+      throw new UnauthorizedException('Authentication required');
+    }
     
     try {
       // Step 1: Build optimized where clause
@@ -366,9 +371,8 @@ export class LectureService {
         this.prisma.lecture.count({ where }),
       ]);
 
-      this.logger.log(`📚 Retrieved ${lectures.length} lectures (${total} total) for user ${user?.sub || 'anonymous'}`);
-
-      // Transform data to production format with proper date handling
+      
+      this.logger.log(`📚 Retrieved ${lectures.length} lectures (${total} total) for user ${user.sub}`);      // Transform data to production format with proper date handling
       const transformedLectures = lectures.map(lecture => ({
         lectureId: convertToString(lecture.lectureId),
         title: lecture.title,
@@ -420,7 +424,11 @@ export class LectureService {
    * - Proper date handling
    * - Sensitive data filtering
    */
-  async getLectureById(lectureId: string, user?: EnhancedJwtPayload) {
+  async getLectureById(lectureId: string, user: EnhancedJwtPayload) {
+    // Validate user authentication
+    if (!user || !user.sub) {
+      throw new UnauthorizedException('Authentication required');
+    }
     try {
       const lectureBigIntId = convertToBigInt(lectureId);
       
@@ -508,7 +516,8 @@ export class LectureService {
         documentCount: lecture.documentations.length,
       };
 
-      this.logger.log(`📚 Lecture ${lectureId} accessed by user ${user?.sub || 'anonymous'} with ${lecture.documentations.length} documents`);
+            
+      this.logger.log(`📚 Lecture ${lectureId} accessed by user ${user.sub} with ${lecture.documentations.length} documents`);
       return result;
 
     } catch (error) {
@@ -545,11 +554,13 @@ export class LectureService {
         throw new NotFoundException('Lecture not found');
       }
 
-      // JWT-based access validation (skip for anonymous/mock users)
-      const organizationId = convertToString(lecture.cause.organizationId);
-      if (user && user.sub !== 'anonymous-user' && user.orgAccess && user.orgAccess.length > 0) {
-        this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
+      // JWT-based access validation - REQUIRED
+      if (!user || !user.orgAccess || user.orgAccess.length === 0) {
+        throw new UnauthorizedException('Authentication required - No organization access');
       }
+      
+      const organizationId = convertToString(lecture.cause.organizationId);
+      this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
 
       // Prepare update data
       const updateData: any = {};
@@ -1003,9 +1014,6 @@ export class LectureService {
           },
         ];
       }
-    } else {
-      // Anonymous users see only public lectures
-      where.isPublic = true;
     }
 
     // Step 3: ORGANIZATION FILTERING (AVOID CAUSE JOINS WHEN POSSIBLE)

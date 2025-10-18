@@ -1,13 +1,25 @@
-import { IsOptional, IsNumberString, IsString, IsIn } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsOptional, IsNumberString, IsString, IsIn, Min, Max } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 export class PaginationDto {
   @IsOptional()
   @IsNumberString()
+  @Transform(({ value }) => {
+    const num = parseInt(value);
+    if (isNaN(num) || num < 1) return '1';
+    if (num > 1000) return '1000'; // Max 1000 pages
+    return value;
+  })
   page?: string = '1';
 
   @IsOptional()
   @IsNumberString()
+  @Transform(({ value }) => {
+    const num = parseInt(value);
+    if (isNaN(num) || num < 1) return '10';
+    if (num > 100) return '100'; // SECURITY: Max 100 items per page
+    return value;
+  })
   limit?: string = '10';
 
   @IsOptional()
@@ -20,15 +32,26 @@ export class PaginationDto {
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => {
+    // SECURITY: Limit search string length to prevent DoS
+    if (typeof value === 'string' && value.length > 200) {
+      return value.substring(0, 200);
+    }
+    return value;
+  })
   search?: string;
 
-  // Transform string values to numbers
+  // Transform string values to numbers with security limits
   get pageNumber(): number {
-    return parseInt(this.page || '1') || 1;
+    const parsed = parseInt(this.page || '1') || 1;
+    // SECURITY: Prevent massive page numbers (DoS protection)
+    return Math.max(1, Math.min(parsed, 1000));
   }
 
   get limitNumber(): number {
-    return Math.min(parseInt(this.limit || '10') || 10, 100); // Max 100 items per page
+    const parsed = parseInt(this.limit || '10') || 10;
+    // SECURITY: Max 100 items per page (prevent bulk data extraction)
+    return Math.max(1, Math.min(parsed, 100));
   }
 
   get skip(): number {

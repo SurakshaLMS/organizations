@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UploadedFiles, UseGuards } from '@nestjs/common';
 import { FilesInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
 import { LectureService } from './lecture.service';
 import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lecture.dto';
 import { CreateLectureWithFilesDto, UpdateLectureWithFilesDto } from './dto/lecture-with-files.dto';
@@ -215,14 +215,16 @@ export class LectureController {
    * Enhanced endpoint for updating lecture with new document uploads
    * Supports both updating lecture details and adding new documents
    * Uses multipart/form-data with FilesInterceptor for better file handling
-   * No authentication required for testing
+   * Authentication required - uses JWT token
    */
   @Put(':id/with-files')
+  @UseGuards(EnhancedJwtAuthGuard)
   @UseInterceptors(FilesInterceptor('documents', 10)) // Accept up to 10 files with field name 'documents'
   @ApiOperation({ 
     summary: 'Update lecture with document uploads to Google Cloud Storage',
-    description: 'No authentication required'
+    description: 'Authentication required'
   })
+  @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Lecture ID to update' })
   @ApiBody({ 
@@ -230,27 +232,18 @@ export class LectureController {
     description: 'Lecture update data with optional file uploads (use form-data with field name "documents")' 
   })
   @ApiResponse({ status: 200, description: 'Lecture updated with documents successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Authentication required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
   @ApiResponse({ status: 413, description: 'File too large or too many files' })
   async updateLectureWithFiles(
     @Param('id') id: string,
     @Body() updateLectureDto: UpdateLectureWithFilesDto,
-    @UploadedFiles() files: Express.Multer.File[]
+    @UploadedFiles() files: Express.Multer.File[],
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Updating lecture ${id} with ${files?.length || 0} documents - No auth required`);
-    
-    // Create a mock user for the service call
-    const mockUser = { 
-      sub: 'anonymous-user',
-      email: 'anonymous@example.com',
-      name: 'Anonymous User',
-      userType: 'USER', 
-      orgAccess: [],
-      isGlobalAdmin: false
-    } as EnhancedJwtPayload;
-    
-    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, mockUser);
+    this.logger.log(`📚 Updating lecture ${id} with ${files?.length || 0} documents by user ${user.sub}`);
+    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, user);
   }
 
   /**
@@ -260,15 +253,17 @@ export class LectureController {
    * Maintained for backward compatibility
    * Use PUT /:id/with-files for new implementations
    * Accepts files from any field name (documents, files, file, etc.)
-   * No authentication required for testing
+   * Authentication required - uses JWT token
    */
   @Put(':id/with-documents')
+  @UseGuards(EnhancedJwtAuthGuard)
   @UseInterceptors(AnyFilesInterceptor()) // Accept files from any field name
   @ApiOperation({ 
     summary: 'Update lecture with document uploads (Legacy - use /:id/with-files instead)',
     deprecated: true,
-    description: 'No authentication required'
+    description: 'Authentication required'
   })
+  @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Lecture ID to update' })
   @ApiBody({ 
@@ -276,26 +271,17 @@ export class LectureController {
     description: 'Lecture update data with optional file uploads (use form-data with any field name like documents, files, or file)' 
   })
   @ApiResponse({ status: 200, description: 'Lecture updated with documents successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Authentication required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
   async updateLectureWithDocuments(
     @Param('id') id: string,
     @Body() updateLectureDto: UpdateLectureDto,
-    @UploadedFiles() files: Express.Multer.File[]
+    @UploadedFiles() files: Express.Multer.File[],
+    @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 [LEGACY] Updating lecture ${id} with ${files?.length || 0} documents - No auth required`);
-    
-    // Create a mock user for the service call
-    const mockUser = { 
-      sub: 'anonymous-user',
-      email: 'anonymous@example.com',
-      name: 'Anonymous User',
-      userType: 'USER', 
-      orgAccess: [],
-      isGlobalAdmin: false
-    } as EnhancedJwtPayload;
-    
-    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, mockUser);
+    this.logger.log(`📚 [LEGACY] Updating lecture ${id} with ${files?.length || 0} documents by user ${user.sub}`);
+    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, user);
   }
 
   /**
