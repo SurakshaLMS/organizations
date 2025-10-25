@@ -230,11 +230,11 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
     }
 
     // Handle objects
-    if (typeof data === 'object') {
+    if (typeof data === 'object' && data !== null) {
       const sanitized = {};
       
       for (const key in data) {
-        if (data.hasOwnProperty(key)) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
           const value = data[key];
           
           // For logging, redact ALL sensitive fields including tokens
@@ -272,11 +272,11 @@ export class SecurityHeadersInterceptor implements NestInterceptor {
     }
 
     // Handle objects
-    if (typeof data === 'object') {
+    if (typeof data === 'object' && data !== null) {
       const sanitized = {};
       
       for (const key in data) {
-        if (data.hasOwnProperty(key)) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
           const value = data[key];
           
           // Don't redact tokens in login/auth responses - they need to be sent to frontend

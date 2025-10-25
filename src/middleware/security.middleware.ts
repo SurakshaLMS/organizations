@@ -186,7 +186,7 @@ export class SecurityMiddleware implements NestMiddleware {
     if (obj !== null && typeof obj === 'object') {
       const sanitized: any = {};
       for (const key in obj) {
-        if (obj.hasOwnProperty(key)) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
           sanitized[key] = this.sanitizeInput(obj[key], depth + 1);
         }
       }
@@ -224,7 +224,7 @@ export class SecurityMiddleware implements NestMiddleware {
 
     if (obj !== null && typeof obj === 'object') {
       for (const key in obj) {
-        if (obj.hasOwnProperty(key)) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
           const result = this.checkDangerousInput(obj[key], depth + 1);
           if (result) return result;
         }
