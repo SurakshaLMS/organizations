@@ -1,41 +1,31 @@
-# Multi-stage build for production
-FROM node:20-alpine AS builder
+# Single-stage build for reliability (Prisma client issues with multi-stage)
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache python3 make g++
+# Install system dependencies
+RUN apk add --no-cache python3 make g++ wget curl
 
-# Copy package files and install ALL dependencies (including dev)
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# Copy package files and install all dependencies
 COPY package*.json ./
 RUN npm ci
 
 # Copy source code
 COPY . .
 
-# Generate Prisma client and build
-RUN npx prisma generate --schema=prisma/schema.prisma || true
+# Generate Prisma client and build application
+RUN npx prisma generate --schema=prisma/schema.prisma
 RUN npm run build
 
-# Production stage
-FROM node:20-alpine AS production
+# Skip pruning dev dependencies to keep Prisma CLI available
+# This ensures Prisma client can be regenerated if needed
 
-WORKDIR /app
-
-# Install runtime dependencies
-RUN apk add --no-cache wget curl
-
-# Set environment variables
-ENV NODE_ENV=production
-ENV PORT=8080
-
-# Copy package files and install ONLY production dependencies
-COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
+# Clean up build cache
+RUN npm cache clean --force
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
