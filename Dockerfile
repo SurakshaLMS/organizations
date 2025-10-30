@@ -1,47 +1,62 @@
-# Multi-stage Dockerfile for NestJS (production)
-# Builder stage: install deps, generate prisma client, build TS
-FROM node:20-alpine AS builder
+# Multi-stage build for NestJS application
+FROM node:20-alpine AS development
 
-# Install build dependencies
-RUN apk add --no-cache python3 make g++ git
-
+# Set working directory
 WORKDIR /app
 
-# Copy package manifests first to leverage Docker cache
-COPY package.json package-lock.json* ./
+# Copy package files
+COPY package*.json ./
 
-# Install all deps (including devDeps for build)
-RUN npm ci --silent
+# Install dependencies (include dev deps for building)
+RUN npm ci
 
-# Copy prisma schema so generation can run (if you use prisma)
-COPY prisma ./prisma
-
-# Copy source files
+# Copy source code
 COPY . .
 
-# Generate prisma client (if applicable) and build
+# Generate Prisma client if schema exists
 RUN npx prisma generate --schema=prisma/schema.prisma || true
+
+# Build the application
 RUN npm run build
 
-# Remove dev deps to reduce size
-RUN npm prune --production
+# Production stage
+FROM node:20-alpine AS production
 
-# Runner stage: smaller runtime image
-FROM node:20-alpine AS runner
+# Install wget for health check
+RUN apk add --no-cache wget
+
+# Set working directory
 WORKDIR /app
 
-ENV NODE_ENV=production
-ENV PORT=8080
+# Copy package files
+COPY package*.json ./
 
-# Copy production node_modules and build output from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
+# Install only production dependencies
+RUN npm ci --omit=dev && npm cache clean --force
 
-# If you have other runtime assets, copy them as needed
-# COPY --from=builder /app/uploads ./uploads
+# Copy built application from development stage
+COPY --from=development /app/dist ./dist
 
+# Copy prisma files for runtime
+COPY --from=development /app/prisma ./prisma
+
+# Copy node_modules from development (in case any runtime deps are needed)
+COPY --from=development /app/node_modules ./node_modules
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nestjs -u 1001
+
+# Change ownership of the app directory
+RUN chown -R nestjs:nodejs /app
+USER nestjs
+
+# Expose port (Cloud Run uses PORT environment variable, default 8080)
 EXPOSE 8080
 
-# Start the app (matches package.json start:prod)
+# Health check (using PORT environment variable)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
+
+# Start the application
 CMD ["node", "dist/main"]
