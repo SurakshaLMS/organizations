@@ -102,19 +102,19 @@ async function bootstrap() {
 
     // Handle preflight requests for any route
     if (req.method === 'OPTIONS') {
-      // SECURITY: In production, validate origin against whitelist
-      if (isProduction && requestOrigin) {
-        if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
-          console.warn(`[SECURITY] CORS preflight blocked for origin: ${requestOrigin}`);
-          return res.status(403).json({
-            statusCode: 403,
-            message: 'Origin not allowed',
-            error: 'Forbidden',
-          });
-        }
-      }
+      // ORIGINS DISABLED: Allow all origins (origin validation disabled)
+      // if (isProduction && requestOrigin) {
+      //   if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
+      //     console.warn(`[SECURITY] CORS preflight blocked for origin: ${requestOrigin}`);
+      //     return res.status(403).json({
+      //       statusCode: 403,
+      //       message: 'Origin not allowed',
+      //       error: 'Forbidden',
+      //     });
+      //   }
+      // }
 
-      res.header('Access-Control-Allow-Origin', requestOrigin || (isProduction ? allowedOrigins[0] || '*' : '*'));
+      res.header('Access-Control-Allow-Origin', requestOrigin || '*'); // ORIGINS DISABLED: Always allow
       res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
       res.header('Access-Control-Allow-Headers', [
         'Accept',
@@ -152,28 +152,36 @@ async function bootstrap() {
       return res.sendStatus(200);
     }
     
-    // Enhanced CORS headers for all requests with production security
-    if (isProduction && requestOrigin) {
-      // SECURITY: In production, only allow whitelisted origins
-      if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
-        console.warn(`[SECURITY] CORS request blocked for origin: ${requestOrigin} on ${req.method} ${req.path}`);
-        return res.status(403).json({
-          statusCode: 403,
-          message: 'Origin not allowed',
-          error: 'Forbidden',
-        });
-      }
+    // Enhanced CORS headers for all requests - ORIGINS DISABLED
+    // ORIGINS DISABLED: Allow all origins (origin validation disabled)
+    // if (isProduction && requestOrigin) {
+    //   // SECURITY: In production, only allow whitelisted origins
+    //   if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
+    //     console.warn(`[SECURITY] CORS request blocked for origin: ${requestOrigin} on ${req.method} ${req.path}`);
+    //     return res.status(403).json({
+    //       statusCode: 403,
+    //       message: 'Origin not allowed',
+    //       error: 'Forbidden',
+    //     });
+    //   }
+    //   res.header('Access-Control-Allow-Origin', requestOrigin);
+    // } else if (!isProduction) {
+    //   // Development: Allow any origin
+    //   if (requestOrigin) {
+    //     res.header('Access-Control-Allow-Origin', requestOrigin);
+    //   } else {
+    //     res.header('Access-Control-Allow-Origin', '*');
+    //   }
+    // } else {
+    //   // Production without specific origin - use first allowed origin or deny
+    //   res.header('Access-Control-Allow-Origin', allowedOrigins[0] || '*');
+    // }
+
+    // ORIGINS DISABLED: Always allow all origins
+    if (requestOrigin) {
       res.header('Access-Control-Allow-Origin', requestOrigin);
-    } else if (!isProduction) {
-      // Development: Allow any origin
-      if (requestOrigin) {
-        res.header('Access-Control-Allow-Origin', requestOrigin);
-      } else {
-        res.header('Access-Control-Allow-Origin', '*');
-      }
     } else {
-      // Production without specific origin - use first allowed origin or deny
-      res.header('Access-Control-Allow-Origin', allowedOrigins[0] || '*');
+      res.header('Access-Control-Allow-Origin', '*');
     }
 
     res.header('Access-Control-Allow-Credentials', 'true');
