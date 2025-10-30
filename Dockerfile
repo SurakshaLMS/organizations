@@ -31,6 +31,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=8080
 
 # Copy production node_modules and build output from builder
 COPY --from=builder /app/node_modules ./node_modules
@@ -40,7 +41,7 @@ COPY --from=builder /app/prisma ./prisma
 # If you have other runtime assets, copy them as needed
 # COPY --from=builder /app/uploads ./uploads
 
-EXPOSE 3001
+EXPOSE 8080
 
 # Start the app (matches package.json start:prod)
 CMD ["node", "dist/main"]
