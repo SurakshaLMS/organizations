@@ -267,7 +267,7 @@ async function bootstrap() {
   app.setGlobalPrefix('organization/api/v1');
 
   // Port configuration
-  const port = configService.get<number>('app.port') || 3000;
+  const port = parseInt(process.env.PORT || '8080', 10) || configService.get<number>('app.port') || 8080;
 
   // Swagger configuration
   const swaggerConfig = new DocumentBuilder()
@@ -371,8 +371,8 @@ Standard HTTP status codes with detailed error messages:
   // Prisma shutdown hooks
   await prismaService.enableShutdownHooks(app);
 
-  // Start server
-  await app.listen(port);
+  // Start server - bind to 0.0.0.0 for Cloud Run compatibility
+  await app.listen(port, '0.0.0.0');
   
   console.log(`🚀 Application is running on: http://localhost:${port}/organization/api/v1`);
   console.log(`📚 API Documentation: http://localhost:${port}/organization/api/v1/docs`);
