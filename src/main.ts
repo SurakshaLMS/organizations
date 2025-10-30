@@ -372,13 +372,20 @@ Standard HTTP status codes with detailed error messages:
   await prismaService.enableShutdownHooks(app);
 
   // Start server - bind to 0.0.0.0 for Cloud Run compatibility
+  console.log(`🚀 Starting server on port ${port}...`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🔗 Database URL configured: ${process.env.DATABASE_URL ? 'Yes' : 'No'}`);
+  
   await app.listen(port, '0.0.0.0');
   
-  console.log(`🚀 Application is running on: http://localhost:${port}/organization/api/v1`);
-  console.log(`📚 API Documentation: http://localhost:${port}/organization/api/v1/docs`);
+  console.log(`✅ Server started successfully!`);
+  console.log(`🚀 Application is running on: http://0.0.0.0:${port}/organization/api/v1`);
+  console.log(`📚 API Documentation: http://0.0.0.0:${port}/api/docs`);
+  console.log(`💚 Health check: http://0.0.0.0:${port}/health`);
 }
 
 bootstrap().catch((error) => {
-  console.error('❌ Error starting server:', error);
+  console.error('❌ Fatal error starting server:', error);
+  console.error('Stack trace:', error.stack);
   process.exit(1);
 });

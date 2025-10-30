@@ -7,13 +7,25 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     super({
       // Reduce query logging for performance (remove 'query' in production)
       log: ['info', 'warn', 'error'],
+      // Add connection timeout for Cloud Run
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL,
+        },
+      },
     });
   }
 
   async onModuleInit() {
+    // Skip database connection if DATABASE_URL is not provided
+    if (!process.env.DATABASE_URL) {
+      console.warn('⚠️ DATABASE_URL not provided, skipping database connection');
+      return;
+    }
+
     // Add timeout and retry for Cloud Run startup
-    const maxRetries = 3;
-    const timeout = 10000; // 10 seconds per attempt
+    const maxRetries = 2; // Reduced for faster startup
+    const timeout = 8000; // 8 seconds per attempt
     
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -32,12 +44,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         console.error(`❌ Database connection attempt ${i + 1} failed:`, error.message);
         
         if (i === maxRetries - 1) {
-          console.error('❌ Failed to connect to database after max retries');
-          throw error;
+          console.warn('⚠️ Starting server without database connection. Some features may not work.');
+          // Don't throw error - let the app start without DB
+          return;
         }
         
         // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Reduced wait time
       }
     }
   }

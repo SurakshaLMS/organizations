@@ -1,0 +1,26 @@
+# Minimal debugging Dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --omit=dev
+
+# Copy everything
+COPY . .
+
+# Build app
+RUN npm run build
+
+# Environment
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# Simple startup
+EXPOSE 8080
+
+# Direct start without complexity
+CMD ["node", "dist/main"]

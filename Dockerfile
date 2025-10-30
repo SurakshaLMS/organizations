@@ -1,62 +1,53 @@
-# Multi-stage build for NestJS application
-FROM node:20-alpine AS development
+# Multi-stage build for production
+FROM node:20-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
 
-# Install dependencies (include dev deps for building)
+# Copy package files and install ALL dependencies (including dev)
+COPY package*.json ./
 RUN npm ci
 
 # Copy source code
 COPY . .
 
-# Generate Prisma client if schema exists
+# Generate Prisma client and build
 RUN npx prisma generate --schema=prisma/schema.prisma || true
-
-# Build the application
 RUN npm run build
 
 # Production stage
 FROM node:20-alpine AS production
 
-# Install wget for health check
-RUN apk add --no-cache wget
-
-# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Install runtime dependencies
+RUN apk add --no-cache wget curl
 
-# Install only production dependencies
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# Copy package files and install ONLY production dependencies
+COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Copy built application from development stage
-COPY --from=development /app/dist ./dist
-
-# Copy prisma files for runtime
-COPY --from=development /app/prisma ./prisma
-
-# Copy node_modules from development (in case any runtime deps are needed)
-COPY --from=development /app/node_modules ./node_modules
+# Copy built application from builder stage
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
 
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nestjs -u 1001
-
-# Change ownership of the app directory
-RUN chown -R nestjs:nodejs /app
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nestjs -u 1001
 USER nestjs
 
-# Expose port (Cloud Run uses PORT environment variable, default 8080)
+# Expose port
 EXPOSE 8080
 
-# Health check (using PORT environment variable)
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/organization/api/v1/health || exit 1
 
 # Start the application
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main.js"]

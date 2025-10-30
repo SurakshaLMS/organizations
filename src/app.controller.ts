@@ -20,6 +20,8 @@ export class AppController {
       status: 'ok',
       timestamp: new Date().toISOString(),
       service: 'organizations',
+      port: process.env.PORT || 'not set',
+      nodeEnv: process.env.NODE_ENV || 'not set',
     };
   }
 
@@ -29,6 +31,13 @@ export class AppController {
     return {
       status: 'ready',
       timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
     };
+  }
+
+  @Get('ping')
+  @ApiOperation({ summary: 'Simple ping endpoint' })
+  getPing() {
+    return 'pong';
   }
 }
