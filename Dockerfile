@@ -13,8 +13,17 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Generate Prisma client BEFORE building (critical for TypeScript compilation)
+RUN echo "=== Generating Prisma client ===" && \
+    npx prisma generate --schema=prisma/schema.prisma && \
+    echo "=== Verifying Prisma client generation ===" && \
+    ls -la node_modules/.prisma/client/ && \
+    echo "=== Checking for required enums ===" && \
+    grep -E "(OrganizationType|OrganizationRole)" node_modules/.prisma/client/index.d.ts | head -10 || echo "Enums not found in generated client"
+
 # Build the application
-RUN npm run build
+RUN echo "=== Building NestJS application ===" && \
+    npm run build
 
 # Production stage
 FROM node:20-alpine AS production
@@ -31,8 +40,20 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built application from development stage
 COPY --from=development /app/dist ./dist
 
+# Copy Prisma schema and generated client
+COPY --from=development /app/prisma ./prisma
+COPY --from=development /app/node_modules/.prisma ./node_modules/.prisma
+
 # Copy node_modules from development (in case any runtime deps are needed)
 COPY --from=development /app/node_modules ./node_modules
+
+# Verify production setup
+RUN echo "=== Production stage verification ===" && \
+    ls -la dist/src/ && \
+    ls -la node_modules/@prisma/client/ && \
+    ls -la node_modules/.prisma/client/ && \
+    echo "=== Checking main.js exists ===" && \
+    test -f dist/src/main.js && echo "main.js found" || echo "main.js NOT found"
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs
@@ -49,5 +70,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
 
-# Start the application
-CMD ["node", "dist/main"]
+# Start the application (correct path based on NestJS build output)
+CMD ["node", "dist/src/main.js"]

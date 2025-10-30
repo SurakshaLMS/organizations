@@ -1,8 +1,6 @@
-# Ignore node modules
 node_modules
 npm-debug.log
 
-# Ignore development files
 *.md
 .git
 .gitignore
@@ -13,18 +11,15 @@ README.md
 .env.test
 .env.productiona
 
-# Ignore test files
 test
 coverage
 .nyc_output
 
-# Ignore IDE files
 .vscode
 .idea
 *.swp
 *.swo
 
-# Ignore OS files
 .DS_Store
 Thumbs.db
 
