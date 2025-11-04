@@ -18,6 +18,9 @@ async function main() {
         password: await hashPassword('AdminPassword123!'),
         firstName: 'Admin',
         lastName: 'User',
+        user_type: 'ORGANIZATION_MANAGER',
+        district: 'COLOMBO',
+        province: 'WESTERN',
       },
     }),
     prisma.user.create({
@@ -26,6 +29,9 @@ async function main() {
         password: await hashPassword('StudentPassword123!'),
         firstName: 'Student',
         lastName: 'User',
+        user_type: 'USER',
+        district: 'COLOMBO',
+        province: 'WESTERN',
       },
     }),
   ]);

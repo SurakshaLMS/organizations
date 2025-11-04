@@ -172,8 +172,11 @@ export class OrganizationService {
             email: 'org.manager@system.local',
             firstName: 'Organization',
             lastName: 'Manager',
-            isActive: true,
-            password: null, // No password for system user
+            isActive: 1 as any, // TinyInt in database
+            password: null,
+            user_type: 'ORGANIZATION_MANAGER' as any,
+            district: 'COLOMBO' as any,
+            province: 'WESTERN' as any,
           }
         });
         this.logger.log(`✅ Created Organization Manager system user with ID: ${omSystemUser.userId}`);

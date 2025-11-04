@@ -99,7 +99,10 @@ async function main() {
           email: userProfiles[i].email,
           password: await hashPassword(isTestUser ? 'Password123@' : `Password${i + 1}!`),
           firstName: firstName,
-          lastName: lastName,
+          lastName: lastName || 'User',
+          user_type: 'USER',
+          district: 'COLOMBO',
+          province: 'WESTERN',
         },
       });
       users.push(user);
