@@ -36,7 +36,7 @@ export class AuthService {
   ) {}
 
   private readonly logger = {
-    log: (message: string) => console.log(`[AUTH] ${message}`),
+    log: (message: string) => this.logger.log(message),
     warn: (message: string) => console.warn(`[AUTH WARNING] ${message}`),
     error: (message: string) => console.error(`[AUTH ERROR] ${message}`),
   };

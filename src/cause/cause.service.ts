@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
 import { CreateCauseWithImageDto, UpdateCauseWithImageDto } from './dto/cause-with-image.dto';
@@ -8,6 +8,8 @@ import { CloudStorageService } from '../common/services/cloud-storage.service';
 
 @Injectable()
 export class CauseService {
+  private readonly logger = new Logger(CauseService.name);
+  
   constructor(
     private prisma: PrismaService,
     private cloudStorageService: CloudStorageService,
@@ -127,9 +129,9 @@ export class CauseService {
           const urlParts = imageUrl.split('/');
           const relativePath = urlParts.slice(-2).join('/'); // Get folder/filename
           await this.cloudStorageService.deleteFile(relativePath);
-          console.log(`🧹 Cleaned up uploaded image: ${relativePath} due to cause creation failure`);
+          this.logger.log(`🧹 Cleaned up uploaded image: ${relativePath} due to cause creation failure`);
         } catch (cleanupError) {
-          console.error(`❌ Failed to cleanup uploaded image`, cleanupError);
+          this.logger.error(`❌ Failed to cleanup uploaded image`, cleanupError);
         }
       }
 
