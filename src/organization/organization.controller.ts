@@ -12,7 +12,8 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
-  BadRequestException
+  BadRequestException,
+  Logger
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
@@ -41,6 +42,8 @@ import { CloudStorageService } from '../common/services/cloud-storage.service';
   validateCustomDecorators: true
 }))
 export class OrganizationController {
+  private readonly logger = new Logger(OrganizationController.name);
+
   constructor(
     private readonly organizationService: OrganizationService,
     private readonly cloudStorageService: CloudStorageService
@@ -48,7 +51,20 @@ export class OrganizationController {
 
   @Post()
   @UseGuards(HybridOrganizationManagerGuard)
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(FileInterceptor('image', {
+    limits: {
+      fileSize: 5 * 1024 * 1024, // ✅ SECURITY: 5MB max file size
+    },
+    fileFilter: (req, file, cb) => {
+      // ✅ SECURITY: Whitelist allowed MIME types
+      const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      if (allowedMimes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException(`Invalid file type: ${file.mimetype}. Only JPEG, PNG, GIF, and WebP images are allowed.`), false);
+      }
+    },
+  }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Create organization with optional image upload - Requires Organization Manager Token (Static or JWT)' })
   @ApiBody({ type: CreateOrganizationWithImageDto })
@@ -62,21 +78,7 @@ export class OrganizationController {
     @GetUser() user: any
   ) {
     try {
-      console.log('🚀 Organization creation request received:', {
-        organizationData: createOrganizationDto,
-        hasImage: !!image,
-        imageInfo: image ? {
-          originalName: image.originalname,
-          mimetype: image.mimetype,
-          size: image.size
-        } : null,
-        userContext: {
-          userId: user?.userId,
-          userType: user?.userType,
-          authMethod: user?.authMethod,
-          isOrganizationManager: user?.isOrganizationManager
-        }
-      });
+      this.logger.log(`Organization creation request - User: ${user?.userId || 'unknown'}, Has image: ${!!image}`);
 
       let imageUrl: string | undefined = createOrganizationDto.imageUrl;
 
@@ -86,9 +88,9 @@ export class OrganizationController {
           // Upload image to Cloud Storage (Google/AWS/Local)
           const uploadResult = await this.cloudStorageService.uploadImage(image, 'organization-images');
           imageUrl = uploadResult.url;
-          console.log('📤 Image uploaded to Cloud Storage:', imageUrl);
+          this.logger.log(`Image uploaded to Cloud Storage: ${imageUrl}`);
         } catch (imageError) {
-          console.error('❌ Image upload failed:', imageError.message);
+          this.logger.error(`Image upload failed: ${imageError.message}`);
           throw new BadRequestException(`Image upload failed: ${imageError.message}`);
         }
       }
@@ -101,21 +103,11 @@ export class OrganizationController {
 
       const result = await this.organizationService.createOrganization(organizationData, user);
       
-      console.log('✅ Organization created successfully:', {
-        organizationId: result.id,
-        name: result.name,
-        hasImage: !!imageUrl,
-        imageUrl: imageUrl
-      });
+      this.logger.log(`Organization created successfully - ID: ${result.id}, Name: ${result.name}`);
 
       return result;
     } catch (error) {
-      console.error('❌ Organization creation failed:', {
-        error: error.message,
-        stack: error.stack,
-        organizationData: createOrganizationDto,
-        userContext: user
-      });
+      this.logger.error(`Organization creation failed: ${error.message}`);
       throw error;
     }
   }
@@ -257,17 +249,7 @@ export class OrganizationController {
     @GetUser() user: EnhancedJwtPayload
   ) {
     try {
-      console.log('🔄 Organization update request received:', {
-        organizationId: id,
-        updateData: updateOrganizationDto,
-        hasImage: !!image,
-        imageInfo: image ? {
-          originalName: image.originalname,
-          mimetype: image.mimetype,
-          size: image.size
-        } : null,
-        userId: user?.sub
-      });
+      this.logger.log(`Organization update request - ID: ${id}, User: ${user?.sub || 'unknown'}, Has image: ${!!image}`);
 
       let imageUrl: string | undefined = updateOrganizationDto.imageUrl;
 
@@ -284,9 +266,9 @@ export class OrganizationController {
           );
           imageUrl = uploadResult.url;
           
-          console.log('📤 Image updated in Cloud Storage:', imageUrl);
+          this.logger.log(`Image updated in Cloud Storage: ${imageUrl}`);
         } catch (imageError) {
-          console.error('❌ Image update failed:', imageError.message);
+          this.logger.error(`Image update failed: ${imageError.message}`);
           throw new BadRequestException(`Image update failed: ${imageError.message}`);
         }
       }
@@ -299,22 +281,11 @@ export class OrganizationController {
 
       const result = await this.organizationService.updateOrganization(id, organizationData, user);
       
-      console.log('✅ Organization updated successfully:', {
-        organizationId: id,
-        organizationName: result.name,
-        imageUrl: result.imageUrl,
-        updatedBy: user?.sub
-      });
+      this.logger.log(`Organization updated successfully - ID: ${id}, Name: ${result.name}`);
 
       return result;
     } catch (error) {
-      console.error('❌ Organization update failed:', {
-        error: error.message,
-        stack: error.stack,
-        organizationId: id,
-        updateData: updateOrganizationDto,
-        userId: user?.sub
-      });
+      this.logger.error(`Organization update failed - ID: ${id}: ${error.message}`);
       throw error;
     }
   }

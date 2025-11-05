@@ -174,7 +174,7 @@ export class OrganizationService {
             lastName: 'Manager',
             isActive: 1 as any, // TinyInt in database
             password: null,
-            user_type: 'ORGANIZATION_MANAGER' as any,
+            userType: 'ORGANIZATION_MANAGER',
             district: 'COLOMBO' as any,
             province: 'WESTERN' as any,
           }
@@ -643,7 +643,7 @@ export class OrganizationService {
       await this.authService.refreshUserToken(userId);
     } catch (error) {
       // Log error but don't fail the main operation
-      console.warn(`Failed to refresh token for user ${userId}:`, error.message);
+      this.logger.warn(`Failed to refresh token for user ${userId}: ${error.message}`);
     }
   }
 

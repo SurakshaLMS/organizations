@@ -1,8 +1,10 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(PrismaService.name);
+
   constructor() {
     super({
       // Reduce query logging for performance (remove 'query' in production)
@@ -19,7 +21,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async onModuleInit() {
     // Skip database connection if DATABASE_URL is not provided
     if (!process.env.DATABASE_URL) {
-      console.warn('⚠️ DATABASE_URL not provided, skipping database connection');
+      this.logger.warn('DATABASE_URL not provided, skipping database connection');
       return;
     }
 
@@ -29,7 +31,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     
     for (let i = 0; i < maxRetries; i++) {
       try {
-        console.log(`🔌 Attempting database connection (attempt ${i + 1}/${maxRetries})...`);
+        this.logger.log(`Attempting database connection (attempt ${i + 1}/${maxRetries})...`);
         
         await Promise.race([
           this.$connect(),
@@ -38,13 +40,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           )
         ]);
         
-        console.log('✅ Database connected successfully');
+        this.logger.log('Database connected successfully');
         return;
       } catch (error) {
-        console.error(`❌ Database connection attempt ${i + 1} failed:`, error.message);
+        this.logger.error(`Database connection attempt ${i + 1} failed: ${error.message}`);
         
         if (i === maxRetries - 1) {
-          console.warn('⚠️ Starting server without database connection. Some features may not work.');
+          this.logger.warn('Starting server without database connection. Some features may not work.');
           // Don't throw error - let the app start without DB
           return;
         }

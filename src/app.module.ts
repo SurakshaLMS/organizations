@@ -8,7 +8,6 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { OrganizationModule } from './organization/organization.module';
-import { InstituteOrganizationsModule } from './institute-organizations/institute-organizations.module';
 import { InstituteModule } from './institute/institute.module';
 import { CauseModule } from './cause/cause.module';
 import { LectureModule } from './lecture/lecture.module';
@@ -55,7 +54,6 @@ import appConfig from './config/app.config';
     PrismaModule,
     AuthModule,
     OrganizationModule,
-    InstituteOrganizationsModule,
     InstituteModule,
     CauseModule,
     LectureModule,

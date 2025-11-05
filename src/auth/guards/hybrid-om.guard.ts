@@ -1,4 +1,4 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
@@ -12,6 +12,8 @@ import { Request } from 'express';
  */
 @Injectable()
 export class  HybridOrganizationManagerGuard implements CanActivate {
+  private readonly logger = new Logger(HybridOrganizationManagerGuard.name);
+
   constructor(
     private configService: ConfigService,
     private jwtService: JwtService
@@ -31,7 +33,7 @@ export class  HybridOrganizationManagerGuard implements CanActivate {
     // Try static OM token first
     const staticOMToken = this.configService.get<string>('OM_TOKEN');
     if (staticOMToken && token === staticOMToken) {
-      console.log('✅ Static Organization Manager token validated');
+      this.logger.debug('Static Organization Manager token validated');
       this.setStaticOMUser(request);
       return true;
     }
@@ -47,20 +49,16 @@ export class  HybridOrganizationManagerGuard implements CanActivate {
       
       // Check if it's an Organization Manager JWT token
       if (payload.ut === 'OM' || payload.userType === 'ORGANIZATION_MANAGER') {
-        console.log('✅ JWT Organization Manager token validated:', {
-          userId: payload.s || payload.sub,
-          userType: payload.ut || payload.userType,
-          adminAccess: payload.aa || payload.adminAccess
-        });
+        this.logger.debug(`JWT Organization Manager token validated for user: ${payload.s || payload.sub}`);
         
         this.setJWTOMUser(request, payload);
         return true;
       } else {
-        console.log('❌ JWT token is not Organization Manager type:', payload.ut || payload.userType);
+        this.logger.warn(`JWT token is not Organization Manager type: ${payload.ut || payload.userType}`);
         throw new UnauthorizedException('Token is not for Organization Manager');
       }
     } catch (jwtError) {
-      console.log('❌ JWT validation failed:', jwtError.message);
+      this.logger.error(`JWT validation failed: ${jwtError.message}`);
       throw new UnauthorizedException('Invalid Organization Manager token');
     }
   }

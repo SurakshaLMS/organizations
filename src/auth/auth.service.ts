@@ -37,6 +37,7 @@ export class AuthService {
 
   private readonly logger = {
     log: (message: string) => console.log(`[AUTH] ${message}`),
+    warn: (message: string) => console.warn(`[AUTH WARNING] ${message}`),
     error: (message: string) => console.error(`[AUTH ERROR] ${message}`),
   };
 
@@ -172,11 +173,13 @@ export class AuthService {
     }
 
     try {
-      // Enhanced temporary bypass for development - matches LaaS known passwords
-      const devPasswords = ['Password123@', 'laas123', 'admin123', 'temp123'];
-      if (devPasswords.includes(plainTextPassword)) {
-        this.logger.log(`✅ Development password bypass successful for: ${plainTextPassword}`);
-        return true;
+      // ✅ SECURITY: Development password bypass - ONLY in development with explicit flag
+      if (process.env.NODE_ENV === 'development' && process.env.ALLOW_DEV_BYPASS === 'true') {
+        const devPasswords = ['Password123@', 'laas123', 'admin123', 'temp123'];
+        if (devPasswords.includes(plainTextPassword)) {
+          this.logger.warn(`⚠️ DEV BYPASS USED for password: ${plainTextPassword} - DO NOT USE IN PRODUCTION`);
+          return true;
+        }
       }
 
       // Method 1: Direct bcrypt validation (most common)
@@ -423,23 +426,25 @@ export class AuthService {
 
   /**
    * Get institute IDs that a user has access to
+   * ✅ SECURITY: Using type-safe Prisma query builder instead of raw SQL
    */
   private async getUserInstituteIds(userId: bigint): Promise<number[]> {
     try {
-      // Get user enrolled institute IDs using your exact SQL query
-      const instituteUsers = await this.prisma.$queryRaw<Array<{ 
-        institute_id: number; 
-        status: string; 
-        created_at: Date; 
-      }>>`
-        SELECT iu.institute_id, iu.status, iu.created_at 
-        FROM institute_user iu
-        WHERE iu.user_id = ${userId} AND (${null} IS NULL OR iu.status = ${null})
-        ORDER BY iu.created_at DESC
-      `;
+      // Use Prisma's type-safe query builder
+      const instituteUsers = await this.prisma.instituteUser.findMany({
+        where: { 
+          userId: userId 
+        },
+        select: { 
+          instituteId: true 
+        },
+        orderBy: { 
+          createdAt: 'desc' 
+        }
+      });
 
       // Extract institute IDs from the query results
-      const instituteIds = instituteUsers.map(iu => iu.institute_id);
+      const instituteIds = instituteUsers.map(iu => Number(iu.instituteId));
       
       if (instituteIds.length > 0) {
         this.logger.log(`🏫 User ${userId} enrolled in institutes: [${instituteIds.join(', ')}]`);

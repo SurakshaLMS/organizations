@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -7,30 +7,33 @@ import { UltraCompactJwtService } from '../services/ultra-compact-jwt.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly logger = new Logger(JwtStrategy.name);
+
   constructor(
     private configService: ConfigService,
     private authService: AuthService,
     private ultraCompactJwtService: UltraCompactJwtService,
   ) {
     const jwtSecret = configService.get<string>('auth.jwtSecret') || 'default-secret-change-in-production';
-    console.log('JWT Strategy - Initializing with ultra-compact token support');
     
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: jwtSecret,
     });
+    
+    this.logger.log('Initializing with ultra-compact token support');
   }
 
   async validate(payload: any) {
-    console.log('🔍 JWT Strategy - Validating payload format...');
+    this.logger.debug('Validating JWT payload format');
     
     try {
       let normalizedPayload;
       
       // Handle ultra-compact format with organization array (s, e, o fields)
       if (payload.s && payload.e && payload.o) {
-        console.log('✅ Detected ultra-compact JWT format with organizations');
+        this.logger.debug('Detected ultra-compact JWT format with organizations');
         
         // Parse ultra-compact organizations: "P66" → { organizationId: "66", role: "PRESIDENT" }
         const organizations = payload.o.map((org: string) => {
@@ -62,7 +65,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
       // Handle Organization Manager ultra-compact format (s, ut, aa fields)
       else if (payload.s && payload.ut === 'OM') {
-        console.log('✅ Detected Organization Manager ultra-compact JWT format');
+        this.logger.debug('Detected Organization Manager ultra-compact JWT format');
         
         // Parse admin access object: {"1": 1} → admin access to organization ID 1
         const adminAccess = payload.aa || {};
@@ -97,7 +100,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
       // Handle other ultra-compact formats (s, ut, aa fields)
       else if (payload.s && payload.ut) {
-        console.log('✅ Detected ultra-compact JWT format with user type');
+        this.logger.debug('Detected ultra-compact JWT format with user type');
         
         // Parse admin access object: {"1": 1} → admin access to organization ID 1
         const adminAccess = payload.aa || {};
@@ -132,7 +135,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
       // Handle standard format (sub, email, organizations fields)
       else if (payload.sub && payload.email && payload.organizations) {
-        console.log('✅ Detected standard JWT format');
+        this.logger.debug('Detected standard JWT format');
         
         // Convert standard organizations to compact format for orgAccess
         const orgAccess = (payload.organizations || []).map((org: any) => {
@@ -153,7 +156,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
       // Handle SUPER_ADMIN/compact format (s, ut fields) 
       else if (payload.s && payload.ut) {
-        console.log('✅ Detected SUPER_ADMIN/Organization Manager compact format');
+        this.logger.debug('Detected SUPER_ADMIN/Organization Manager compact format');
         
         // Parse admin access object: {"1": 1} → admin access to organization ID 1
         const adminAccess = payload.aa || {};
@@ -188,7 +191,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
       // Legacy format fallback
       else if (payload.sub && payload.email) {
-        console.log('✅ Detected legacy JWT format');
+        this.logger.debug('Detected legacy JWT format');
         
         // Convert legacy organizations to compact format for orgAccess
         const orgAccess = (payload.organizations || []).map((org: any) => {
@@ -208,18 +211,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         };
       }
       else {
-        console.log('❌ Unrecognized JWT payload format');
+        this.logger.error('Unrecognized JWT payload format');
         throw new UnauthorizedException('Invalid token format');
       }
 
       // Validate user exists
       const user = await this.authService.validateJwtUser(normalizedPayload);
       if (!user) {
-        console.log('❌ User validation failed for:', normalizedPayload.sub);
+        this.logger.warn(`User validation failed for userId: ${normalizedPayload.sub}`);
         throw new UnauthorizedException('User not found');
       }
       
-      console.log('✅ JWT validation successful for user:', user.userId);
+      this.logger.debug(`JWT validation successful for user: ${user.userId}`);
       
       // Return standardized user object
       const result = {
@@ -236,12 +239,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       };
       
       if (result.instituteIds.length > 0) {
-        console.log('🏫 User has access to institutes:', result.instituteIds);
+        this.logger.debug(`User has access to ${result.instituteIds.length} institutes`);
       }
       
       return result;
     } catch (error) {
-      console.error('❌ JWT validation error:', error.message);
+      this.logger.error(`JWT validation error: ${error.message}`);
       throw new UnauthorizedException('Token validation failed');
     }
   }

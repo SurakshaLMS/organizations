@@ -1,4 +1,4 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 
@@ -11,6 +11,8 @@ import { Request } from 'express';
  */
 @Injectable()
 export class OrganizationManagerTokenGuard implements CanActivate {
+  private readonly logger = new Logger(OrganizationManagerTokenGuard.name);
+
   constructor(private configService: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
@@ -27,17 +29,17 @@ export class OrganizationManagerTokenGuard implements CanActivate {
 
     // Validate OM token is configured
     if (!validOMToken) {
-      console.error('❌ OM_TOKEN not configured in environment variables');
+      this.logger.error('OM_TOKEN not configured in environment variables');
       throw new UnauthorizedException('Organization Manager token not configured');
     }
 
     // Validate token matches
     if (token !== validOMToken) {
-      console.log('❌ Invalid Organization Manager token provided');
+      this.logger.warn('Invalid Organization Manager token provided');
       throw new UnauthorizedException('Invalid Organization Manager token');
     }
 
-    console.log('✅ Organization Manager token validated successfully');
+    this.logger.debug('Organization Manager token validated successfully');
 
     // Create standardized user object following JWT architecture
     const organizationManagerUser = {
@@ -77,11 +79,7 @@ export class OrganizationManagerTokenGuard implements CanActivate {
     // Attach user to request (following NestJS JWT pattern)
     (request as any).user = organizationManagerUser;
     
-    console.log('✅ Organization Manager user context created:', {
-      userId: organizationManagerUser.userId,
-      userType: organizationManagerUser.userType,
-      isGlobalAdmin: organizationManagerUser.isGlobalAdmin
-    });
+    this.logger.debug('Organization Manager user context created');
 
     return true;
   }

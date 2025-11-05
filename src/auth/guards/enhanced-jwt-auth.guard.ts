@@ -1,6 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, ForbiddenException, Logger } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { EnhancedJwtPayload } from '../organization-access.service';
 
@@ -25,6 +26,7 @@ export class EnhancedJwtAuthGuard implements CanActivate {
   constructor(
     private jwtService: JwtService,
     private reflector: Reflector,
+    private configService: ConfigService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -87,10 +89,48 @@ export class EnhancedJwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('Invalid token format');
       }
 
-      // Decode and validate payload
-      const payload = this.jwtService.verify(token, {
-        ignoreExpiration: false, // We'll handle expiration manually with grace period
-      });
+      // ✅ MULTI-SECRET VERIFICATION: Try multiple secrets
+      const secrets = [
+        this.configService.get<string>('auth.jwtSecret'),
+        this.configService.get<string>('OM_TOKEN'),
+      ].filter(Boolean);
+
+      if (secrets.length === 0) {
+        this.logger.error('❌ No JWT secrets configured!');
+        throw new UnauthorizedException('Server configuration error');
+      }
+
+      let payload: any = null;
+      let lastError: any = null;
+      let verifiedWithSecret: string | null = null;
+
+      // Try each secret until one works
+      for (let i = 0; i < secrets.length; i++) {
+        try {
+          payload = this.jwtService.verify(token, { 
+            secret: secrets[i],
+            ignoreExpiration: false 
+          });
+          verifiedWithSecret = i === 0 ? 'Local JWT Secret' : 'OM_TOKEN (Main Backend)';
+          this.logger.log(`✅ Token verified with: ${verifiedWithSecret}`);
+          break;
+        } catch (error) {
+          lastError = error;
+          continue;
+        }
+      }
+
+      // If no secret worked, throw the last error
+      if (!payload) {
+        this.logger.error(`❌ Token verification failed with all secrets: ${lastError?.message}`);
+        if (lastError?.name === 'TokenExpiredError') {
+          throw new UnauthorizedException('Token has expired');
+        }
+        if (lastError?.name === 'JsonWebTokenError') {
+          throw new UnauthorizedException('Invalid token signature');
+        }
+        throw new UnauthorizedException(`Token verification failed: ${lastError?.message}`);
+      }
 
       // Manual expiration check with grace period
       if (payload.exp) {
@@ -102,7 +142,7 @@ export class EnhancedJwtAuthGuard implements CanActivate {
         }
         
         if (now > expiration) {
-          this.logger.warn(`⚠️ Token in grace period for user ${payload.sub}`);
+          this.logger.warn(`⚠️ Token in grace period for user ${payload.sub || payload.s}`);
         }
       }
 
@@ -119,7 +159,7 @@ export class EnhancedJwtAuthGuard implements CanActivate {
         sub: userId,
         email: email,
         name: payload.name || email.split('@')[0],
-        userType: payload.userType || 'USER',
+        userType: payload.userType || payload.ut || 'USER',
         orgAccess: payload.orgAccess || payload.o || [],
         isGlobalAdmin: payload.isGlobalAdmin || false,
         iat: payload.iat,

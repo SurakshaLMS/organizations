@@ -42,6 +42,7 @@ model User {
   paymentExpiresAt   DateTime? @map("payment_expires_at")
   imageUrl           String?   @map("image_url") @db.VarChar(255)
   idUrl              String?   @map("id_url") @db.VarChar(500)
+  userType           String?   @map("user_type") @db.VarChar(50)
   isActive           Boolean   @default(true) @map("is_active")
   createdAt          DateTime  @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)

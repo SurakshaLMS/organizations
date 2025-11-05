@@ -57,32 +57,29 @@ export class CloudStorageService {
   private initializeProviders(): void {
     const provider = this.provider.toLowerCase();
     
+    // SECURITY: Force Google Cloud Storage only - no local fallback
+    if (provider !== 'google' && provider !== 'gcs') {
+      throw new InternalServerErrorException(
+        `Only Google Cloud Storage is supported. Current STORAGE_PROVIDER: ${provider}. ` +
+        `Set STORAGE_PROVIDER=google in your .env file.`
+      );
+    }
+    
     try {
-      switch (provider) {
-        case 'google':
-        case 'gcs':
-          this.initializeGoogleStorage();
-          break;
-        case 'aws':
-        case 's3':
-          this.initializeAwsStorage();
-          break;
-        case 'local':
-          this.initializeLocalStorage();
-          break;
-        default:
-          this.logger.warn(`Unknown provider ${provider}, falling back to local storage`);
-          this.initializeLocalStorage();
+      this.initializeGoogleStorage();
+      
+      if (!this.bucket) {
+        throw new InternalServerErrorException(
+          'Google Cloud Storage initialization failed. ' +
+          'Ensure all GCS environment variables are configured correctly.'
+        );
       }
     } catch (error) {
-      this.logger.error(`Failed to initialize ${provider} storage:`, error);
-      this.logger.warn('⚠️ Falling back to local storage');
-      // Fallback to local storage instead of throwing error
-      try {
-        this.initializeLocalStorage();
-      } catch (localError) {
-        throw new InternalServerErrorException(`All storage initialization failed: ${error.message}`);
-      }
+      this.logger.error(`❌ Google Cloud Storage initialization failed:`, error);
+      throw new InternalServerErrorException(
+        `Google Cloud Storage initialization failed: ${error.message}. ` +
+        `Check your GCS credentials and ensure STORAGE_PROVIDER=google`
+      );
     }
   }
 
@@ -120,17 +117,27 @@ export class CloudStorageService {
       const projectId = this.configService.get<string>('GCS_PROJECT_ID');
       
       if (!this.bucketName || !projectId) {
-        this.logger.warn('⚠️ Google Cloud Storage credentials not configured - skipping GCS initialization');
-        return; // Don't throw error, just skip initialization
+        throw new InternalServerErrorException(
+          'Google Cloud Storage credentials not configured. ' +
+          'Required: GCS_BUCKET_NAME, GCS_PROJECT_ID, GCS_PRIVATE_KEY, GCS_CLIENT_EMAIL'
+        );
       }
 
       const clientEmail = this.configService.get<string>('GCS_CLIENT_EMAIL') || '';
+      const privateKey = this.configService.get<string>('GCS_PRIVATE_KEY');
+      
+      if (!privateKey || !clientEmail) {
+        throw new InternalServerErrorException(
+          'Google Cloud Storage credentials incomplete. ' +
+          'Missing GCS_PRIVATE_KEY or GCS_CLIENT_EMAIL'
+        );
+      }
       
       const credentials = {
         type: "service_account",
         project_id: projectId,
         private_key_id: this.configService.get<string>('GCS_PRIVATE_KEY_ID'),
-        private_key: this.configService.get<string>('GCS_PRIVATE_KEY')?.replace(/\\n/g, '\n'),
+        private_key: privateKey.replace(/\\n/g, '\n'),
         client_email: clientEmail,
         client_id: this.configService.get<string>('GCS_CLIENT_ID'),
         auth_uri: this.configService.get<string>('GCS_AUTH_URI', 'https://accounts.google.com/o/oauth2/auth'),
@@ -149,8 +156,7 @@ export class CloudStorageService {
       this.logger.log(`✅ Google Cloud Storage initialized - Bucket: ${this.bucketName}`);
     } catch (error) {
       this.logger.error('❌ Google Cloud Storage initialization failed:', error);
-      this.logger.warn('⚠️ Continuing without Google Cloud Storage - ensure STORAGE_PROVIDER is set to local or aws');
-      // Don't throw error, allow service to continue with other providers
+      throw error; // Don't catch - let it propagate
     }
   }
 
@@ -374,33 +380,13 @@ export class CloudStorageService {
   }
 
   private async performUpload(file: Buffer, relativePath: string, mimeType: string): Promise<{ success: boolean; metadata?: any; error?: string }> {
-    switch (this.provider.toLowerCase()) {
-      case 'google':
-      case 'gcs':
-        return this.uploadToGoogle(file, relativePath, mimeType);
-      case 'aws':
-      case 's3':
-        return this.uploadToAws(file, relativePath, mimeType);
-      case 'local':
-        return this.uploadToLocal(file, relativePath, mimeType);
-      default:
-        return { success: false, error: `Unsupported provider: ${this.provider}` };
-    }
+    // SECURITY: Only Google Cloud Storage is supported
+    return this.uploadToGoogle(file, relativePath, mimeType);
   }
 
   private async performDeletion(relativePath: string): Promise<boolean> {
-    switch (this.provider.toLowerCase()) {
-      case 'google':
-      case 'gcs':
-        return this.deleteFromGoogle(relativePath);
-      case 'aws':
-      case 's3':
-        return this.deleteFromAws(relativePath);
-      case 'local':
-        return this.deleteFromLocal(relativePath);
-      default:
-        return false;
-    }
+    // SECURITY: Only Google Cloud Storage is supported
+    return this.deleteFromGoogle(relativePath);
   }
 
   // 🌐 Google Cloud Storage Implementation

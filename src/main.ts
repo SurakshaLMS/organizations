@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
@@ -9,6 +9,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as express from 'express';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
+
   // Global BigInt serialization fix
   (BigInt.prototype as any).toJSON = function() {
     return this.toString();
@@ -26,20 +28,28 @@ async function bootstrap() {
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
-        defaultSrc: ["'self'", "*"],
-        styleSrc: ["'self'", "'unsafe-inline'", "*"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*"],
-        imgSrc: ["'self'", "data:", "https:", "http:", "*"],
-        connectSrc: ["'self'", "*"],
-        fontSrc: ["'self'", "*"],
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // ✅ Minimal inline CSS only
+        scriptSrc: ["'self'"], // ✅ No unsafe-inline or unsafe-eval
+        imgSrc: ["'self'", "data:", "https://storage.googleapis.com", "https:"],
+        connectSrc: ["'self'", "https://storage.googleapis.com"],
+        fontSrc: ["'self'", "https:", "data:"],
         objectSrc: ["'none'"],
-        mediaSrc: ["'self'", "*"],
-        frameSrc: ["'self'", "*"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"],
       },
     },
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: "cross-origin" },
     crossOriginOpenerPolicy: { policy: "unsafe-none" },
+    frameguard: { action: 'deny' }, // ✅ Prevent clickjacking
+    hsts: {
+      maxAge: 31536000, // ✅ 1 year HSTS
+      includeSubDomains: true,
+      preload: true,
+    },
+    noSniff: true, // ✅ Prevent MIME sniffing
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   }));
 
   // Enhanced CORS configuration for any proxy and cross-origin access
@@ -102,19 +112,24 @@ async function bootstrap() {
 
     // Handle preflight requests for any route
     if (req.method === 'OPTIONS') {
-      // ORIGINS DISABLED: Allow all origins (origin validation disabled)
-      // if (isProduction && requestOrigin) {
-      //   if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
-      //     console.warn(`[SECURITY] CORS preflight blocked for origin: ${requestOrigin}`);
-      //     return res.status(403).json({
-      //       statusCode: 403,
-      //       message: 'Origin not allowed',
-      //       error: 'Forbidden',
-      //     });
-      //   }
-      // }
+      // ✅ SECURITY: CORS origin validation ENABLED
+      if (isProduction && requestOrigin) {
+        if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
+          logger.warn(`[SECURITY] CORS preflight blocked for origin: ${requestOrigin}`);
+          return res.status(403).json({
+            statusCode: 403,
+            message: 'Origin not allowed',
+            error: 'Forbidden',
+          });
+        }
+      }
 
-      res.header('Access-Control-Allow-Origin', requestOrigin || '*'); // ORIGINS DISABLED: Always allow
+      // Set appropriate origin header
+      if (isProduction && allowedOrigins.length > 0) {
+        res.header('Access-Control-Allow-Origin', requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]);
+      } else {
+        res.header('Access-Control-Allow-Origin', requestOrigin || '*');
+      }
       res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
       res.header('Access-Control-Allow-Headers', [
         'Accept',
@@ -152,36 +167,33 @@ async function bootstrap() {
       return res.sendStatus(200);
     }
     
-    // Enhanced CORS headers for all requests - ORIGINS DISABLED
-    // ORIGINS DISABLED: Allow all origins (origin validation disabled)
-    // if (isProduction && requestOrigin) {
-    //   // SECURITY: In production, only allow whitelisted origins
-    //   if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
-    //     console.warn(`[SECURITY] CORS request blocked for origin: ${requestOrigin} on ${req.method} ${req.path}`);
-    //     return res.status(403).json({
-    //       statusCode: 403,
-    //       message: 'Origin not allowed',
-    //       error: 'Forbidden',
-    //     });
-    //   }
-    //   res.header('Access-Control-Allow-Origin', requestOrigin);
-    // } else if (!isProduction) {
-    //   // Development: Allow any origin
-    //   if (requestOrigin) {
-    //     res.header('Access-Control-Allow-Origin', requestOrigin);
-    //   } else {
-    //     res.header('Access-Control-Allow-Origin', '*');
-    //   }
-    // } else {
-    //   // Production without specific origin - use first allowed origin or deny
-    //   res.header('Access-Control-Allow-Origin', allowedOrigins[0] || '*');
-    // }
-
-    // ORIGINS DISABLED: Always allow all origins
-    if (requestOrigin) {
+    // ✅ SECURITY: Enhanced CORS headers with origin validation ENABLED
+    if (isProduction && requestOrigin) {
+      // SECURITY: In production, only allow whitelisted origins
+      if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
+        logger.warn(`[SECURITY] CORS request blocked for origin: ${requestOrigin} on ${req.method} ${req.path}`);
+        return res.status(403).json({
+          statusCode: 403,
+          message: 'Origin not allowed',
+          error: 'Forbidden',
+        });
+      }
       res.header('Access-Control-Allow-Origin', requestOrigin);
+    } else if (!isProduction) {
+      // Development: Allow any origin (with warning)
+      if (requestOrigin) {
+        res.header('Access-Control-Allow-Origin', requestOrigin);
+      } else {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
     } else {
-      res.header('Access-Control-Allow-Origin', '*');
+      // Production without specific origin - use first allowed origin or deny
+      if (allowedOrigins.length > 0) {
+        res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
+      } else {
+        logger.warn('[SECURITY] No allowed origins configured in production!');
+        res.header('Access-Control-Allow-Origin', 'null');
+      }
     }
 
     res.header('Access-Control-Allow-Credentials', 'true');
@@ -227,15 +239,23 @@ async function bootstrap() {
   // Global exception filter for enhanced error handling
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // Global validation pipe
+  // ✅ SECURITY: Enhanced Global validation pipe with strict rules
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true, // Strip non-whitelisted properties
       forbidNonWhitelisted: true, // Throw error for non-whitelisted properties
+      forbidUnknownValues: true, // ✅ Prevent prototype pollution
       transform: true, // Transform payloads to be objects typed according to their DTO classes
       transformOptions: {
         enableImplicitConversion: true,
       },
+      disableErrorMessages: false, // Show validation errors
+      validateCustomDecorators: true, // Support custom validators
+      stopAtFirstError: false, // Show all validation errors
+      // ✅ SECURITY: Strict validation
+      skipMissingProperties: false,
+      skipNullProperties: false,
+      skipUndefinedProperties: false,
     }),
   );
 
@@ -277,10 +297,15 @@ async function bootstrap() {
   // Port configuration
   const port = parseInt(process.env.PORT || '8080', 10) || configService.get<number>('app.port') || 8080;
 
-  // Swagger configuration
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Organization Management API')
-    .setDescription(`
+  // ✅ SECURITY: Conditional Swagger setup - ONLY in development or when explicitly enabled
+  const isProduction = process.env.NODE_ENV === 'production';
+  const swaggerEnabled = process.env.SWAGGER_ENABLED === 'true' || process.env.ENABLE_SWAGGER === 'true';
+  
+  if (!isProduction || swaggerEnabled) {
+    // Swagger configuration
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Organization Management API')
+      .setDescription(`
 ## Organization Management System API
 
 Complete API for managing organizations with role-based access control.
@@ -374,26 +399,30 @@ Standard HTTP status codes with detailed error messages:
     ],
   });
 
-  console.log(`📚 Swagger UI available at: http://localhost:${port}/api/docs`);
+    logger.log(`Swagger UI available at: http://localhost:${port}/api/docs`);
+  } else {
+    logger.log('Swagger UI disabled in production mode (Set SWAGGER_ENABLED=true to enable)');
+  }
 
   // Prisma shutdown hooks
   await prismaService.enableShutdownHooks(app);
 
   // Start server - bind to 0.0.0.0 for Cloud Run compatibility
-  console.log(`🚀 Starting server on port ${port}...`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🔗 Database URL configured: ${process.env.DATABASE_URL ? 'Yes' : 'No'}`);
+  logger.log(`Starting server on port ${port}...`);
+  logger.log(`Environment: ${process.env.NODE_ENV}`);
+  logger.log(`Database URL configured: ${process.env.DATABASE_URL ? 'Yes' : 'No'}`);
   
   await app.listen(port, '0.0.0.0');
   
-  console.log(`✅ Server started successfully!`);
-  console.log(`🚀 Application is running on: http://0.0.0.0:${port}/organization/api/v1`);
-  console.log(`📚 API Documentation: http://0.0.0.0:${port}/api/docs`);
-  console.log(`💚 Health check: http://0.0.0.0:${port}/health`);
+  logger.log('Server started successfully!');
+  logger.log(`Application is running on: http://0.0.0.0:${port}/organization/api/v1`);
+  logger.log(`API Documentation: http://0.0.0.0:${port}/api/docs`);
+  logger.log(`Health check: http://0.0.0.0:${port}/health`);
 }
 
 bootstrap().catch((error) => {
-  console.error('❌ Fatal error starting server:', error);
-  console.error('Stack trace:', error.stack);
+  const logger = new Logger('Bootstrap');
+  logger.error(`Fatal error starting server: ${error.message}`);
+  logger.error(`Stack trace: ${error.stack}`);
   process.exit(1);
 });
