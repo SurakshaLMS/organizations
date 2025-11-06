@@ -1,0 +1,67 @@
+# Cloud Build configuration for NestJS application
+steps:
+  # Step 1: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/organizations-service:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/organizations-service:latest'
+      - '.'
+    timeout: 1200s  # 20 minutes for build
+
+  # Step 2: Push the Docker image to GCR
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/organizations-service:$SHORT_SHA'
+    waitFor: ['build-image']
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    id: 'deploy'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'organizations'
+      - '--image=gcr.io/$PROJECT_ID/organizations-service:$SHORT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--timeout=300'
+      - '--memory=1Gi'
+      - '--cpu=1'
+      - '--max-instances=10'
+      - '--min-instances=0'
+      - '--set-env-vars=NODE_ENV=production'
+      - '--set-env-vars=PORT=8080'
+      # Add other environment variables via Secret Manager (recommended)
+      # or via --set-env-vars for non-sensitive values
+    waitFor: ['push-image']
+    timeout: 600s  # 10 minutes for deployment
+
+# Images to be pushed to Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/organizations-service:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/organizations-service:latest'
+
+# Build options
+options:
+  machineType: 'E2_HIGHCPU_8'  # Use faster machine for builds
+  logging: CLOUD_LOGGING_ONLY
+  timeout: 1800s  # 30 minutes total timeout
+
+# Substitute variables (optional)
+substitutions:
+  _SERVICE_NAME: 'organizations'
+  _REGION: 'us-central1'
+
+tags:
+  - 'organizations-service'
+  - 'nestjs'
+  - 'cloud-run'

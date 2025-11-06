@@ -1,34 +1,7 @@
 # Multi-stage build for NestJS application
-FROM node:20-alpine AS development
+FROM node:20-alpine AS builder
 
-# Set working directory
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies (include dev deps for building)
-RUN npm ci
-
-# Copy source code
-COPY . .
-
-# Generate Prisma client BEFORE building (critical for TypeScript compilation)
-RUN echo "=== Generating Prisma client ===" && \
-    npx prisma generate --schema=prisma/schema.prisma && \
-    echo "=== Verifying Prisma client generation ===" && \
-    ls -la node_modules/.prisma/client/ && \
-    echo "=== Checking for required enums ===" && \
-    grep -E "(OrganizationType|OrganizationRole)" node_modules/.prisma/client/index.d.ts | head -10 || echo "Enums not found in generated client"
-
-# Build the application
-RUN echo "=== Building NestJS application ===" && \
-    npm run build
-
-# Production stage
-FROM node:20-alpine AS production
-
-# Install necessary runtime dependencies
+# Install OpenSSL (required by Prisma)
 RUN apk add --no-cache openssl
 
 # Set working directory
@@ -36,41 +9,63 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+COPY prisma ./prisma/
 
-# Copy Prisma schema (needed for generation)
-COPY --from=development /app/prisma ./prisma
-
-# Install ALL dependencies (including devDependencies needed for Prisma)
+# Install ALL dependencies (needed for build and Prisma)
 RUN npm ci
 
+# Generate Prisma Client
+RUN npx prisma generate
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Verify build
+RUN ls -la dist/ && (test -f dist/src/main.js || test -f dist/main.js)
+
+# Production stage
+FROM node:20-alpine AS production
+
+# Install OpenSSL and other runtime dependencies
+RUN apk add --no-cache openssl curl
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install dependencies
+RUN npm ci --omit=dev
+
 # Generate Prisma Client in production
-RUN npx prisma generate --schema=prisma/schema.prisma
+RUN npx prisma generate
 
-# Copy built application from development stage
-COPY --from=development /app/dist ./dist
+# Copy built application from builder stage
+COPY --from=builder /app/dist ./dist
 
-# Verify production setup
-RUN echo "=== Production stage verification ===" && \
-    ls -la dist/ && \
-    ls -la dist/src/ || echo "dist/src not found" && \
-    ls -la node_modules/@prisma/client/ && \
-    ls -la node_modules/.prisma/client/ && \
-    echo "=== Checking main.js exists ===" && \
-    test -f dist/src/main.js && echo "main.js found" || (test -f dist/main.js && echo "main.js found in dist/" || echo "main.js NOT found")
+# Copy entrypoint script for diagnostics
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create non-root user for security
+# Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nestjs -u 1001 && \
     chown -R nestjs:nodejs /app
 
+# Switch to non-root user
 USER nestjs
 
-# Expose port (Cloud Run uses PORT environment variable, default 8080)
+# Expose port
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/organization/api/v1/health || exit 1
+# Environment variables with defaults
+ENV NODE_ENV=production
+ENV PORT=8080
 
-# Start the application
-CMD ["node", "dist/src/main.js"]
+# Start the application with diagnostics
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
