@@ -100,7 +100,7 @@ async function main() {
           password: await hashPassword(isTestUser ? 'Password123@' : `Password${i + 1}!`),
           firstName: firstName,
           lastName: lastName || 'User',
-          user_type: 'USER',
+          userType: 'USER',
           district: 'COLOMBO',
           province: 'WESTERN',
         },
