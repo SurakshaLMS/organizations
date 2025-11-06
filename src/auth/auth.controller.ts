@@ -19,17 +19,17 @@ export class AuthController {
 
   /**
    * Login endpoint with strict rate limiting
-   * Allows only 5 attempts per 15 minutes to prevent brute force attacks
+   * Allows only 3 attempts per 5 minutes to prevent brute force attacks
    */
   @Post('login')
   @HttpCode(200)
-  @Throttle({ default: { limit: 5, ttl: 900000 } }) // 5 attempts per 15 minutes (900,000ms)
+  @Throttle({ default: { limit: 3, ttl: 300000 } }) // 3 attempts per 5 minutes (300,000ms)
   @ApiOperation({ 
     summary: 'Login with ultra-compact JWT tokens', 
-    description: 'Rate limited: 5 attempts per 15 minutes to prevent brute force attacks' 
+    description: 'Rate limited: 3 attempts per 5 minutes to prevent brute force attacks' 
   })
   @ApiResponse({ status: 200, description: 'Login successful with ultra-compact JWT token' })
-  @ApiResponse({ status: 429, description: 'Too many login attempts - Please try again later' })
+  @ApiResponse({ status: 429, description: 'Too many login attempts - Please try again in 5 minutes' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto): Promise<LoginResponse> {
     return this.authService.login(loginDto);
