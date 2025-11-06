@@ -1,14 +1,23 @@
 # Multi-stage build for NestJS application
 FROM node:20-alpine AS development
 
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
+
 # Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
+# Copy Prisma schema first (required for prisma generate)
+COPY prisma ./prisma
+
 # Install dependencies (include dev deps for building)
 RUN npm ci
+
+# Generate Prisma Client
+RUN npx prisma generate
 
 # Copy source code
 COPY . .
@@ -19,20 +28,26 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine AS production
 
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
+
 # Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
+# Copy Prisma schema
+COPY prisma ./prisma
+
 # Install only production dependencies
 RUN npm ci --omit=dev && npm cache clean --force
 
+# Generate Prisma Client in production
+RUN npx prisma generate
+
 # Copy built application from development stage
 COPY --from=development /app/dist ./dist
-
-# Copy node_modules from development (in case any runtime deps are needed)
-COPY --from=development /app/node_modules ./node_modules
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs
