@@ -1,21 +1,14 @@
 # Multi-stage build for NestJS application
-FROM node:20-alpine AS builder
-
-# Install OpenSSL (required by Prisma)
-RUN apk add --no-cache openssl
+FROM node:20-alpine AS development
 
 # Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY prisma ./prisma/
 
-# Install ALL dependencies (needed for build and Prisma)
+# Install dependencies (include dev deps for building)
 RUN npm ci
-
-# Generate Prisma Client
-RUN npx prisma generate
 
 # Copy source code
 COPY . .
@@ -23,49 +16,38 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Verify build
-RUN ls -la dist/ && (test -f dist/src/main.js || test -f dist/main.js)
-
 # Production stage
 FROM node:20-alpine AS production
-
-# Install OpenSSL and other runtime dependencies
-RUN apk add --no-cache openssl curl
 
 # Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY prisma ./prisma/
 
-# Install dependencies
-RUN npm ci --omit=dev
+# Install only production dependencies
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Generate Prisma Client in production
-RUN npx prisma generate
+# Copy built application from development stage
+COPY --from=development /app/dist ./dist
 
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
+# Copy node_modules from development (in case any runtime deps are needed)
+COPY --from=development /app/node_modules ./node_modules
 
-# Copy entrypoint script for diagnostics
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nestjs -u 1001
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nestjs -u 1001 && \
-    chown -R nestjs:nodejs /app
-
-# Switch to non-root user
+# Change ownership of the app directory
+RUN chown -R nestjs:nodejs /app
 USER nestjs
 
-# Expose port
+# Expose port (Cloud Run uses PORT environment variable, default 8080)
 EXPOSE 8080
 
-# Environment variables with defaults
-ENV NODE_ENV=production
-ENV PORT=8080
+# Health check (using PORT environment variable)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
 
-# Start the application with diagnostics
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# Start the application
+CMD ["node", "dist/main"]
