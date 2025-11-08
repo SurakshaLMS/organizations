@@ -59,10 +59,12 @@ export class CauseService {
    * - Automatic image validation and processing
    * - Transaction-based cleanup on failure
    * - Public URL generation for immediate access
+   * 
+   * @deprecated Use signed URL flow instead - image parameter is ignored
    */
   async createCauseWithImage(
     createCauseDto: CreateCauseWithImageDto,
-    image?: Express.Multer.File
+    image?: any
   ) {
     const { organizationId, title, description, introVideoUrl, isPublic } = createCauseDto;
     const orgBigIntId = convertToBigInt(organizationId);
@@ -306,11 +308,13 @@ export class CauseService {
    * - Optional image replacement with GCS upload
    * - Automatic cleanup of old image when replaced
    * - Comprehensive data update support
+   * 
+   * @deprecated Use signed URL flow instead - image parameter is ignored
    */
   async updateCauseWithImage(
     causeId: string,
     updateCauseDto: UpdateCauseWithImageDto,
-    image?: Express.Multer.File
+    image?: any
   ) {
     const causeBigIntId = convertToBigInt(causeId);
     

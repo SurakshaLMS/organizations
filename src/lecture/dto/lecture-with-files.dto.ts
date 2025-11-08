@@ -119,7 +119,7 @@ export class CreateLectureWithFilesDto {
       format: 'binary'
     }
   })
-  documents?: Express.Multer.File[];
+  documents?: any[];
 }
 
 /**
@@ -229,5 +229,5 @@ export class UpdateLectureWithFilesDto {
       format: 'binary'
     }
   })
-  documents?: Express.Multer.File[];
+  documents?: any[];
 }

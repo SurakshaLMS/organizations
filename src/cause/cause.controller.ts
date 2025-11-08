@@ -1,6 +1,5 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, UploadedFile, Logger, UseGuards } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Param, Put, Delete, Query, Logger, UseGuards, UseInterceptors } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { CauseService } from './cause.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
 import { CreateCauseWithImageDto, UpdateCauseWithImageDto, CauseResponseDto } from './dto/cause-with-image.dto';
@@ -18,14 +17,13 @@ import { EnhancedJwtPayload } from '../auth/organization-access.service';
  * CAUSE CONTROLLER
  * 
  * Handles all cause-related operations including image uploads to Google Cloud Storage
- * Enhanced with Multer file upload support for seamless image management
+ * Uses signed URL upload system for secure and efficient file handling
  * 
  * Features:
  * - Basic cause CRUD operations
- * - Enhanced image upload endpoints with Multer integration
- * - Image management with GCS storage
+ * - Image management with GCS storage via signed URLs
  * - Comprehensive API documentation with Swagger
- * - Legacy endpoint support for backward compatibility
+ * - Legacy endpoint support for backward compatibility (deprecated)
  */
 @ApiTags('Causes')
 @Controller('causes')
@@ -66,28 +64,21 @@ export class CauseController {
    * Authentication required
    */
   @Post('with-image')
-  @UseInterceptors(FileInterceptor('image'))
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Create cause with image upload to Google Cloud Storage',
-    description: 'Authentication required'
-  })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({ 
-    type: CreateCauseWithImageDto,
-    description: 'Cause data with optional image upload (use form-data with field name "image")' 
+    summary: 'Create cause with image (Use signed URL flow instead)',
+    description: 'DEPRECATED: Use POST /signed-urls/cause to get upload URL, then create cause with imageUrl field. Authentication required.'
   })
   @ApiResponse({ status: 201, description: 'Cause created with image successfully', type: CauseResponseDto })
   @ApiResponse({ status: 400, description: 'Invalid request data or image format' })
   @ApiResponse({ status: 401, description: 'Authentication required' })
-  @ApiResponse({ status: 413, description: 'Image file too large' })
+  @ApiResponse({ status: 410, description: 'Endpoint deprecated - use signed URL flow' })
   async createCauseWithImage(
     @Body() createCauseDto: CreateCauseWithImageDto,
-    @UploadedFile() image: Express.Multer.File,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📋 Creating cause "${createCauseDto.title}" with ${image ? 'image' : 'no image'} - User: ${user.email}`);
-    return this.causeService.createCauseWithImage(createCauseDto, image);
+    this.logger.log(`📋 Creating cause "${createCauseDto.title}" - User: ${user.email}`);
+    return this.causeService.createCauseWithImage(createCauseDto, null);
   }
 
   /**
@@ -168,31 +159,24 @@ export class CauseController {
    * Authentication required
    */
   @Put(':id/with-image')
-  @UseInterceptors(FileInterceptor('image'))
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Update cause with image upload to Google Cloud Storage',
-    description: 'Authentication required'
+    summary: 'Update cause with image (Use signed URL flow instead)',
+    description: 'DEPRECATED: Use POST /signed-urls/cause to get upload URL, then update cause with imageUrl field. Authentication required.'
   })
-  @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Cause ID to update' })
-  @ApiBody({ 
-    type: UpdateCauseWithImageDto,
-    description: 'Cause update data with optional image upload (use form-data with field name "image")' 
-  })
   @ApiResponse({ status: 200, description: 'Cause updated with image successfully', type: CauseResponseDto })
   @ApiResponse({ status: 404, description: 'Cause not found' })
   @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 400, description: 'Invalid request data or image format' })
-  @ApiResponse({ status: 413, description: 'Image file too large' })
+  @ApiResponse({ status: 410, description: 'Endpoint deprecated - use signed URL flow' })
   async updateCauseWithImage(
     @Param('id') causeId: string,
     @Body() updateCauseDto: UpdateCauseWithImageDto,
-    @UploadedFile() image: Express.Multer.File,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📋 Updating cause ${causeId} with ${image ? 'new image' : 'no image change'} - User: ${user.email}`);
-    return this.causeService.updateCauseWithImage(causeId, updateCauseDto, image);
+    this.logger.log(`📋 Updating cause ${causeId} - User: ${user.email}`);
+    return this.causeService.updateCauseWithImage(causeId, updateCauseDto, null);
   }
 
   /**

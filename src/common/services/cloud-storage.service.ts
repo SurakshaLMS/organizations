@@ -271,11 +271,13 @@ export class CloudStorageService {
   }
 
   /**
-   * 📤 Upload Express.Multer.File (compatible with existing GCS service)
+   * 📤 Upload file (compatible with existing GCS service)
    * Returns relative path for database storage
+   * 
+   * @deprecated Use signed URL flow instead - kept for backward compatibility
    */
   async uploadMulterFile(
-    file: Express.Multer.File,
+    file: any,
     folder: string,
     filename?: string
   ): Promise<{ url: string; key: string; filename?: string }> {
@@ -299,17 +301,21 @@ export class CloudStorageService {
 
   /**
    * 📤 Upload image - Simplified method compatible with GCSImageService
+   * 
+   * @deprecated Use signed URL flow instead - kept for backward compatibility
    */
-  async uploadImage(file: Express.Multer.File, folder: string): Promise<{ url: string }> {
+  async uploadImage(file: any, folder: string): Promise<{ url: string }> {
     const result = await this.uploadMulterFile(file, folder);
     return { url: result.url };
   }
 
   /**
    * 🔄 Update organization image - Compatible with GCSImageService
+   * 
+   * @deprecated Use signed URL flow instead - kept for backward compatibility
    */
   async updateOrganizationImage(
-    file: Express.Multer.File,
+    file: any,
     currentImageUrl?: string
   ): Promise<{ url: string }> {
     // Delete old image if exists

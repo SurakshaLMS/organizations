@@ -1,5 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UploadedFiles, UseGuards } from '@nestjs/common';
-import { FilesInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
+import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
 import { LectureService } from './lecture.service';
 import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lecture.dto';
@@ -68,7 +67,6 @@ export class LectureController {
    * Authentication required
    */
   @Post('with-files')
-  @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files with field name 'documents'
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Create lecture with document uploads to Google Cloud Storage',
@@ -83,18 +81,18 @@ export class LectureController {
   @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
   @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({ status: 413, description: 'File too large or too many files' })
+  @ApiResponse({ status: 410, description: 'Endpoint deprecated - use signed URL flow' })
   async createLectureWithFiles(
     @Body() createLectureDto: CreateLectureWithFilesDto,
-    @UploadedFiles() files: Express.Multer.File[],
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents - User: ${user.email}`);
+    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" - User: ${user.email}`);
     
     return this.lectureService.createLectureWithDocuments(
       createLectureDto,
       createLectureDto.causeId,
       user,
-      files
+      []
     );
   }
 
@@ -107,7 +105,6 @@ export class LectureController {
    * Authentication required
    */
   @Post('with-documents/:causeId')
-  @UseInterceptors(FilesInterceptor('documents', 10)) // Allow up to 10 files
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
     summary: 'Create lecture with document uploads (Legacy - use /with-files instead)',
@@ -127,10 +124,9 @@ export class LectureController {
   async createLectureWithDocuments(
     @Param('causeId') causeId: string,
     @Body() createLectureDto: CreateLectureWithDocumentsBodyDto,
-    @UploadedFiles() files: Express.Multer.File[],
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 [LEGACY] Creating lecture "${createLectureDto.title}" with ${files?.length || 0} documents for cause ${causeId} - User: ${user.email}`);
+    this.logger.log(`📚 [LEGACY] Creating lecture "${createLectureDto.title}" for cause ${causeId} - User: ${user.email}`);
     
     // Create full DTO with causeId from URL parameter
     const fullLectureDto: CreateLectureDto = {
@@ -142,7 +138,7 @@ export class LectureController {
       fullLectureDto,
       causeId,
       user,
-      files
+      []
     );
   }
 
@@ -219,7 +215,6 @@ export class LectureController {
    */
   @Put(':id/with-files')
   @UseGuards(EnhancedJwtAuthGuard)
-  @UseInterceptors(FilesInterceptor('documents', 10)) // Accept up to 10 files with field name 'documents'
   @ApiOperation({ 
     summary: 'Update lecture with document uploads to Google Cloud Storage',
     description: 'Authentication required'
@@ -239,11 +234,10 @@ export class LectureController {
   async updateLectureWithFiles(
     @Param('id') id: string,
     @Body() updateLectureDto: UpdateLectureWithFilesDto,
-    @UploadedFiles() files: Express.Multer.File[],
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Updating lecture ${id} with ${files?.length || 0} documents by user ${user.sub}`);
-    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, user);
+    this.logger.log(`📚 Updating lecture ${id} by user ${user.sub}`);
+    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, [], user);
   }
 
   /**
@@ -257,7 +251,6 @@ export class LectureController {
    */
   @Put(':id/with-documents')
   @UseGuards(EnhancedJwtAuthGuard)
-  @UseInterceptors(AnyFilesInterceptor()) // Accept files from any field name
   @ApiOperation({ 
     summary: 'Update lecture with document uploads (Legacy - use /:id/with-files instead)',
     deprecated: true,
@@ -277,11 +270,10 @@ export class LectureController {
   async updateLectureWithDocuments(
     @Param('id') id: string,
     @Body() updateLectureDto: UpdateLectureDto,
-    @UploadedFiles() files: Express.Multer.File[],
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 [LEGACY] Updating lecture ${id} with ${files?.length || 0} documents by user ${user.sub}`);
-    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, files, user);
+    this.logger.log(`📚 [LEGACY] Updating lecture ${id} by user ${user.sub}`);
+    return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, [], user);
   }
 
   /**

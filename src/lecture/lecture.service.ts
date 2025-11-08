@@ -152,7 +152,7 @@ export class LectureService {
     createLectureDto: CreateLectureDto,
     causeId: string,
     user?: any,
-    files?: Express.Multer.File[]
+    files?: any[]
   ): Promise<LectureWithDocumentsResponseDto> {
     try {
       // Convert causeId to BigInt for database query
@@ -635,7 +635,7 @@ export class LectureService {
   async updateLectureWithDocuments(
     lectureId: string,
     updateLectureDto: UpdateLectureDto,
-    files?: Express.Multer.File[],
+    files?: any[],
     user?: EnhancedJwtPayload
   ) {
     try {

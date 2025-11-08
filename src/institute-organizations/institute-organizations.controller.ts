@@ -9,24 +9,18 @@ import {
   Query, 
   UsePipes, 
   ValidationPipe,
-  UseInterceptors,
-  UploadedFile,
   BadRequestException
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { InstituteOrganizationsService } from './institute-organizations.service';
 import { 
   CreateInstituteOrganizationDto, 
-  CreateInstituteOrganizationWithImageDto,
   UpdateInstituteOrganizationDto, 
-  UpdateInstituteOrganizationWithImageDto,
   InstituteOrganizationDto 
 } from './dto/institute-organization.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ParseOrganizationIdPipe, ParseInstituteIdPipe } from '../common/pipes/parse-numeric-id.pipe';
 import { PaginationValidationPipe } from '../common/pipes/pagination-validation.pipe';
-import { CloudStorageService } from '../common/services/cloud-storage.service';
 
 @ApiTags('Institute Organizations (No Auth)')
 @Controller('institute-organizations')
@@ -40,61 +34,35 @@ import { CloudStorageService } from '../common/services/cloud-storage.service';
 export class InstituteOrganizationsController {
   constructor(
     private readonly instituteOrganizationsService: InstituteOrganizationsService,
-    private readonly cloudStorageService: CloudStorageService
   ) {}
 
   @Post()
-  @UseInterceptors(FileInterceptor('image'))
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Create organization for institute - No authentication required' })
-  @ApiBody({ type: CreateInstituteOrganizationWithImageDto })
+  @ApiOperation({ 
+    summary: 'Create organization for institute - No authentication required',
+    description: 'Use POST /signed-urls/organization to get upload URL for image, then include imageUrl here after verification'
+  })
+  @ApiBody({ type: CreateInstituteOrganizationDto })
   @ApiResponse({ status: 201, description: 'Organization created successfully', type: InstituteOrganizationDto })
-  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data or image file' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data' })
   async createOrganization(
     @Body() createOrganizationDto: CreateInstituteOrganizationDto,
-    @UploadedFile() image: Express.Multer.File
   ) {
     try {
       console.log('🚀 Institute organization creation request received:', {
         organizationData: createOrganizationDto,
-        hasImage: !!image,
-        imageInfo: image ? {
-          originalName: image.originalname,
-          mimetype: image.mimetype,
-          size: image.size
-        } : null
+        imageUrl: createOrganizationDto.imageUrl || 'none'
       });
 
       // Validate institute exists
       await this.instituteOrganizationsService.validateInstituteExists(createOrganizationDto.instituteId);
 
-      let imageUrl: string | undefined = createOrganizationDto.imageUrl;
-
-      // Handle image upload if provided
-      if (image) {
-        try {
-          const uploadResult = await this.cloudStorageService.uploadImage(image, 'institute-organization-images');
-          imageUrl = uploadResult.url;
-          console.log('📤 Image uploaded to cloud storage:', imageUrl);
-        } catch (imageError) {
-          console.error('❌ Image upload failed:', imageError.message);
-          throw new BadRequestException(`Image upload failed: ${imageError.message}`);
-        }
-      }
-
-      // Create organization with image URL
-      const organizationData = {
-        ...createOrganizationDto,
-        imageUrl
-      };
-
-      const result = await this.instituteOrganizationsService.createOrganization(organizationData);
+      const result = await this.instituteOrganizationsService.createOrganization(createOrganizationDto);
       
       console.log('✅ Institute organization created successfully:', {
         organizationId: result.id,
         name: result.name,
         instituteId: result.instituteId,
-        hasImage: !!imageUrl
+        hasImage: !!createOrganizationDto.imageUrl
       });
 
       return result;
@@ -151,42 +119,23 @@ export class InstituteOrganizationsController {
   }
 
   @Put('institute/:instituteId/:organizationId')
-  @UseInterceptors(FileInterceptor('image'))
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Update organization for institute - No authentication required' })
+  @ApiOperation({ 
+    summary: 'Update organization for institute - No authentication required',
+    description: 'Use POST /signed-urls/organization to get upload URL for new image, then include imageUrl here after verification'
+  })
   @ApiParam({ name: 'instituteId', description: 'Institute ID' })
   @ApiParam({ name: 'organizationId', description: 'Organization ID' })
-  @ApiBody({ type: UpdateInstituteOrganizationWithImageDto })
+  @ApiBody({ type: UpdateInstituteOrganizationDto })
   @ApiResponse({ status: 200, description: 'Organization updated successfully', type: InstituteOrganizationDto })
   @ApiResponse({ status: 404, description: 'Organization not found' })
   async updateOrganization(
     @Param('instituteId', ParseInstituteIdPipe()) instituteId: string,
     @Param('organizationId', ParseOrganizationIdPipe()) organizationId: string,
     @Body() updateOrganizationDto: UpdateInstituteOrganizationDto,
-    @UploadedFile() image: Express.Multer.File
   ) {
-    console.log(`🔄 Updating organization ${organizationId} for institute ${instituteId}`);
+    console.log(`🔄 Updating organization ${organizationId} for institute ${instituteId}, imageUrl: ${updateOrganizationDto.imageUrl || 'none'}`);
 
-    let imageUrl: string | undefined = updateOrganizationDto.imageUrl;
-
-    // Handle image upload if provided
-    if (image) {
-      try {
-        const uploadResult = await this.cloudStorageService.uploadImage(image, 'institute-organization-images');
-        imageUrl = uploadResult.url;
-        console.log('📤 Updated image uploaded to cloud storage:', imageUrl);
-      } catch (imageError) {
-        console.error('❌ Image upload failed:', imageError.message);
-        throw new BadRequestException(`Image upload failed: ${imageError.message}`);
-      }
-    }
-
-    const organizationData = {
-      ...updateOrganizationDto,
-      ...(imageUrl && { imageUrl })
-    };
-
-    return this.instituteOrganizationsService.updateOrganization(organizationId, instituteId, organizationData);
+    return this.instituteOrganizationsService.updateOrganization(organizationId, instituteId, updateOrganizationDto);
   }
 
   @Delete('institute/:instituteId/:organizationId')

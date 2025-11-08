@@ -12,6 +12,7 @@ import { InstituteModule } from './institute/institute.module';
 import { CauseModule } from './cause/cause.module';
 import { LectureModule } from './lecture/lecture.module';
 import { JobsModule } from './jobs/jobs.module';
+import { CommonModule } from './common/common.module';
 import { SecurityMiddleware } from './middleware/security.middleware';
 
 // Config imports
@@ -52,6 +53,7 @@ import appConfig from './config/app.config';
 
     // Core modules
     PrismaModule,
+    CommonModule,
     AuthModule,
     OrganizationModule,
     InstituteModule,

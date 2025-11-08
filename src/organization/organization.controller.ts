@@ -10,15 +10,12 @@ import {
   UsePipes, 
   ValidationPipe,
   UseGuards,
-  UseInterceptors,
-  UploadedFile,
   BadRequestException,
   Logger
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
-import { CreateOrganizationDto, CreateOrganizationWithImageDto, UpdateOrganizationDto, UpdateOrganizationWithImageDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
+import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUserDto, AssignInstituteDto } from './dto/organization.dto';
 import { OrganizationDto } from './dto/organization.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ParseOrganizationIdPipe, ParseInstituteIdPipe } from '../common/pipes/parse-numeric-id.pipe';
@@ -29,7 +26,6 @@ import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { OrganizationManagerTokenGuard } from '../auth/guards/om-token.guard';
 import { HybridOrganizationManagerGuard } from '../auth/guards/hybrid-om.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
-import { CloudStorageService } from '../common/services/cloud-storage.service';
 
 @ApiTags('Organizations')
 @Controller('organizations')
@@ -46,62 +42,27 @@ export class OrganizationController {
 
   constructor(
     private readonly organizationService: OrganizationService,
-    private readonly cloudStorageService: CloudStorageService
   ) {}
 
   @Post()
   @UseGuards(HybridOrganizationManagerGuard)
-  @UseInterceptors(FileInterceptor('image', {
-    limits: {
-      fileSize: 5 * 1024 * 1024, // ✅ SECURITY: 5MB max file size
-    },
-    fileFilter: (req, file, cb) => {
-      // ✅ SECURITY: Whitelist allowed MIME types
-      const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-      if (allowedMimes.includes(file.mimetype)) {
-        cb(null, true);
-      } else {
-        cb(new BadRequestException(`Invalid file type: ${file.mimetype}. Only JPEG, PNG, GIF, and WebP images are allowed.`), false);
-      }
-    },
-  }))
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Create organization with optional image upload - Requires Organization Manager Token (Static or JWT)' })
-  @ApiBody({ type: CreateOrganizationWithImageDto })
+  @ApiOperation({ 
+    summary: 'Create organization - Requires Organization Manager Token (Static or JWT)', 
+    description: 'Use POST /signed-urls/organization to get upload URL for image, then include imageUrl here after verification'
+  })
+  @ApiBody({ type: CreateOrganizationDto })
   @ApiResponse({ status: 201, description: 'Organization created successfully', type: OrganizationDto })
   @ApiResponse({ status: 401, description: 'Unauthorized - Organization Manager token required' })
   @ApiResponse({ status: 403, description: 'Forbidden - Organization Manager access required' })
-  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data or image file' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data' })
   async createOrganization(
     @Body() createOrganizationDto: CreateOrganizationDto,
-    @UploadedFile() image: Express.Multer.File,
     @GetUser() user: any
   ) {
     try {
-      this.logger.log(`Organization creation request - User: ${user?.userId || 'unknown'}, Has image: ${!!image}`);
+      this.logger.log(`Organization creation request - User: ${user?.userId || 'unknown'}, imageUrl: ${createOrganizationDto.imageUrl || 'none'}`);
 
-      let imageUrl: string | undefined = createOrganizationDto.imageUrl;
-
-      // Handle image upload if provided
-      if (image) {
-        try {
-          // Upload image to Cloud Storage (Google/AWS/Local)
-          const uploadResult = await this.cloudStorageService.uploadImage(image, 'organization-images');
-          imageUrl = uploadResult.url;
-          this.logger.log(`Image uploaded to Cloud Storage: ${imageUrl}`);
-        } catch (imageError) {
-          this.logger.error(`Image upload failed: ${imageError.message}`);
-          throw new BadRequestException(`Image upload failed: ${imageError.message}`);
-        }
-      }
-
-      // Create organization with image URL
-      const organizationData = {
-        ...createOrganizationDto,
-        imageUrl
-      };
-
-      const result = await this.organizationService.createOrganization(organizationData, user);
+      const result = await this.organizationService.createOrganization(createOrganizationDto, user);
       
       this.logger.log(`Organization created successfully - ID: ${result.id}, Name: ${result.name}`);
 
@@ -234,52 +195,24 @@ export class OrganizationController {
 
   @Put(':id')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('image'))
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Update organization with optional image upload - Requires Authentication' })
+  @ApiOperation({ 
+    summary: 'Update organization - Requires Authentication',
+    description: 'Use POST /signed-urls/organization to get upload URL for new image, then include imageUrl here after verification'
+  })
   @ApiParam({ name: 'id', description: 'Organization ID' })
-  @ApiBody({ type: UpdateOrganizationWithImageDto })
+  @ApiBody({ type: UpdateOrganizationDto })
   @ApiResponse({ status: 200, description: 'Organization updated successfully', type: OrganizationDto })
   @ApiResponse({ status: 401, description: 'Unauthorized - JWT token required' })
-  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data or image file' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid organization data' })
   async updateOrganization(
     @Param('id', ParseOrganizationIdPipe()) id: string,
     @Body() updateOrganizationDto: UpdateOrganizationDto,
-    @UploadedFile() image: Express.Multer.File,
     @GetUser() user: EnhancedJwtPayload
   ) {
     try {
-      this.logger.log(`Organization update request - ID: ${id}, User: ${user?.sub || 'unknown'}, Has image: ${!!image}`);
+      this.logger.log(`Organization update request - ID: ${id}, User: ${user?.sub || 'unknown'}, imageUrl: ${updateOrganizationDto.imageUrl || 'none'}`);
 
-      let imageUrl: string | undefined = updateOrganizationDto.imageUrl;
-
-      // Handle image upload if provided
-      if (image) {
-        try {
-          // Get current organization to check for existing image
-          const currentOrg = await this.organizationService.getOrganizationById(id, user.sub);
-          
-          // Upload new image and delete old one using Cloud Storage
-          const uploadResult = await this.cloudStorageService.updateOrganizationImage(
-            image,
-            currentOrg.imageUrl || undefined
-          );
-          imageUrl = uploadResult.url;
-          
-          this.logger.log(`Image updated in Cloud Storage: ${imageUrl}`);
-        } catch (imageError) {
-          this.logger.error(`Image update failed: ${imageError.message}`);
-          throw new BadRequestException(`Image update failed: ${imageError.message}`);
-        }
-      }
-
-      // Update organization with new image URL if provided
-      const organizationData = {
-        ...updateOrganizationDto,
-        ...(imageUrl && { imageUrl })
-      };
-
-      const result = await this.organizationService.updateOrganization(id, organizationData, user);
+      const result = await this.organizationService.updateOrganization(id, updateOrganizationDto, user);
       
       this.logger.log(`Organization updated successfully - ID: ${id}, Name: ${result.name}`);
 

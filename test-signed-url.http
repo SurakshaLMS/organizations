@@ -1,0 +1,160 @@
+### Test Signed URL Upload Flow
+### Prerequisites: Start the server with npm run start:dev
+
+### Step 1: Get JWT Token (Login first if needed)
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "your-password"
+}
+
+### Extract the JWT token from response and use it below
+
+@token = YOUR_JWT_TOKEN_HERE
+
+### ============================================================================
+### STEP 2: Request Signed URL for Organization Image
+### ============================================================================
+POST http://localhost:8080/signed-urls/organization
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "instituteId": "123",
+  "fileExtension": ".jpg"
+}
+
+### Response will contain:
+# {
+#   "uploadToken": "encrypted-token-here",
+#   "signedUrl": "https://storage.googleapis.com/...",
+#   "expiresAt": "2025-11-08T12:10:00Z",
+#   "expiresIn": 600,
+#   "expectedFilename": "organization-123-abc-1699445000.jpg",
+#   "maxFileSizeBytes": 5242880,
+#   "allowedExtensions": [".jpg", ".jpeg", ".png", ".webp", ".gif"]
+# }
+
+@uploadToken = PASTE_UPLOAD_TOKEN_FROM_RESPONSE
+@signedUrl = PASTE_SIGNED_URL_FROM_RESPONSE
+
+### ============================================================================
+### STEP 3: Upload File to GCS (Use the signedUrl from Step 2)
+### ============================================================================
+### NOTE: This must be done from frontend or using curl/Postman
+### You cannot upload binary files directly in .http files
+### Use this curl command instead:
+
+# curl -X PUT "{{signedUrl}}" \
+#   -H "Content-Type: image/jpeg" \
+#   --data-binary "@/path/to/your/image.jpg"
+
+### OR from JavaScript:
+# const file = document.querySelector('input[type="file"]').files[0];
+# await fetch(signedUrl, {
+#   method: 'PUT',
+#   headers: { 'Content-Type': file.type },
+#   body: file
+# });
+
+### ============================================================================
+### STEP 4: Verify Upload (Call AFTER successful upload to GCS)
+### ============================================================================
+POST http://localhost:8080/signed-urls/verify/{{uploadToken}}
+Authorization: Bearer {{token}}
+
+### Response will contain:
+# {
+#   "success": true,
+#   "publicUrl": "https://storage.googleapis.com/bucket/organization-images/...",
+#   "relativePath": "/organization-images/organization-123-abc.jpg",
+#   "filename": "organization-123-abc.jpg",
+#   "message": "Upload verified and file made public"
+# }
+
+@publicUrl = PASTE_PUBLIC_URL_FROM_RESPONSE
+
+### ============================================================================
+### STEP 5: Create Organization with Verified Image URL
+### ============================================================================
+POST http://localhost:8080/organizations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Test Organization",
+  "type": "INSTITUTE",
+  "isPublic": true,
+  "imageUrl": "{{publicUrl}}",
+  "instituteId": "123"
+}
+
+### ============================================================================
+### ALTERNATIVE ENDPOINTS
+### ============================================================================
+
+### Profile Image
+POST http://localhost:8080/signed-urls/profile
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": "456",
+  "fileExtension": ".png"
+}
+
+### Institute Image
+POST http://localhost:8080/signed-urls/institute
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "instituteId": "789",
+  "fileExtension": ".jpg"
+}
+
+### Lecture Document
+POST http://localhost:8080/signed-urls/lecture-document
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "lectureId": "999",
+  "documentType": "document",
+  "fileExtension": ".pdf"
+}
+
+### Lecture Cover
+POST http://localhost:8080/signed-urls/lecture-cover
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "lectureId": "999",
+  "documentType": "cover",
+  "fileExtension": ".jpg"
+}
+
+### Cause Image
+POST http://localhost:8080/signed-urls/cause
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "causeId": "888",
+  "fileExtension": ".webp"
+}
+
+### Generic Upload (Advanced)
+POST http://localhost:8080/signed-urls/generate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "folder": "custom-folder",
+  "fileName": "my-file.jpg",
+  "contentType": "image/jpeg",
+  "maxSizeBytes": 10485760
+}

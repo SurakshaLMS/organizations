@@ -92,12 +92,7 @@ export class CreateOrganizationDto {
 }
 
 export class CreateOrganizationWithImageDto extends CreateOrganizationDto {
-  @ApiPropertyOptional({
-    description: 'Organization image file (JPEG, PNG, GIF, WebP - max 5MB)',
-    type: 'string',
-    format: 'binary'
-  })
-  image?: Express.Multer.File;
+  // Deprecated - use CreateOrganizationDto with imageUrl field instead
 }
 
 export class UpdateOrganizationDto {
@@ -179,12 +174,7 @@ export class UpdateOrganizationDto {
 }
 
 export class UpdateOrganizationWithImageDto extends UpdateOrganizationDto {
-  @ApiPropertyOptional({
-    description: 'Organization image file (JPEG, PNG, GIF, WebP - max 5MB)',
-    type: 'string',
-    format: 'binary'
-  })
-  image?: Express.Multer.File;
+  // Deprecated - use UpdateOrganizationDto with imageUrl field instead
 }
 
 export class EnrollUserDto {
