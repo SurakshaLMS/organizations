@@ -53,8 +53,13 @@ async function bootstrap() {
   }));
 
   // Enhanced CORS configuration for any proxy and cross-origin access
+  const isProduction = process.env.NODE_ENV === 'production';
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
+  
   app.enableCors({
-    origin: true, // Allow all origins
+    origin: isProduction && allowedOrigins.length > 0 
+      ? allowedOrigins  // Production: Use whitelist
+      : true,           // Development: Allow all origins
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Accept',
@@ -106,15 +111,17 @@ async function bootstrap() {
 
   // Enhanced middleware for proxy and cross-origin compatibility with security
   app.use((req: any, res: any, next: any) => {
-    const isProduction = process.env.NODE_ENV === 'production';
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
     const requestOrigin = req.headers.origin;
 
     // Handle preflight requests for any route
     if (req.method === 'OPTIONS') {
-      // ✅ SECURITY: CORS origin validation ENABLED
-      if (isProduction && requestOrigin) {
-        if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
+      // Development: Allow all origins
+      if (!isProduction) {
+        res.header('Access-Control-Allow-Origin', requestOrigin || '*');
+      } 
+      // Production: CORS origin validation with allowedOrigins check
+      else if (requestOrigin && allowedOrigins.length > 0) {
+        if (!allowedOrigins.includes(requestOrigin)) {
           logger.warn(`[SECURITY] CORS preflight blocked for origin: ${requestOrigin}`);
           return res.status(403).json({
             statusCode: 403,
@@ -122,13 +129,9 @@ async function bootstrap() {
             error: 'Forbidden',
           });
         }
-      }
-
-      // Set appropriate origin header
-      if (isProduction && allowedOrigins.length > 0) {
-        res.header('Access-Control-Allow-Origin', requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]);
+        res.header('Access-Control-Allow-Origin', requestOrigin);
       } else {
-        res.header('Access-Control-Allow-Origin', requestOrigin || '*');
+        res.header('Access-Control-Allow-Origin', allowedOrigins.length > 0 ? allowedOrigins[0] : '*');
       }
       res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
       res.header('Access-Control-Allow-Headers', [
@@ -166,10 +169,15 @@ async function bootstrap() {
       
       return res.sendStatus(200);
     }
+
     
-    // ✅ SECURITY: Enhanced CORS headers with origin validation ENABLED
-    if (isProduction && requestOrigin) {
-      // SECURITY: In production, only allow whitelisted origins
+    // Enhanced CORS headers with environment-aware validation
+    if (!isProduction) {
+      // 🔓 DEVELOPMENT: Allow all origins
+      res.header('Access-Control-Allow-Origin', requestOrigin || '*');
+      logger.log(`[DEV] CORS allowed for origin: ${requestOrigin || 'any'}`);
+    } else if (requestOrigin) {
+      // 🔒 PRODUCTION: Validate origin against whitelist
       if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
         logger.warn(`[SECURITY] CORS request blocked for origin: ${requestOrigin} on ${req.method} ${req.path}`);
         return res.status(403).json({
@@ -179,13 +187,6 @@ async function bootstrap() {
         });
       }
       res.header('Access-Control-Allow-Origin', requestOrigin);
-    } else if (!isProduction) {
-      // Development: Allow any origin (with warning)
-      if (requestOrigin) {
-        res.header('Access-Control-Allow-Origin', requestOrigin);
-      } else {
-        res.header('Access-Control-Allow-Origin', '*');
-      }
     } else {
       // Production without specific origin - use first allowed origin or deny
       if (allowedOrigins.length > 0) {
@@ -298,7 +299,6 @@ async function bootstrap() {
   const port = parseInt(process.env.PORT || '8080', 10) || configService.get<number>('app.port') || 8080;
 
   // ✅ SECURITY: Conditional Swagger setup - ONLY in development or when explicitly enabled
-  const isProduction = process.env.NODE_ENV === 'production';
   const swaggerEnabled = process.env.SWAGGER_ENABLED === 'true' || process.env.ENABLE_SWAGGER === 'true';
   
   if (!isProduction || swaggerEnabled) {
