@@ -31,11 +31,11 @@ export class CreateCauseDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Introduction video URL',
-    example: 'https://youtube.com/watch?v=example',
+    description: 'Introduction video URL (full URL or relative path from signed URL upload)',
+    example: 'causes/videos/1731234567890-intro.mp4',
     type: 'string'
   })
-  @IsUrl({}, { message: 'introVideoUrl must be a valid URL' })
+  @IsString({ message: 'introVideoUrl must be a string' })
   @IsOptional()
   introVideoUrl?: string;
 
@@ -48,6 +48,15 @@ export class CreateCauseDto {
   @IsBoolean({ message: 'isPublic must be a boolean' })
   @IsOptional()
   isPublic?: boolean = false;
+
+  @ApiPropertyOptional({
+    description: 'Image URL for the cause (relative path from signed URL upload)',
+    example: 'causes/images/1731234567890-banner.jpg',
+    type: 'string'
+  })
+  @IsString({ message: 'imageUrl must be a string' })
+  @IsOptional()
+  imageUrl?: string;
 }
 
 export class UpdateCauseDto {
@@ -70,11 +79,11 @@ export class UpdateCauseDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Updated introduction video URL',
-    example: 'https://youtube.com/watch?v=updated',
+    description: 'Updated introduction video URL (full URL or relative path from signed URL upload)',
+    example: 'causes/videos/1731234567890-updated-intro.mp4',
     type: 'string'
   })
-  @IsUrl({}, { message: 'introVideoUrl must be a valid URL' })
+  @IsString({ message: 'introVideoUrl must be a string' })
   @IsOptional()
   introVideoUrl?: string;
 
@@ -86,4 +95,13 @@ export class UpdateCauseDto {
   @IsBoolean({ message: 'isPublic must be a boolean' })
   @IsOptional()
   isPublic?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Updated image URL for the cause (relative path from signed URL upload)',
+    example: 'causes/images/1731234567890-updated-banner.jpg',
+    type: 'string'
+  })
+  @IsString({ message: 'imageUrl must be a string' })
+  @IsOptional()
+  imageUrl?: string;
 }

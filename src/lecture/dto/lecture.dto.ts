@@ -40,7 +40,7 @@ export class CreateLectureDto {
   @IsOptional()
   timeEnd?: string;
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
   liveLink?: string;
 
@@ -49,7 +49,7 @@ export class CreateLectureDto {
   @IsIn(['youtube', 'meet', 'zoom', 'teams'])
   liveMode?: 'youtube' | 'meet' | 'zoom' | 'teams';
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
   recordingUrl?: string;
 
@@ -93,7 +93,7 @@ export class UpdateLectureDto {
   @IsOptional()
   timeEnd?: string;
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
   liveLink?: string;
 
@@ -102,7 +102,7 @@ export class UpdateLectureDto {
   @IsIn(['youtube', 'meet', 'zoom', 'teams'])
   liveMode?: 'youtube' | 'meet' | 'zoom' | 'teams';
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
   recordingUrl?: string;
 

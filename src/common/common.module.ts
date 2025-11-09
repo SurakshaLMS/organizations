@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { CloudStorageService } from './services/cloud-storage.service';
 import { SignedUrlService } from './services/signed-url.service';
+import { UrlTransformerService } from './services/url-transformer.service';
 import { SignedUrlController } from './controllers/signed-url.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 
@@ -13,7 +14,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 @Module({
   imports: [ConfigModule, PrismaModule],
   controllers: [SignedUrlController],
-  providers: [CloudStorageService, SignedUrlService],
-  exports: [CloudStorageService, SignedUrlService],
+  providers: [CloudStorageService, SignedUrlService, UrlTransformerService],
+  exports: [CloudStorageService, SignedUrlService, UrlTransformerService],
 })
 export class CommonModule {}

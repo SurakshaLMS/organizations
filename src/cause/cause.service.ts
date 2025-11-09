@@ -5,6 +5,7 @@ import { CreateCauseWithImageDto, UpdateCauseWithImageDto } from './dto/cause-wi
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString } from '../auth/organization-access.service';
 import { CloudStorageService } from '../common/services/cloud-storage.service';
+import { UrlTransformerService } from '../common/services/url-transformer.service';
 
 @Injectable()
 export class CauseService {
@@ -13,13 +14,14 @@ export class CauseService {
   constructor(
     private prisma: PrismaService,
     private cloudStorageService: CloudStorageService,
+    private urlTransformer: UrlTransformerService,
   ) {}
 
   /**
    * Create a new cause (ENHANCED with validation)
    */
   async createCause(createCauseDto: CreateCauseDto) {
-    const { organizationId, title, description, isPublic } = createCauseDto;
+    const { organizationId, title, description, isPublic, imageUrl } = createCauseDto;
     const orgBigIntId = convertToBigInt(organizationId);
 
     // Validate that the organization exists to prevent foreign key constraint violation
@@ -38,12 +40,14 @@ export class CauseService {
         title,
         description,
         isPublic,
+        imageUrl,
       },
       select: {
         causeId: true,
         title: true,
         description: true,
         isPublic: true,
+        imageUrl: true,
         organizationId: true,
         // Exclude: createdAt, updatedAt
       },
@@ -240,7 +244,10 @@ export class CauseService {
       },
     });
 
-    return createPaginatedResponse(causes, total, pagination);
+    // Transform URLs for all causes in response
+    const transformedCauses = this.urlTransformer.transformCommonFieldsArray(causes);
+
+    return createPaginatedResponse(transformedCauses, total, pagination);
   }
 
   /**
@@ -267,7 +274,8 @@ export class CauseService {
       throw new NotFoundException('Cause not found');
     }
 
-    return cause;
+    // Transform URLs: relative paths → full URLs, full URLs → unchanged
+    return this.urlTransformer.transformCommonFields(cause);
   }
 
   /**

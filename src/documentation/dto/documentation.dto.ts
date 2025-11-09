@@ -42,11 +42,11 @@ export class CreateDocumentationDto {
   content?: string;
 
   @ApiPropertyOptional({
-    description: 'External URL for additional resources',
-    example: 'https://example.com/additional-resources'
+    description: 'Document URL (full URL or relative path from signed URL upload)',
+    example: 'documentation/pdfs/1731234567890-intro-algorithms.pdf'
   })
   @IsOptional()
-  @IsUrl()
+  @IsString()
   docUrl?: string;
 }
 
@@ -80,10 +80,10 @@ export class UpdateDocumentationDto {
   content?: string;
 
   @ApiPropertyOptional({
-    description: 'Updated external URL'
+    description: 'Updated document URL (full URL or relative path from signed URL upload)'
   })
   @IsOptional()
-  @IsUrl()
+  @IsString()
   docUrl?: string;
 }
 
