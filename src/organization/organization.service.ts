@@ -6,6 +6,7 @@ import { CreateOrganizationDto, UpdateOrganizationDto, EnrollUserDto, VerifyUser
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { EnhancedJwtPayload } from '../auth/organization-access.service';
 import { UserType, GLOBAL_ACCESS_ROLES } from '../common/enums/user-types.enum';
+import { UrlTransformerService } from '../common/services/url-transformer.service';
 
 @Injectable()
 export class OrganizationService {
@@ -16,6 +17,7 @@ export class OrganizationService {
     @Inject(forwardRef(() => AuthService))
     private authService: AuthService,
     private jwtAccessValidation: JwtAccessValidationService,
+    private urlTransformer: UrlTransformerService,
   ) {}
 
   /**
@@ -195,7 +197,7 @@ export class OrganizationService {
     }
 
     // Transform to match OrganizationDto
-    return {
+    const response = {
       id: organization.organizationId.toString(),
       name: organization.name,
       type: organization.type,
@@ -205,6 +207,9 @@ export class OrganizationService {
       imageUrl: organization.imageUrl,
       instituteId: organization.instituteId ? organization.instituteId.toString() : null
     };
+
+    // Transform URLs: relative paths → full URLs
+    return this.urlTransformer.transformCommonFields(response);
   }
 
   /**

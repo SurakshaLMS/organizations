@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDocumentationDto, UpdateDocumentationDto } from './dto/documentation.dto';
+import { UrlTransformerService } from '../common/services/url-transformer.service';
 
 /**
  * SIMPLE DOCUMENTATION SERVICE FOR PDF URL MANAGEMENT
@@ -13,7 +14,10 @@ import { CreateDocumentationDto, UpdateDocumentationDto } from './dto/documentat
  */
 @Injectable()
 export class DocumentationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private urlTransformer: UrlTransformerService,
+  ) {}
 
   /**
    * CREATE DOCUMENTATION
@@ -33,12 +37,12 @@ export class DocumentationService {
       throw new NotFoundException(`Lecture with ID ${lectureId} not found`);
     }
 
-    // Validate PDF URL if provided
+    // Validate PDF URL if provided (now accepts both relative paths and full URLs)
     if (docUrl && !this.isValidUrl(docUrl)) {
       throw new BadRequestException('Invalid PDF URL format');
     }
 
-    return this.prisma.documentation.create({
+    const result = await this.prisma.documentation.create({
       data: {
         lectureId: lectureBigIntId,
         title,
@@ -56,6 +60,8 @@ export class DocumentationService {
         },
       },
     });
+    
+    return this.urlTransformer.transformCommonFields(result);
   }
 
   /**
@@ -64,7 +70,7 @@ export class DocumentationService {
   async findAll(lectureId?: string) {
     const where = lectureId ? { lectureId: BigInt(lectureId) } : {};
 
-    return this.prisma.documentation.findMany({
+    const docs = await this.prisma.documentation.findMany({
       where,
       include: {
         lecture: {
@@ -79,6 +85,8 @@ export class DocumentationService {
         createdAt: 'desc',
       },
     });
+    
+    return this.urlTransformer.transformCommonFieldsArray(docs);
   }
 
   /**
@@ -104,7 +112,7 @@ export class DocumentationService {
       throw new NotFoundException(`Documentation with ID ${id} not found`);
     }
 
-    return documentation;
+    return this.urlTransformer.transformCommonFields(documentation);
   }
 
   /**
@@ -122,12 +130,14 @@ export class DocumentationService {
       throw new NotFoundException(`Lecture with ID ${lectureId} not found`);
     }
 
-    return this.prisma.documentation.findMany({
+    const docs = await this.prisma.documentation.findMany({
       where: { lectureId: lectureBigIntId },
       orderBy: {
         createdAt: 'desc',
       },
     });
+    
+    return this.urlTransformer.transformCommonFieldsArray(docs);
   }
 
   /**
@@ -145,12 +155,12 @@ export class DocumentationService {
       throw new NotFoundException(`Documentation with ID ${id} not found`);
     }
 
-    // Validate PDF URL if provided
+    // Validate PDF URL if provided (now accepts both relative paths and full URLs)
     if (updateDocumentationDto.docUrl && !this.isValidUrl(updateDocumentationDto.docUrl)) {
       throw new BadRequestException('Invalid PDF URL format');
     }
 
-    return this.prisma.documentation.update({
+    const result = await this.prisma.documentation.update({
       where: { documentationId: docBigIntId },
       data: updateDocumentationDto,
       include: {
@@ -163,6 +173,8 @@ export class DocumentationService {
         },
       },
     });
+    
+    return this.urlTransformer.transformCommonFields(result);
   }
 
   /**

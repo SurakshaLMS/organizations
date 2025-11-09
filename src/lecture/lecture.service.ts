@@ -6,6 +6,7 @@ import { CreateLectureWithDocumentsDto, LectureWithDocumentsResponseDto } from '
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
 import { convertToBigInt, convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
 import { CloudStorageService, FileUploadResult } from '../common/services/cloud-storage.service';
+import { UrlTransformerService } from '../common/services/url-transformer.service';
 
 /**
  * Document upload result interface
@@ -35,14 +36,13 @@ export interface DocumentUploadResult {
 @Injectable()
 export class LectureService {
   private readonly logger = new Logger(LectureService.name);
-  
+
   constructor(
     private prisma: PrismaService,
     private jwtAccessValidation: JwtAccessValidationService,
     private cloudStorage: CloudStorageService,
-  ) {}
-
-  /**
+    private urlTransformer: UrlTransformerService,
+  ) {}  /**
    * CREATE LECTURE (ENTERPRISE OPTIMIZED)
    * 
    * Features:
@@ -130,7 +130,7 @@ export class LectureService {
       };
 
       this.logger.log(`📚 Lecture created: ${lecture.lectureId} ${user ? `by user ${user.sub}` : 'without authentication'} in cause ${causeId}`);
-      return result;
+      return this.urlTransformer.transformCommonFields(result);
 
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
@@ -283,11 +283,15 @@ export class LectureService {
         })),
       };
 
+      // Transform URLs in lecture and nested documents
+      const transformedResult = this.urlTransformer.transformCommonFields(result);
+      transformedResult.documents = this.urlTransformer.transformCommonFieldsArray(result.documents);
+
       this.logger.log(
         `🎓 Lecture with documents created: ${lecture.lectureId} (${uploadedDocuments.length}/${files?.length || 0} documents uploaded)`
       );
 
-      return result;
+      return transformedResult;
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
         throw error;
@@ -373,32 +377,39 @@ export class LectureService {
 
       
       this.logger.log(`📚 Retrieved ${lectures.length} lectures (${total} total) for user ${user.sub}`);      // Transform data to production format with proper date handling
-      const transformedLectures = lectures.map(lecture => ({
-        lectureId: convertToString(lecture.lectureId),
-        title: lecture.title,
-        description: lecture.description,
-        venue: lecture.venue,
-        mode: lecture.mode,
-        timeStart: lecture.timeStart?.toISOString(),
-        timeEnd: lecture.timeEnd?.toISOString(),
-        liveLink: lecture.liveLink,
-        liveMode: lecture.liveMode,
-        recordingUrl: lecture.recordingUrl,
-        isPublic: lecture.isPublic,
-        createdAt: lecture.createdAt.toISOString(),
-        updatedAt: lecture.updatedAt.toISOString(),
-        causeId: convertToString(lecture.causeId),
-        // Include full document details with proper date formatting
-        documents: lecture.documentations.map(doc => ({
-          documentationId: convertToString(doc.documentationId),
-          title: doc.title,
-          description: doc.description,
-          docUrl: doc.docUrl,
-          createdAt: doc.createdAt.toISOString(),
-          updatedAt: doc.updatedAt.toISOString(),
-        })),
-        documentCount: lecture.documentations.length,
-      }));
+      const transformedLectures = lectures.map(lecture => {
+        const lectureData = {
+          lectureId: convertToString(lecture.lectureId),
+          title: lecture.title,
+          description: lecture.description,
+          venue: lecture.venue,
+          mode: lecture.mode,
+          timeStart: lecture.timeStart?.toISOString(),
+          timeEnd: lecture.timeEnd?.toISOString(),
+          liveLink: lecture.liveLink,
+          liveMode: lecture.liveMode,
+          recordingUrl: lecture.recordingUrl,
+          isPublic: lecture.isPublic,
+          createdAt: lecture.createdAt.toISOString(),
+          updatedAt: lecture.updatedAt.toISOString(),
+          causeId: convertToString(lecture.causeId),
+          // Include full document details with proper date formatting
+          documents: lecture.documentations.map(doc => ({
+            documentationId: convertToString(doc.documentationId),
+            title: doc.title,
+            description: doc.description,
+            docUrl: doc.docUrl,
+            createdAt: doc.createdAt.toISOString(),
+            updatedAt: doc.updatedAt.toISOString(),
+          })),
+          documentCount: lecture.documentations.length,
+        };
+        
+        // Transform URLs in lecture and nested documents
+        const transformed = this.urlTransformer.transformCommonFields(lectureData);
+        transformed.documents = this.urlTransformer.transformCommonFieldsArray(lectureData.documents);
+        return transformed;
+      });
 
       const paginationDto = new PaginationDto();
       paginationDto.page = page.toString();
@@ -516,9 +527,12 @@ export class LectureService {
         documentCount: lecture.documentations.length,
       };
 
+      // Transform URLs in lecture and nested documents
+      const transformedResult = this.urlTransformer.transformCommonFields(result);
+      transformedResult.documents = this.urlTransformer.transformCommonFieldsArray(result.documents);
             
       this.logger.log(`📚 Lecture ${lectureId} accessed by user ${user.sub} with ${lecture.documentations.length} documents`);
-      return result;
+      return transformedResult;
 
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
@@ -615,7 +629,7 @@ export class LectureService {
       };
 
       this.logger.log(`📚 Lecture ${lectureId} updated ${user ? `by user ${user.sub}` : 'without authentication'}`);
-      return result;
+      return this.urlTransformer.transformCommonFields(result);
 
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
@@ -939,11 +953,14 @@ export class LectureService {
         updatedAt: doc.updatedAt.toISOString(),
       }));
 
+      // Transform document URLs
+      const transformedDocuments = this.urlTransformer.transformCommonFieldsArray(result);
+
       this.logger.log(`📄 Retrieved ${documents.length} documents for lecture ${lectureId}`);
       return {
         lectureId: convertToString(lecture.lectureId),
-        documents: result,
-        documentCount: result.length,
+        documents: transformedDocuments,
+        documentCount: transformedDocuments.length,
       };
 
     } catch (error) {
