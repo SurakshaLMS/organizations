@@ -208,7 +208,7 @@ export class OrganizationService {
       instituteId: organization.instituteId ? organization.instituteId.toString() : null
     };
 
-    // Transform URLs: relative paths → full URLs
+    // Transform URLs: relative paths → full URLs, full URLs → unchanged
     return this.urlTransformer.transformCommonFields(response);
   }
 
@@ -626,6 +626,7 @@ export class OrganizationService {
       instituteId: updatedOrganization.instituteId ? updatedOrganization.instituteId.toString() : null
     };
     
+    // Transform URLs: relative paths → full URLs, full URLs → unchanged
     return this.urlTransformer.transformCommonFields(result);
   }
 

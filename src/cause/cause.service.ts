@@ -34,7 +34,7 @@ export class CauseService {
       throw new NotFoundException(`Organization with ID ${organizationId} not found`);
     }
 
-    return this.prisma.cause.create({
+    const cause = await this.prisma.cause.create({
       data: {
         organizationId: orgBigIntId,
         title,
@@ -54,6 +54,9 @@ export class CauseService {
         // Exclude: createdAt, updatedAt
       },
     });
+
+    // Transform URLs: relative paths → full URLs, full URLs → unchanged
+    return this.urlTransformer.transformCommonFields(cause);
   }
 
   /**
@@ -310,6 +313,7 @@ export class CauseService {
       },
     });
     
+    // Transform URLs: relative paths → full URLs, full URLs → unchanged
     return this.urlTransformer.transformCommonFields(updatedCause);
   }
 
