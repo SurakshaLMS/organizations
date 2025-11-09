@@ -182,23 +182,23 @@ export class AuthService {
         }
       }
 
-      // Method 1: Direct bcrypt validation (most common)
+      // Method 1: Direct bcrypt validation WITHOUT pepper (most common)
       if (hashedPassword.startsWith('$2b$') || hashedPassword.startsWith('$2a$') || hashedPassword.startsWith('$2y$')) {
         const isValid = await bcrypt.compare(plainTextPassword, hashedPassword);
         if (isValid) {
-          this.logger.log('✅ Password validated via direct bcrypt');
+          this.logger.log('✅ Password validated via direct bcrypt (no pepper)');
           return true;
         }
-      }
-
-      // Method 2: Try with pepper from environment
-      const pepper = process.env.PASSWORD_PEPPER || process.env.LAAS_PASSWORD_PEPPER || '';
-      if (pepper) {
-        const pepperedPassword = plainTextPassword + pepper;
-        const isValidWithPepper = await bcrypt.compare(pepperedPassword, hashedPassword);
-        if (isValidWithPepper) {
-          this.logger.log('✅ Password validated with pepper');
-          return true;
+        
+        // Method 1b: Try with BCRYPT_PEPPER if direct comparison failed
+        const pepper = process.env.BCRYPT_PEPPER || process.env.PASSWORD_PEPPER || '';
+        if (pepper) {
+          const pepperedPassword = plainTextPassword + pepper;
+          const isValidWithPepper = await bcrypt.compare(pepperedPassword, hashedPassword);
+          if (isValidWithPepper) {
+            this.logger.log('✅ Password validated with BCRYPT_PEPPER');
+            return true;
+          }
         }
       }
 
