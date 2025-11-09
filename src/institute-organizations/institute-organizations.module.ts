@@ -2,12 +2,12 @@ import { Module } from '@nestjs/common';
 import { InstituteOrganizationsController } from './institute-organizations.controller';
 import { InstituteOrganizationsService } from './institute-organizations.service';
 import { PrismaModule } from '../prisma/prisma.module';
-import { CloudStorageService } from '../common/services/cloud-storage.service';
+import { CommonModule } from '../common/common.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, CommonModule],
   controllers: [InstituteOrganizationsController],
-  providers: [InstituteOrganizationsService, CloudStorageService],
+  providers: [InstituteOrganizationsService],
   exports: [InstituteOrganizationsService],
 })
 export class InstituteOrganizationsModule {}

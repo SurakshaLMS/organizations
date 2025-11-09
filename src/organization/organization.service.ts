@@ -319,7 +319,8 @@ export class OrganizationService {
       },
     });
 
-    return createPaginatedResponse(organizations, total, pagination);
+    const transformedOrgs = this.urlTransformer.transformCommonFieldsArray(organizations);
+    return createPaginatedResponse(transformedOrgs, total, pagination);
   }
 
   /**
@@ -554,7 +555,7 @@ export class OrganizationService {
       throw new ForbiddenException('Access denied to this organization');
     }
 
-    return organization;
+    return this.urlTransformer.transformCommonFields(organization);
   }
 
   /**
@@ -614,7 +615,7 @@ export class OrganizationService {
     });
 
     // Transform to match OrganizationDto
-    return {
+    const result = {
       id: updatedOrganization.organizationId.toString(),
       name: updatedOrganization.name,
       type: updatedOrganization.type,
@@ -624,6 +625,8 @@ export class OrganizationService {
       imageUrl: updatedOrganization.imageUrl,
       instituteId: updatedOrganization.instituteId ? updatedOrganization.instituteId.toString() : null
     };
+    
+    return this.urlTransformer.transformCommonFields(result);
   }
 
   /**

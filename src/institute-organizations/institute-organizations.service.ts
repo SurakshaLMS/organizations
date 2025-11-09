@@ -2,12 +2,16 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInstituteOrganizationDto, UpdateInstituteOrganizationDto } from './dto/institute-organization.dto';
 import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../common/dto/pagination.dto';
+import { UrlTransformerService } from '../common/services/url-transformer.service';
 
 @Injectable()
 export class InstituteOrganizationsService {
   private readonly logger = new Logger(InstituteOrganizationsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private urlTransformer: UrlTransformerService,
+  ) {}
 
   /**
    * Create a new organization for an institute (No authentication required)
@@ -56,7 +60,7 @@ export class InstituteOrganizationsService {
 
     this.logger.log(`✅ Organization created successfully: ${createdOrganization.organizationId} for institute: ${instituteId}`);
 
-    return {
+    const result = {
       id: createdOrganization.organizationId.toString(),
       name: createdOrganization.name,
       type: createdOrganization.type,
@@ -74,6 +78,8 @@ export class InstituteOrganizationsService {
       createdAt: createdOrganization.createdAt,
       updatedAt: createdOrganization.updatedAt
     };
+    
+    return this.urlTransformer.transformCommonFields(result);
   }
 
   /**
@@ -113,7 +119,7 @@ export class InstituteOrganizationsService {
       })
     ]);
 
-    return createPaginatedResponse(
+    const transformedOrgs = this.urlTransformer.transformCommonFieldsArray(
       organizations.map(org => ({
         id: org.organizationId.toString(),
         name: org.name,
@@ -132,10 +138,10 @@ export class InstituteOrganizationsService {
         memberCount: org._count.organizationUsers,
         createdAt: org.createdAt,
         updatedAt: org.updatedAt
-      })),
-      total,
-      paginationDto
+      }))
     );
+    
+    return createPaginatedResponse(transformedOrgs, total, paginationDto);
   }
 
   /**
@@ -172,7 +178,7 @@ export class InstituteOrganizationsService {
       throw new NotFoundException(`Organization ${organizationId} not found for institute ${instituteId}`);
     }
 
-    return {
+    const result = {
       id: organization.organizationId.toString(),
       name: organization.name,
       type: organization.type,
@@ -191,6 +197,8 @@ export class InstituteOrganizationsService {
       createdAt: organization.createdAt,
       updatedAt: organization.updatedAt
     };
+    
+    return this.urlTransformer.transformCommonFields(result);
   }
 
   /**
@@ -229,7 +237,7 @@ export class InstituteOrganizationsService {
 
     this.logger.log(`✅ Organization updated successfully: ${organizationId} for institute: ${instituteId}`);
 
-    return {
+    const result = {
       id: updatedOrganization.organizationId.toString(),
       name: updatedOrganization.name,
       type: updatedOrganization.type,
@@ -247,6 +255,8 @@ export class InstituteOrganizationsService {
       createdAt: updatedOrganization.createdAt,
       updatedAt: updatedOrganization.updatedAt
     };
+    
+    return this.urlTransformer.transformCommonFields(result);
   }
 
   /**
@@ -318,7 +328,7 @@ export class InstituteOrganizationsService {
       })
     ]);
 
-    return createPaginatedResponse(
+    const transformedOrgs = this.urlTransformer.transformCommonFieldsArray(
       organizations.map(org => ({
         id: org.organizationId.toString(),
         name: org.name,
@@ -333,10 +343,10 @@ export class InstituteOrganizationsService {
         } : null,
         createdAt: org.createdAt,
         updatedAt: org.updatedAt
-      })),
-      total,
-      paginationDto
+      }))
     );
+    
+    return createPaginatedResponse(transformedOrgs, total, paginationDto);
   }
 
   /**

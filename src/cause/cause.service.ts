@@ -292,7 +292,7 @@ export class CauseService {
       throw new NotFoundException('Cause not found');
     }
 
-    return this.prisma.cause.update({
+    const updatedCause = await this.prisma.cause.update({
       where: { causeId: causeBigIntId },
       data: updateCauseDto,
       select: {
@@ -307,6 +307,8 @@ export class CauseService {
         updatedAt: true,
       },
     });
+    
+    return this.urlTransformer.transformCommonFields(updatedCause);
   }
 
   /**
@@ -449,7 +451,7 @@ export class CauseService {
       }
     }
 
-    return this.prisma.cause.findMany({
+    const causes = await this.prisma.cause.findMany({
       where,
       include: {
         organization: {
@@ -468,6 +470,8 @@ export class CauseService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    
+    return this.urlTransformer.transformCommonFieldsArray(causes);
   }
 
 }
