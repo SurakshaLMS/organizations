@@ -18,6 +18,8 @@ export interface SignedUrlResponse {
   expiresAt: Date;
   expiresIn: number;
   expectedFilename: string;
+  relativePath: string; // Relative path for saving to database
+  publicUrl: string; // Full public URL (available after verification)
   maxFileSizeBytes: number;
   allowedExtensions: string[];
   uploadInstructions: {
@@ -140,20 +142,26 @@ export class SignedUrlService {
       
       this.logger.log(`✅ Generated signed URL - File: ${secureFilename}, TTL: ${this.SIGNED_URL_TTL_MINUTES}min`);
       
+      // Calculate the future public URL (after verification)
+      const futurePublicUrl = `${this.baseUrl}/${relativePath}`;
+      
       return {
         uploadToken,
         signedUrl,
         expiresAt,
         expiresIn: this.SIGNED_URL_TTL_MINUTES * 60,
         expectedFilename: secureFilename,
+        relativePath, // For saving to database
+        publicUrl: futurePublicUrl, // Full public URL (available after verification)
         maxFileSizeBytes: maxSizeBytes,
         allowedExtensions,
         uploadInstructions: {
           method: 'PUT',
           headers: {
             'Content-Type': request.contentType,
+            'x-goog-content-length-range': `0,${maxSizeBytes}`, // IMPORTANT: Must include this header in upload
           },
-          note: `Upload the file directly to the signed URL using PUT method. The URL expires in ${this.SIGNED_URL_TTL_MINUTES} minutes. After upload, call /signed-urls/verify/{token} to make the file public.`,
+          note: `IMPORTANT: You MUST include the 'x-goog-content-length-range' header in your PUT request with the exact value shown above. Upload the file directly to the signed URL using PUT method. The URL expires in ${this.SIGNED_URL_TTL_MINUTES} minutes. After upload, call /signed-urls/verify/{token} to make the file public.`,
         },
       };
       
