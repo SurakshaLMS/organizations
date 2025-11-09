@@ -21,7 +21,7 @@ export class CauseService {
    * Create a new cause (ENHANCED with validation)
    */
   async createCause(createCauseDto: CreateCauseDto) {
-    const { organizationId, title, description, isPublic, imageUrl } = createCauseDto;
+    const { organizationId, title, description, isPublic, imageUrl, introVideoUrl } = createCauseDto;
     const orgBigIntId = convertToBigInt(organizationId);
 
     // Validate that the organization exists to prevent foreign key constraint violation
@@ -41,6 +41,7 @@ export class CauseService {
         description,
         isPublic,
         imageUrl,
+        introVideoUrl,
       },
       select: {
         causeId: true,
@@ -48,6 +49,7 @@ export class CauseService {
         description: true,
         isPublic: true,
         imageUrl: true,
+        introVideoUrl: true,
         organizationId: true,
         // Exclude: createdAt, updatedAt
       },
