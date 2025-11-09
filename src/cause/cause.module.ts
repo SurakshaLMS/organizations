@@ -3,12 +3,12 @@ import { CauseService } from './cause.service';
 import { CauseController } from './cause.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
-import { CloudStorageService } from '../common/services/cloud-storage.service';
+import { CommonModule } from '../common/common.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, CommonModule],
   controllers: [CauseController],
-  providers: [CauseService, CloudStorageService],
+  providers: [CauseService],
   exports: [CauseService],
 })
 export class CauseModule {}
