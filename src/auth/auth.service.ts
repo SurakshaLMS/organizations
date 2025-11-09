@@ -36,7 +36,7 @@ export class AuthService {
   ) {}
 
   private readonly logger = {
-    log: (message: string) => this.logger.log(message),
+    log: (message: string) => console.log(`[AUTH] ${message}`),
     warn: (message: string) => console.warn(`[AUTH WARNING] ${message}`),
     error: (message: string) => console.error(`[AUTH ERROR] ${message}`),
   };
@@ -182,21 +182,22 @@ export class AuthService {
         }
       }
 
-      // Method 1: Direct bcrypt validation WITHOUT pepper (most common)
+      // Method 1: Bcrypt validation - try both with and without pepper
       if (hashedPassword.startsWith('$2b$') || hashedPassword.startsWith('$2a$') || hashedPassword.startsWith('$2y$')) {
+        // First try: Direct comparison (no pepper)
         const isValid = await bcrypt.compare(plainTextPassword, hashedPassword);
         if (isValid) {
           this.logger.log('✅ Password validated via direct bcrypt (no pepper)');
           return true;
         }
         
-        // Method 1b: Try with BCRYPT_PEPPER if direct comparison failed
-        const pepper = process.env.BCRYPT_PEPPER || process.env.PASSWORD_PEPPER || '';
+        // Second try: With BCRYPT_PEPPER (if passwords were created by main backend)
+        const pepper = process.env.BCRYPT_PEPPER || '';
         if (pepper) {
           const pepperedPassword = plainTextPassword + pepper;
           const isValidWithPepper = await bcrypt.compare(pepperedPassword, hashedPassword);
           if (isValidWithPepper) {
-            this.logger.log('✅ Password validated with BCRYPT_PEPPER');
+            this.logger.log('✅ Password validated with BCRYPT_PEPPER (main backend)');
             return true;
           }
         }
@@ -250,6 +251,7 @@ export class AuthService {
 
   async hashPassword(password: string): Promise<string> {
     const saltRounds = 12;
+    // This service uses plain bcrypt WITHOUT pepper (separate from main backend)
     return bcrypt.hash(password, saltRounds);
   }
 
