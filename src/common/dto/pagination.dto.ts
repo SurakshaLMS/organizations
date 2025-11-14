@@ -1,13 +1,20 @@
 import { IsOptional, IsNumberString, IsString, IsIn, Min, Max } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
+// Configurable limits - can be overridden via environment variables
+// These are safe defaults that will be used if ConfigService is not available
+const getMaxPaginationLimit = () => parseInt(process.env.MAX_PAGINATION_LIMIT || '100', 10);
+const getMaxPageNumber = () => parseInt(process.env.MAX_PAGE_NUMBER || '1000', 10);
+const getMaxSearchLength = () => parseInt(process.env.MAX_SEARCH_LENGTH || '200', 10);
+
 export class PaginationDto {
   @IsOptional()
   @IsNumberString()
   @Transform(({ value }) => {
     const num = parseInt(value);
+    const maxPageNumber = getMaxPageNumber();
     if (isNaN(num) || num < 1) return '1';
-    if (num > 1000) return '1000'; // Max 1000 pages
+    if (num > maxPageNumber) return maxPageNumber.toString();
     return value;
   })
   page?: string = '1';
@@ -16,8 +23,9 @@ export class PaginationDto {
   @IsNumberString()
   @Transform(({ value }) => {
     const num = parseInt(value);
+    const maxLimit = getMaxPaginationLimit();
     if (isNaN(num) || num < 1) return '10';
-    if (num > 100) return '100'; // SECURITY: Max 100 items per page
+    if (num > maxLimit) return maxLimit.toString();
     return value;
   })
   limit?: string = '10';
@@ -34,8 +42,9 @@ export class PaginationDto {
   @IsString()
   @Transform(({ value }) => {
     // SECURITY: Limit search string length to prevent DoS
-    if (typeof value === 'string' && value.length > 200) {
-      return value.substring(0, 200);
+    const maxSearchLength = getMaxSearchLength();
+    if (typeof value === 'string' && value.length > maxSearchLength) {
+      return value.substring(0, maxSearchLength);
     }
     return value;
   })
@@ -44,14 +53,16 @@ export class PaginationDto {
   // Transform string values to numbers with security limits
   get pageNumber(): number {
     const parsed = parseInt(this.page || '1') || 1;
+    const maxPageNumber = getMaxPageNumber();
     // SECURITY: Prevent massive page numbers (DoS protection)
-    return Math.max(1, Math.min(parsed, 1000));
+    return Math.max(1, Math.min(parsed, maxPageNumber));
   }
 
   get limitNumber(): number {
     const parsed = parseInt(this.limit || '10') || 10;
-    // SECURITY: Max 100 items per page (prevent bulk data extraction)
-    return Math.max(1, Math.min(parsed, 100));
+    const maxLimit = getMaxPaginationLimit();
+    // SECURITY: Max items per page (prevent bulk data extraction)
+    return Math.max(1, Math.min(parsed, maxLimit));
   }
 
   get skip(): number {

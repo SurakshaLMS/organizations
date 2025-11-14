@@ -55,12 +55,15 @@ async function bootstrap() {
   // Enhanced CORS configuration for any proxy and cross-origin access
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
   const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS')?.split(',').map(o => o.trim()) || [];
+  const corsMethods = configService.get<string>('CORS_METHODS', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS').split(',');
+  const corsCredentials = configService.get<boolean>('CORS_CREDENTIALS', true);
+  const corsMaxAge = configService.get<number>('CORS_MAX_AGE', 86400);
   
   app.enableCors({
     origin: isProduction && allowedOrigins.length > 0 
       ? allowedOrigins  // Production: Use whitelist
       : true,           // Development: Allow all origins
-    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    methods: corsMethods,
     allowedHeaders: [
       'Accept',
       'Authorization', 
@@ -93,16 +96,17 @@ async function bootstrap() {
       'Access-Control-Allow-Origin',
       'Access-Control-Allow-Credentials'
     ],
-    credentials: true,
+    credentials: corsCredentials,
     optionsSuccessStatus: 200, // For legacy browser support
     preflightContinue: false,
-    maxAge: 86400, // 24 hours for preflight cache
+    maxAge: corsMaxAge, // Configurable preflight cache
   });
 
   // Enhanced request size limits for file uploads
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-  app.use(express.raw({ limit: '10mb' }));
+  const requestSizeLimit = configService.get<string>('REQUEST_SIZE_LIMIT', '10mb');
+  app.use(express.json({ limit: requestSizeLimit }));
+  app.use(express.urlencoded({ extended: true, limit: requestSizeLimit }));
+  app.use(express.raw({ limit: requestSizeLimit }));
 
   // Trust proxy settings for load balancers and reverse proxies
   // Set specific trust proxy configuration to avoid rate limiting validation errors
@@ -133,7 +137,7 @@ async function bootstrap() {
       } else {
         res.header('Access-Control-Allow-Origin', allowedOrigins.length > 0 ? allowedOrigins[0] : '*');
       }
-      res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+      res.header('Access-Control-Allow-Methods', corsMethods.join(','));
       res.header('Access-Control-Allow-Headers', [
         'Accept',
         'Authorization', 

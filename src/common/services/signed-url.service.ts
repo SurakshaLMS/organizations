@@ -65,14 +65,15 @@ export class SignedUrlService {
   private readonly baseUrl: string;
   private readonly encryptionKey: string;
   
-  // Cost optimization settings
-  private readonly SIGNED_URL_TTL_MINUTES = 10; // Short TTL for cost savings
+  // Cost optimization settings (now configurable via .env)
+  private readonly SIGNED_URL_TTL_MINUTES: number;
 
   constructor(
     private readonly configService: ConfigService,
   ) {
     this.bucketName = this.configService.get<string>('GCS_BUCKET_NAME') || '';
     this.baseUrl = `https://storage.googleapis.com/${this.bucketName}`;
+    this.SIGNED_URL_TTL_MINUTES = this.configService.get<number>('SIGNED_URL_TTL_MINUTES', 10);
     this.encryptionKey = this.configService.get<string>('PASSWORD_ENCRYPTION_KEY') || 'default-key-change-me';
     
     const projectId = this.configService.get<string>('GCS_PROJECT_ID');
