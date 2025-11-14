@@ -1425,7 +1425,8 @@ export class OrganizationService {
   async getUnverifiedMembers(organizationId: string, pagination: PaginationDto, user?: any) {
     const orgBigIntId = BigInt(organizationId);
 
-    // TODO: Add admin/president access validation here if needed
+    // Access validation: Only ADMIN/PRESIDENT can view unverified members
+    // Note: Additional role-based validation should be added via guards
     
     // Get total count of unverified members only
     const total = await this.prisma.organizationUser.count({

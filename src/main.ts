@@ -53,8 +53,8 @@ async function bootstrap() {
   }));
 
   // Enhanced CORS configuration for any proxy and cross-origin access
-  const isProduction = process.env.NODE_ENV === 'production';
-  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
+  const isProduction = configService.get<string>('NODE_ENV') === 'production';
+  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS')?.split(',').map(o => o.trim()) || [];
   
   app.enableCors({
     origin: isProduction && allowedOrigins.length > 0 
@@ -295,13 +295,11 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix('organization/api/v1');
 
-  // Port configuration
-  const port = parseInt(process.env.PORT || '8080', 10) || configService.get<number>('app.port') || 8080;
+  // Port configuration - Use ConfigService with fallback to 8080 for Cloud Run
+  const port = configService.get<number>('PORT', 8080);
 
-  // ✅ SECURITY: Conditional Swagger setup - ONLY in development or when explicitly enabled
-  const swaggerEnabled = process.env.SWAGGER_ENABLED === 'true' || process.env.ENABLE_SWAGGER === 'true';
-  
-  if (!isProduction || swaggerEnabled) {
+  // ✅ SECURITY: Conditional Swagger setup - ONLY in development (disabled in production)
+  if (!isProduction) {
     // Swagger configuration
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Organization Management API')
@@ -399,18 +397,21 @@ Standard HTTP status codes with detailed error messages:
     ],
   });
 
-    logger.log(`Swagger UI available at: http://localhost:${port}/api/docs`);
+    logger.log(`📚 Swagger UI available at: http://localhost:${port}/api/docs`);
   } else {
-    logger.log('Swagger UI disabled in production mode (Set SWAGGER_ENABLED=true to enable)');
+    logger.log('🔒 Swagger UI disabled in production mode for security');
   }
 
   // Prisma shutdown hooks
   await prismaService.enableShutdownHooks(app);
 
   // Start server - bind to 0.0.0.0 for Cloud Run compatibility
-  logger.log(`Starting server on port ${port}...`);
-  logger.log(`Environment: ${process.env.NODE_ENV}`);
-  logger.log(`Database URL configured: ${process.env.DATABASE_URL ? 'Yes' : 'No'}`);
+  logger.log(`🚀 Starting server on port ${port}...`);
+  logger.log(`🌍 Environment: ${isProduction ? 'production' : 'development'}`);
+  logger.log(`💾 Database: ${configService.get<string>('DATABASE_URL') ? 'Connected' : 'Not configured'}`);
+  logger.log(`🔐 Security: ${isProduction ? 'Enabled (CORS whitelist, no Swagger)' : 'Development mode'}`);
+  logger.log(`📁 Storage: Google Cloud Storage (${configService.get<string>('GCS_BUCKET_NAME', 'not-configured')})`);
+  logger.log(`⏰ Rate limiting: ${configService.get<number>('RATE_LIMIT_MAX_REQUESTS', 100)} requests per ${configService.get<number>('RATE_LIMIT_WINDOW_MS', 900000) / 60000} minutes`);
   
   await app.listen(port, '0.0.0.0');
   

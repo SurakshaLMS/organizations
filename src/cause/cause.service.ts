@@ -364,7 +364,7 @@ export class CauseService {
             const relativePath = urlParts.slice(-2).join('/'); // Get folder/filename
             await this.cloudStorageService.deleteFile(relativePath);
           } catch (error) {
-            console.warn('Failed to delete old cause image:', error.message);
+            this.logger.warn('Failed to delete old cause image:', error.message);
           }
         }
         

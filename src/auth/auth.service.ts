@@ -3,7 +3,8 @@ import {
   BadRequestException, 
   UnauthorizedException,
   NotFoundException,
-  ConflictException
+  ConflictException,
+  Logger
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,11 +36,7 @@ export class AuthService {
     private readonly ultraCompactJwtService: UltraCompactJwtService,
   ) {}
 
-  private readonly logger = {
-    log: (message: string) => console.log(`[AUTH] ${message}`),
-    warn: (message: string) => console.warn(`[AUTH WARNING] ${message}`),
-    error: (message: string) => console.error(`[AUTH ERROR] ${message}`),
-  };
+  private readonly logger = new Logger(AuthService.name);
 
   async login(loginDto: LoginDto) {
     try {

@@ -362,19 +362,21 @@ export class SignedUrlService {
   }
 
   private getMaxFileSizeForType(folder: string): number {
-    // Get from environment or use defaults
+    // Get from environment or use defaults (with radix 10 for proper parsing)
     const sizeMap: Record<string, number> = {
-      'profile-images': parseInt(this.configService.get('MAX_PROFILE_IMAGE_SIZE', '10485760')), // 10MB
-      'institute-images': parseInt(this.configService.get('MAX_INSTITUTE_IMAGE_SIZE', '10485760')), // 10MB
-      'organization-images': parseInt(this.configService.get('MAX_INSTITUTE_IMAGE_SIZE', '10485760')), // 10MB
-      'student-images': parseInt(this.configService.get('MAX_STUDENT_IMAGE_SIZE', '5242880')), // 5MB
-      'advertisement-media': parseInt(this.configService.get('MAX_ADVERTISEMENT_SIZE', '104857600')), // 100MB
-      'lecture-documents': parseInt(this.configService.get('MAX_LECTURE_DOCUMENT_SIZE', '52428800')), // 50MB
-      'lecture-covers': parseInt(this.configService.get('MAX_LECTURE_COVER_SIZE', '5242880')), // 5MB
-      'homework-submissions': parseInt(this.configService.get('MAX_HOMEWORK_SIZE', '20971520')), // 20MB
-      'teacher-corrections': parseInt(this.configService.get('MAX_CORRECTION_SIZE', '20971520')), // 20MB
+      'profile-images': parseInt(this.configService.get('MAX_PROFILE_IMAGE_SIZE', '5242880'), 10), // 5MB (match .env)
+      'institute-images': parseInt(this.configService.get('MAX_INSTITUTE_IMAGE_SIZE', '10485760'), 10), // 10MB
+      'organization-images': parseInt(this.configService.get('MAX_INSTITUTE_IMAGE_SIZE', '10485760'), 10), // 10MB
+      'student-images': parseInt(this.configService.get('MAX_STUDENT_IMAGE_SIZE', '5242880'), 10), // 5MB
+      'advertisement-media': parseInt(this.configService.get('MAX_ADVERTISEMENT_SIZE', '104857600'), 10), // 100MB
+      'lecture-documents': parseInt(this.configService.get('MAX_LECTURE_DOCUMENT_SIZE', '52428800'), 10), // 50MB
+      'lecture-covers': parseInt(this.configService.get('MAX_LECTURE_COVER_SIZE', '5242880'), 10), // 5MB
+      'homework-submissions': parseInt(this.configService.get('MAX_HOMEWORK_SIZE', '20971520'), 10), // 20MB
+      'teacher-corrections': parseInt(this.configService.get('MAX_CORRECTION_SIZE', '20971520'), 10), // 20MB
     };
     
-    return sizeMap[folder] || 10485760; // 10MB default
+    const maxSize = sizeMap[folder] || 10485760; // 10MB default
+    this.logger.debug(`Max file size for ${folder}: ${maxSize} bytes (${(maxSize / 1048576).toFixed(2)} MB)`);
+    return maxSize;
   }
 }

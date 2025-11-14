@@ -9,7 +9,8 @@ import {
   Query, 
   UsePipes, 
   ValidationPipe,
-  BadRequestException
+  BadRequestException,
+  Logger
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { InstituteOrganizationsService } from './institute-organizations.service';
@@ -32,6 +33,8 @@ import { PaginationValidationPipe } from '../common/pipes/pagination-validation.
   validateCustomDecorators: true
 }))
 export class InstituteOrganizationsController {
+  private readonly logger = new Logger(InstituteOrganizationsController.name);
+
   constructor(
     private readonly instituteOrganizationsService: InstituteOrganizationsService,
   ) {}
@@ -48,7 +51,7 @@ export class InstituteOrganizationsController {
     @Body() createOrganizationDto: CreateInstituteOrganizationDto,
   ) {
     try {
-      console.log('🚀 Institute organization creation request received:', {
+      this.logger.log('🚀 Institute organization creation request received:', {
         organizationData: createOrganizationDto,
         imageUrl: createOrganizationDto.imageUrl || 'none'
       });
@@ -58,7 +61,7 @@ export class InstituteOrganizationsController {
 
       const result = await this.instituteOrganizationsService.createOrganization(createOrganizationDto);
       
-      console.log('✅ Institute organization created successfully:', {
+      this.logger.log('✅ Institute organization created successfully:', {
         organizationId: result.id,
         name: result.name,
         instituteId: result.instituteId,
@@ -67,7 +70,7 @@ export class InstituteOrganizationsController {
 
       return result;
     } catch (error) {
-      console.error('❌ Institute organization creation failed:', {
+      this.logger.error('❌ Institute organization creation failed:', {
         error: error.message,
         stack: error.stack,
         organizationData: createOrganizationDto
