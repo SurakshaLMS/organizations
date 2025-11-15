@@ -202,6 +202,10 @@ export class LectureService {
 
         for (const docMeta of documentsMetadata) {
           try {
+            // Determine if docUrl is a full URL or relative path
+            const docUrl = docMeta.docUrl || '';
+            const isFullUrl = docUrl.startsWith('http://') || docUrl.startsWith('https://');
+
             // Create documentation record with provided metadata
             const documentation = await this.prisma.documentation.create({
               data: {
@@ -209,7 +213,7 @@ export class LectureService {
                 title: docMeta.title || 'Untitled Document',
                 description: docMeta.description || '',
                 content: docMeta.content || '',
-                docUrl: docMeta.docUrl || '', // Store relative path only
+                docUrl: docUrl, // Store relative path only (full URLs stored as-is for external links)
                 createdAt: new Date(),
                 updatedAt: new Date(),
               },
@@ -217,17 +221,22 @@ export class LectureService {
 
             this.logger.log(`📋 Documentation record created: ${documentation.documentationId}`);
 
+            // Build response URL: full URL stays as-is, relative path gets base URL
+            const responseUrl = isFullUrl 
+              ? docUrl 
+              : `${process.env.GCS_BASE_URL || 'https://storage.googleapis.com/suraksha-lms'}/${docUrl}`;
+
             uploadedDocuments.push({
               documentationId: convertToString(documentation.documentationId),
               title: documentation.title,
-              url: documentation.docUrl || '', // Store relative path
+              url: responseUrl, // Return full URL for client
               fileName: docMeta.title,
               size: 0, // Size not available for pre-uploaded files
               fileId: convertToString(documentation.documentationId),
               uploadedAt: new Date().toISOString(),
             });
 
-            this.logger.log(`✅ Document linked: ${docMeta.title} -> ${documentation.docUrl}`);
+            this.logger.log(`✅ Document linked: ${docMeta.title} -> ${responseUrl}`);
           } catch (docError) {
             this.logger.error(`❌ Failed to create document record for ${docMeta.title}:`, docError);
             // Continue with other documents
