@@ -1,4 +1,22 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+/**
+ * DOCUMENT CREATION DTO
+ */
+export class CreateDocumentDto {
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  @IsOptional()
+  content?: string;
+}
 
 /**
  * CREATE LECTURE WITH DOCUMENTS DTO (for URL-based causeId)
@@ -52,4 +70,11 @@ export class CreateLectureWithDocumentsBodyDto {
   @IsBoolean()
   @IsOptional()
   isPublic?: boolean;
+
+  // Document metadata (optional - to be paired with uploaded files)
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateDocumentDto)
+  @IsOptional()
+  documents?: CreateDocumentDto[];
 }
