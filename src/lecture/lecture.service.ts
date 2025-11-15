@@ -145,11 +145,12 @@ export class LectureService {
   /**
    * CREATE LECTURE WITH DOCUMENTS
    * 
-   * Enhanced lecture creation that supports uploading multiple documents to S3
-   * and creating lecture with documents in a single transaction.
+   * Enhanced lecture creation that supports:
+   * 1. Creating lecture with pre-uploaded document URLs (signed URL flow)
+   * 2. Legacy: Uploading multiple documents to S3 (deprecated)
    */
   async createLectureWithDocuments(
-    createLectureDto: CreateLectureDto,
+    createLectureDto: CreateLectureWithDocumentsDto,
     causeId: string,
     user?: any,
     files?: any[]
@@ -176,10 +177,17 @@ export class LectureService {
         this.jwtAccessValidation.requireOrganizationMember(user, organizationId);
       }
 
+      // Extract documents array from DTO if present
+      const documentsMetadata = createLectureDto.documents || [];
+      
+      // Remove documents from lecture data to avoid Prisma errors
+      const lectureData = { ...createLectureDto };
+      delete lectureData.documents;
+
       // Create the lecture first
       const lecture = await this.prisma.lecture.create({
         data: {
-          ...createLectureDto,
+          ...lectureData,
           causeId: causeIdBigInt,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -187,6 +195,45 @@ export class LectureService {
       });
 
       let uploadedDocuments: DocumentUploadResult[] = [];
+
+      // Handle documents from DTO (pre-uploaded via signed URLs)
+      if (documentsMetadata && documentsMetadata.length > 0) {
+        this.logger.log(`📁 Creating ${documentsMetadata.length} document records for lecture ${lecture.lectureId}`);
+
+        for (const docMeta of documentsMetadata) {
+          try {
+            // Create documentation record with provided metadata
+            const documentation = await this.prisma.documentation.create({
+              data: {
+                lectureId: lecture.lectureId,
+                title: docMeta.title || 'Untitled Document',
+                description: docMeta.description || '',
+                content: docMeta.content || '',
+                docUrl: docMeta.docUrl || '', // Store relative path only
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              },
+            });
+
+            this.logger.log(`📋 Documentation record created: ${documentation.documentationId}`);
+
+            uploadedDocuments.push({
+              documentationId: convertToString(documentation.documentationId),
+              title: documentation.title,
+              url: documentation.docUrl || '', // Store relative path
+              fileName: docMeta.title,
+              size: 0, // Size not available for pre-uploaded files
+              fileId: convertToString(documentation.documentationId),
+              uploadedAt: new Date().toISOString(),
+            });
+
+            this.logger.log(`✅ Document linked: ${docMeta.title} -> ${documentation.docUrl}`);
+          } catch (docError) {
+            this.logger.error(`❌ Failed to create document record for ${docMeta.title}:`, docError);
+            // Continue with other documents
+          }
+        }
+      }
 
       // Upload documents if provided
       if (files && files.length > 0) {

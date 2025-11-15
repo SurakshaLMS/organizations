@@ -16,6 +16,10 @@ export class CreateDocumentDto {
   @IsString()
   @IsOptional()
   content?: string;
+
+  @IsString()
+  @IsOptional()
+  docUrl?: string;
 }
 
 /**
