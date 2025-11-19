@@ -1,0 +1,106 @@
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
+
+/**
+ * PRODUCTION ORIGIN VALIDATION GUARD
+ * 
+ * Blocks all requests that don't come from authorized frontend domains.
+ * This prevents:
+ * - Postman requests
+ * - cURL requests
+ * - Unauthorized API clients
+ * - Direct browser access
+ * 
+ * Only allows requests from:
+ * - lms.suraksha.lk
+ * - org.suraksha.lk
+ * - transport.suraksha.lk
+ * - admin.suraksha.lk
+ */
+@Injectable()
+export class OriginValidationGuard implements CanActivate {
+  private readonly logger = new Logger(OriginValidationGuard.name);
+  private readonly allowedOrigins: string[];
+  private readonly isProduction: boolean;
+
+  constructor(
+    private configService: ConfigService,
+    private reflector: Reflector,
+  ) {
+    this.isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    
+    // Get allowed origins from environment
+    const originsFromEnv = this.configService.get<string>('ALLOWED_ORIGINS', '');
+    this.allowedOrigins = originsFromEnv
+      .split(',')
+      .map(o => o.trim())
+      .filter(o => o.length > 0);
+
+    if (this.isProduction && this.allowedOrigins.length === 0) {
+      this.logger.error('⚠️ SECURITY WARNING: No ALLOWED_ORIGINS configured in production!');
+    }
+  }
+
+  canActivate(context: ExecutionContext): boolean {
+    // Skip validation in development
+    if (!this.isProduction) {
+      return true;
+    }
+
+    const request = context.switchToHttp().getRequest();
+    const origin = request.headers.origin || request.headers.referer;
+    
+    // Block requests without origin/referer (Postman, cURL, direct API calls)
+    if (!origin) {
+      this.logger.warn(`🚫 [SECURITY] Request blocked - No origin/referer header`);
+      this.logger.warn(`   Method: ${request.method} ${request.url}`);
+      this.logger.warn(`   IP: ${request.ip}`);
+      this.logger.warn(`   User-Agent: ${request.headers['user-agent']}`);
+      throw new ForbiddenException('Direct API access not allowed. Please use the official application.');
+    }
+
+    // Extract domain from origin/referer
+    let requestOrigin: string;
+    try {
+      const url = new URL(origin);
+      requestOrigin = `${url.protocol}//${url.hostname}`;
+      if (url.port && !['80', '443'].includes(url.port)) {
+        requestOrigin += `:${url.port}`;
+      }
+    } catch (error) {
+      this.logger.warn(`🚫 [SECURITY] Invalid origin format: ${origin}`);
+      throw new ForbiddenException('Invalid origin');
+    }
+
+    // Check if origin is in whitelist
+    const isAllowed = this.allowedOrigins.some(allowed => {
+      // Exact match
+      if (requestOrigin === allowed) return true;
+      
+      // Wildcard subdomain support (*.suraksha.lk)
+      if (allowed.startsWith('*.')) {
+        const domain = allowed.substring(2);
+        return requestOrigin.endsWith(domain);
+      }
+      
+      return false;
+    });
+
+    if (!isAllowed) {
+      this.logger.warn(`🚫 [SECURITY] Unauthorized origin blocked: ${requestOrigin}`);
+      this.logger.warn(`   Method: ${request.method} ${request.url}`);
+      this.logger.warn(`   IP: ${request.ip}`);
+      this.logger.warn(`   User-Agent: ${request.headers['user-agent']}`);
+      this.logger.warn(`   Allowed origins: ${this.allowedOrigins.join(', ')}`);
+      throw new ForbiddenException('Origin not authorized. Access denied.');
+    }
+
+    // Log successful validation (only in verbose mode)
+    if (this.configService.get<boolean>('LOG_ORIGIN_CHECKS', false)) {
+      this.logger.log(`✅ Origin validated: ${requestOrigin}`);
+    }
+
+    return true;
+  }
+}

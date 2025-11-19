@@ -59,6 +59,24 @@ async function bootstrap() {
   const corsCredentials = configService.get<boolean>('CORS_CREDENTIALS', true);
   const corsMaxAge = configService.get<number>('CORS_MAX_AGE', 86400);
   
+  // SECURITY: Log production configuration
+  if (isProduction) {
+    logger.log('🔒 PRODUCTION MODE ACTIVATED');
+    logger.log(`🛡️  Allowed Origins: ${allowedOrigins.length > 0 ? allowedOrigins.join(', ') : 'NONE - API WILL BE LOCKED DOWN!'}`);
+    logger.log('🚫 Postman/cURL requests will be BLOCKED');
+    logger.log('🚫 Direct API access will be BLOCKED');
+    logger.log('✅ Only authorized frontend domains allowed');
+    
+    if (allowedOrigins.length === 0) {
+      logger.error('⚠️⚠️⚠️ CRITICAL SECURITY WARNING ⚠️⚠️⚠️');
+      logger.error('⚠️  No ALLOWED_ORIGINS configured!');
+      logger.error('⚠️  API will reject ALL requests in production!');
+      logger.error('⚠️  Set ALLOWED_ORIGINS in .env file');
+    }
+  } else {
+    logger.warn('⚠️  DEVELOPMENT MODE - All origins allowed (INSECURE)');
+  }
+  
   app.enableCors({
     origin: isProduction && allowedOrigins.length > 0 
       ? allowedOrigins  // Production: Use whitelist

@@ -15,6 +15,7 @@ import { LectureModule } from './lecture/lecture.module';
 import { JobsModule } from './jobs/jobs.module';
 import { CommonModule } from './common/common.module';
 import { SecurityMiddleware } from './middleware/security.middleware';
+import { OriginValidationGuard } from './common/guards/origin-validation.guard';
 
 // Config imports
 import databaseConfig from './config/database.config';
@@ -70,6 +71,11 @@ import appConfig from './config/app.config';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    // Apply origin validation guard globally in production
+    {
+      provide: APP_GUARD,
+      useClass: OriginValidationGuard,
     },
   ],
 })
