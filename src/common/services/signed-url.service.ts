@@ -5,6 +5,9 @@ import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import * as crypto from 'crypto';
 
+// AWS SDK will be dynamically imported when needed
+let AWS: any = null;
+
 export interface SignedUrlRequest {
   folder: string;
   fileName: string;
@@ -14,7 +17,7 @@ export interface SignedUrlRequest {
 
 export interface SignedUrlResponse {
   uploadToken: string;
-  signedUrl: string;
+  signedUrl: string | { url: string; fields: Record<string, string> };
   expiresAt: Date;
   expiresIn: number;
   expectedFilename: string;
@@ -24,7 +27,8 @@ export interface SignedUrlResponse {
   allowedExtensions: string[];
   uploadInstructions: {
     method: string;
-    headers: Record<string, string>;
+    headers?: Record<string, string>;
+    formFields?: Record<string, string>;
     note: string;
   };
 }
@@ -62,8 +66,14 @@ export class SignedUrlService {
   private readonly storage: Storage;
   private readonly bucket: Bucket;
   private readonly bucketName: string;
-  private readonly baseUrl: string;
+  private baseUrl: string; // Not readonly - can be set for AWS
   private readonly encryptionKey: string;
+  private readonly provider: string;
+  
+  // AWS S3
+  private s3: any;
+  private s3BucketName: string;
+  private s3Region: string;
   
   // Cost optimization settings (now configurable via .env)
   private readonly SIGNED_URL_TTL_MINUTES: number;
@@ -71,25 +81,82 @@ export class SignedUrlService {
   constructor(
     private readonly configService: ConfigService,
   ) {
-    this.bucketName = this.configService.get<string>('GCS_BUCKET_NAME') || '';
-    this.baseUrl = `https://storage.googleapis.com/${this.bucketName}`;
+    this.provider = this.configService.get<string>('STORAGE_PROVIDER', 'google').toLowerCase();
     this.SIGNED_URL_TTL_MINUTES = this.configService.get<number>('SIGNED_URL_TTL_MINUTES', 10);
     this.encryptionKey = this.configService.get<string>('PASSWORD_ENCRYPTION_KEY') || 'default-key-change-me';
     
-    const projectId = this.configService.get<string>('GCS_PROJECT_ID');
-    const clientEmail = this.configService.get<string>('GCS_CLIENT_EMAIL');
-    const privateKey = this.configService.get<string>('GCS_PRIVATE_KEY');
-    
-    this.storage = new Storage({
-      projectId,
-      credentials: {
-        client_email: clientEmail,
-        private_key: privateKey?.replace(/\\n/g, '\n'),
+    // Initialize based on provider
+    if (this.provider === 'aws' || this.provider === 's3') {
+      this.initializeAwsStorage();
+    } else {
+      // Default to Google Cloud Storage
+      this.bucketName = this.configService.get<string>('GCS_BUCKET_NAME') || '';
+      this.baseUrl = `https://storage.googleapis.com/${this.bucketName}`;
+      
+      const projectId = this.configService.get<string>('GCS_PROJECT_ID');
+      const clientEmail = this.configService.get<string>('GCS_CLIENT_EMAIL');
+      const privateKey = this.configService.get<string>('GCS_PRIVATE_KEY');
+      
+      this.storage = new Storage({
+        projectId,
+        credentials: {
+          client_email: clientEmail,
+          private_key: privateKey?.replace(/\\n/g, '\n'),
+        }
+      });
+      
+      this.bucket = this.storage.bucket(this.bucketName);
+      this.logger.log(`💰 GCS Signed URL Service initialized (TTL: ${this.SIGNED_URL_TTL_MINUTES} min, No DB)`);
+    }
+  }
+
+  private async initializeAwsStorage(): Promise<void> {
+    try {
+      this.s3BucketName = this.configService.get<string>('AWS_S3_BUCKET') || '';
+      this.s3Region = this.configService.get<string>('AWS_REGION', 'us-east-1');
+      this.baseUrl = `https://${this.s3BucketName}.s3.${this.s3Region}.amazonaws.com`;
+      
+      if (!this.s3BucketName) {
+        throw new Error('AWS S3 bucket name not configured');
       }
-    });
-    
-    this.bucket = this.storage.bucket(this.bucketName);
-    this.logger.log(`💰 Cost-Optimized Signed URL Service initialized (TTL: ${this.SIGNED_URL_TTL_MINUTES} min, No DB)`);
+
+      // Try to dynamically import AWS SDK
+      try {
+        const dynamicImport = new Function('specifier', 'return import(specifier)');
+        const awsModule = await dynamicImport('aws-sdk').catch(() => null);
+        if (!awsModule) {
+          this.logger.error('⚠️ AWS SDK not installed. Install with: npm install aws-sdk');
+          throw new Error('AWS SDK not available');
+        }
+        AWS = awsModule.default || awsModule;
+        
+        const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
+        const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+        
+        if (!accessKeyId || !secretAccessKey) {
+          throw new Error('AWS credentials not configured');
+        }
+        
+        AWS.config.update({
+          accessKeyId,
+          secretAccessKey,
+          region: this.s3Region
+        });
+        
+        this.s3 = new AWS.S3({
+          apiVersion: '2006-03-01',
+          signatureVersion: 'v4'
+        });
+        
+        this.logger.log(`💰 AWS S3 Signed URL Service initialized (TTL: ${this.SIGNED_URL_TTL_MINUTES} min, No DB)`);
+      } catch (error) {
+        this.logger.error('❌ AWS SDK initialization failed:', error.message);
+        throw error;
+      }
+    } catch (error) {
+      this.logger.error('❌ AWS S3 initialization failed:', error);
+      throw error;
+    }
   }
 
   /**
@@ -97,6 +164,17 @@ export class SignedUrlService {
    * Metadata encrypted in token - no database needed
    */
   async generateSignedUploadUrl(request: SignedUrlRequest): Promise<SignedUrlResponse> {
+    if (this.provider === 'aws' || this.provider === 's3') {
+      return this.generateAwsSignedUploadUrl(request);
+    } else {
+      return this.generateGcsSignedUploadUrl(request);
+    }
+  }
+
+  /**
+   * 📝 Generate GCS signed URL for PRIVATE upload
+   */
+  private async generateGcsSignedUploadUrl(request: SignedUrlRequest): Promise<SignedUrlResponse> {
     try {
       // Validate file extension
       const extension = path.extname(request.fileName).toLowerCase();
@@ -141,7 +219,7 @@ export class SignedUrlService {
       
       const [signedUrl] = await file.getSignedUrl(options);
       
-      this.logger.log(`✅ Generated signed URL - File: ${secureFilename}, TTL: ${this.SIGNED_URL_TTL_MINUTES}min`);
+      this.logger.log(`✅ Generated GCS signed URL - File: ${secureFilename}, TTL: ${this.SIGNED_URL_TTL_MINUTES}min`);
       
       // Calculate the future public URL (after verification)
       const futurePublicUrl = `${this.baseUrl}/${relativePath}`;
@@ -160,14 +238,104 @@ export class SignedUrlService {
           method: 'PUT',
           headers: {
             'Content-Type': request.contentType,
-            'x-goog-content-length-range': `0,${maxSizeBytes}`, // IMPORTANT: Must include this header in upload
+            'x-goog-content-length-range': `0,${maxSizeBytes}`,
           },
-          note: `IMPORTANT: You MUST include the 'x-goog-content-length-range' header in your PUT request with the exact value shown above. Upload the file directly to the signed URL using PUT method. The URL expires in ${this.SIGNED_URL_TTL_MINUTES} minutes. After upload, call /signed-urls/verify/{token} to make the file public.`,
+          note: `Upload the file directly to the signed URL using PUT method. The URL expires in ${this.SIGNED_URL_TTL_MINUTES} minutes. After upload, call /signed-urls/verify/{token} to make the file public.`,
         },
       };
       
     } catch (error) {
-      this.logger.error(`❌ Failed to generate signed URL:`, error);
+      this.logger.error(`❌ Failed to generate GCS signed URL:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 📝 Generate AWS S3 presigned POST for PRIVATE upload
+   */
+  private async generateAwsSignedUploadUrl(request: SignedUrlRequest): Promise<SignedUrlResponse> {
+    try {
+      if (!this.s3) {
+        throw new BadRequestException('AWS S3 not initialized');
+      }
+
+      // Validate file extension
+      const extension = path.extname(request.fileName).toLowerCase();
+      this.validateFileExtension(extension, request.folder);
+      
+      // Get max size from environment or request
+      const maxSizeBytes = request.maxSizeBytes || this.getMaxFileSizeForType(request.folder);
+      const allowedExtensions = this.getAllowedExtensions(request.folder);
+      
+      // Generate secure filename
+      const timestamp = Date.now();
+      const secureToken = this.generateSecureToken(16);
+      const secureFilename = this.generateSecureFilename(request.fileName, secureToken, timestamp);
+      const relativePath = `${request.folder}/${secureFilename}`;
+      
+      // Calculate expiry
+      const expiresAt = new Date(Date.now() + this.SIGNED_URL_TTL_MINUTES * 60 * 1000);
+      const expiresInSeconds = this.SIGNED_URL_TTL_MINUTES * 60;
+      
+      // Encrypt metadata to embed in token
+      const metadata = {
+        relativePath,
+        fileName: secureFilename,
+        folder: request.folder,
+        contentType: request.contentType,
+        maxSizeBytes,
+        expiresAt: expiresAt.getTime(),
+      };
+      const uploadToken = this.encryptMetadata(metadata);
+      
+      // Create presigned POST for AWS S3 with security conditions
+      const params = {
+        Bucket: this.s3BucketName,
+        Fields: {
+          key: relativePath,
+          'Content-Type': request.contentType,
+          'x-amz-server-side-encryption': 'AES256', // Enforce encryption
+        },
+        Expires: expiresInSeconds,
+        Conditions: [
+          ['eq', '$Content-Type', request.contentType], // Exact content type match
+          ['eq', '$key', relativePath], // Exact path match
+          ['content-length-range', 0, maxSizeBytes], // Size validation
+          ['eq', '$x-amz-server-side-encryption', 'AES256'], // Enforce encryption
+        ]
+      };
+      
+      const presignedPost = await new Promise<any>((resolve, reject) => {
+        this.s3.createPresignedPost(params, (err: any, data: any) => {
+          if (err) reject(err);
+          else resolve(data);
+        });
+      });
+      
+      this.logger.log(`✅ Generated AWS S3 presigned POST - File: ${secureFilename}, TTL: ${this.SIGNED_URL_TTL_MINUTES}min`);
+      
+      // Calculate the future public URL (after verification)
+      const futurePublicUrl = `${this.baseUrl}/${relativePath}`;
+      
+      return {
+        uploadToken,
+        signedUrl: presignedPost, // Contains { url, fields }
+        expiresAt,
+        expiresIn: expiresInSeconds,
+        expectedFilename: secureFilename,
+        relativePath,
+        publicUrl: futurePublicUrl,
+        maxFileSizeBytes: maxSizeBytes,
+        allowedExtensions,
+        uploadInstructions: {
+          method: 'POST',
+          formFields: presignedPost.fields,
+          note: `Upload using multipart/form-data POST to the URL. Include all form fields first, then the file with field name 'file'. The URL expires in ${this.SIGNED_URL_TTL_MINUTES} minutes. After upload, call /signed-urls/verify/{token} to make the file public.`,
+        },
+      };
+      
+    } catch (error) {
+      this.logger.error(`❌ Failed to generate AWS S3 presigned POST:`, error);
       throw error;
     }
   }
@@ -177,6 +345,17 @@ export class SignedUrlService {
    * Decrypts token to get metadata - no database needed
    */
   async verifyUpload(uploadToken: string): Promise<VerificationResult> {
+    if (this.provider === 'aws' || this.provider === 's3') {
+      return this.verifyUploadS3(uploadToken);
+    } else {
+      return this.verifyUploadGcs(uploadToken);
+    }
+  }
+
+  /**
+   * ✅ Verify GCS upload and make file PUBLIC
+   */
+  private async verifyUploadGcs(uploadToken: string): Promise<VerificationResult> {
     try {
       // Decrypt metadata from token
       const metadata = this.decryptMetadata(uploadToken);
@@ -265,7 +444,143 @@ export class SignedUrlService {
       };
       
     } catch (error) {
-      this.logger.error(`❌ Verification failed:`, error);
+      this.logger.error(`❌ GCS verification failed:`, error);
+      return {
+        success: false,
+        message: `Verification failed: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * ✅ Verify AWS S3 upload and make file PUBLIC
+   */
+  private async verifyUploadS3(uploadToken: string): Promise<VerificationResult> {
+    try {
+      if (!this.s3) {
+        return {
+          success: false,
+          message: 'AWS S3 not initialized',
+        };
+      }
+
+      // Decrypt metadata from token
+      const metadata = this.decryptMetadata(uploadToken);
+      
+      if (!metadata) {
+        return {
+          success: false,
+          message: 'Invalid or expired upload token',
+        };
+      }
+      
+      // Check if expired
+      if (Date.now() > metadata.expiresAt) {
+        return {
+          success: false,
+          message: `Upload window expired (${this.SIGNED_URL_TTL_MINUTES} minutes). Please request a new signed URL.`,
+        };
+      }
+      
+      // Verify file exists in S3
+      try {
+        const headParams = {
+          Bucket: this.s3BucketName,
+          Key: metadata.relativePath
+        };
+        
+        const headResult = await this.s3.headObject(headParams).promise();
+        const fileSize = headResult.ContentLength;
+        
+        // Validate file size
+        if (fileSize > metadata.maxSizeBytes) {
+          // Delete oversized file
+          await this.s3.deleteObject(headParams).promise();
+          return {
+            success: false,
+            message: `File too large (${fileSize} bytes). Max: ${metadata.maxSizeBytes} bytes`,
+          };
+        }
+        
+        // Validate content type
+        if (headResult.ContentType !== metadata.contentType) {
+          await this.s3.deleteObject(headParams).promise();
+          return {
+            success: false,
+            message: `Invalid content type. Expected: ${metadata.contentType}, Got: ${headResult.ContentType}`,
+          };
+        }
+        
+        // SECURITY: Validate no double extensions
+        const filename = metadata.fileName;
+        const extension = path.extname(filename).toLowerCase();
+        const baseWithoutExt = path.basename(filename, extension);
+        
+        if (baseWithoutExt.includes('.')) {
+          await this.s3.deleteObject(headParams).promise();
+          return {
+            success: false,
+            message: 'Security violation: Double extensions not allowed (e.g., .mysql.jpg)',
+          };
+        }
+        
+        // Validate extension is allowed for folder
+        try {
+          this.validateFileExtension(extension, metadata.folder);
+        } catch (error) {
+          await this.s3.deleteObject(headParams).promise();
+          return {
+            success: false,
+            message: error.message,
+          };
+        }
+        
+        // 🔓 MAKE FILE PUBLIC by setting ACL
+        const aclParams = {
+          Bucket: this.s3BucketName,
+          Key: metadata.relativePath,
+          ACL: 'public-read'
+        };
+        
+        await this.s3.putObjectAcl(aclParams).promise();
+        
+        // Set cache control for performance
+        const copyParams = {
+          Bucket: this.s3BucketName,
+          Key: metadata.relativePath,
+          CopySource: `${this.s3BucketName}/${metadata.relativePath}`,
+          MetadataDirective: 'REPLACE',
+          CacheControl: 'public, max-age=31536000', // 1 year
+          ContentType: metadata.contentType,
+          ServerSideEncryption: 'AES256'
+        };
+        
+        await this.s3.copyObject(copyParams).promise();
+        
+        const publicUrl = this.getPublicUrl(metadata.relativePath);
+        
+        this.logger.log(`✅ S3 upload verified - File: ${metadata.fileName}, Size: ${fileSize} bytes`);
+        
+        return {
+          success: true,
+          publicUrl,
+          relativePath: metadata.relativePath,
+          filename: metadata.fileName,
+          message: 'Upload verified successfully',
+        };
+        
+      } catch (error) {
+        if (error.code === 'NotFound') {
+          return {
+            success: false,
+            message: 'File not found in storage. Upload may have failed or timed out.',
+          };
+        }
+        throw error;
+      }
+      
+    } catch (error) {
+      this.logger.error(`❌ S3 verification failed:`, error);
       return {
         success: false,
         message: `Verification failed: ${error.message}`,

@@ -57,29 +57,45 @@ export class CloudStorageService {
   private initializeProviders(): void {
     const provider = this.provider.toLowerCase();
     
-    // SECURITY: Force Google Cloud Storage only - no local fallback
-    if (provider !== 'google' && provider !== 'gcs') {
+    // Support Google Cloud Storage, AWS S3, and Local storage
+    if (provider !== 'google' && provider !== 'gcs' && provider !== 'aws' && provider !== 's3' && provider !== 'local') {
       throw new InternalServerErrorException(
-        `Only Google Cloud Storage is supported. Current STORAGE_PROVIDER: ${provider}. ` +
-        `Set STORAGE_PROVIDER=google in your .env file.`
+        `Unsupported STORAGE_PROVIDER: ${provider}. ` +
+        `Supported values: google, gcs, aws, s3, local`
       );
     }
     
-    try {
-      this.initializeGoogleStorage();
-      
-      if (!this.bucket) {
+    // Initialize based on provider
+    if (provider === 'aws' || provider === 's3') {
+      // AWS S3 only - async initialization
+      this.initializeAwsStorage().catch(error => {
+        this.logger.error(`❌ AWS S3 initialization failed:`, error);
         throw new InternalServerErrorException(
-          'Google Cloud Storage initialization failed. ' +
-          'Ensure all GCS environment variables are configured correctly.'
+          `AWS S3 initialization failed: ${error.message}. ` +
+          `Check your AWS credentials and ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, AWS_REGION are set`
+        );
+      });
+    } else if (provider === 'local') {
+      // Local storage only
+      this.initializeLocalStorage();
+    } else {
+      // Google Cloud Storage (default)
+      try {
+        this.initializeGoogleStorage();
+        
+        if (!this.bucket) {
+          throw new InternalServerErrorException(
+            'Google Cloud Storage initialization failed. ' +
+            'Ensure all GCS environment variables are configured correctly.'
+          );
+        }
+      } catch (error) {
+        this.logger.error(`❌ Google Cloud Storage initialization failed:`, error);
+        throw new InternalServerErrorException(
+          `Google Cloud Storage initialization failed: ${error.message}. ` +
+          `Check your GCS credentials and ensure STORAGE_PROVIDER=google`
         );
       }
-    } catch (error) {
-      this.logger.error(`❌ Google Cloud Storage initialization failed:`, error);
-      throw new InternalServerErrorException(
-        `Google Cloud Storage initialization failed: ${error.message}. ` +
-        `Check your GCS credentials and ensure STORAGE_PROVIDER=google`
-      );
     }
   }
 
@@ -169,31 +185,45 @@ export class CloudStorageService {
         throw new Error('AWS S3 bucket name not configured');
       }
 
-      // Try to dynamically import AWS SDK
+      // Try to load AWS SDK
       try {
-        // SECURITY: Safe dynamic import using Function constructor (safer than eval)
-        // This code path never executes since STORAGE_PROVIDER=google is enforced
-        const dynamicImport = new Function('specifier', 'return import(specifier)');
-        const awsModule = await dynamicImport('aws-sdk').catch(() => null);
-        if (!awsModule) {
-          this.logger.warn('⚠️ AWS SDK not installed. To enable AWS support, install with: npm install aws-sdk');
+        // Use require for AWS SDK (CommonJS module)
+        AWS = require('aws-sdk');
+        if (!AWS) {
+          this.logger.error('⚠️ AWS SDK not installed. Install with: npm install aws-sdk');
+          throw new Error('AWS SDK not available');
+        }
+        const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
+        const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+        
+        if (!accessKeyId || !secretAccessKey) {
+          this.logger.error('❌ AWS credentials not configured');
+          this.logger.error('💡 Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env');
           this.s3 = null;
           return;
         }
-        AWS = awsModule.default || awsModule;
+        
         AWS.config.update({
-          accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID'),
-          secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY'),
+          accessKeyId,
+          secretAccessKey,
           region: this.s3Region
         });
-        this.s3 = new AWS.S3();
-        this.logger.log(`✅ AWS S3 initialized - Bucket: ${this.s3BucketName}, Region: ${this.s3Region}`);
+        this.s3 = new AWS.S3({
+          apiVersion: '2006-03-01',
+          signatureVersion: 'v4',
+        });
+        this.logger.log(`✅ AWS S3 initialized successfully`);
+        this.logger.log(`   Region: ${this.s3Region}`);
+        this.logger.log(`   Bucket: ${this.s3BucketName}`);
+        this.logger.log(`   Access Key: ${accessKeyId.substring(0, 8)}...`);
       } catch (importError) {
-        this.logger.warn('⚠️ AWS SDK not installed. To enable AWS support, install with: npm install aws-sdk');
-        this.s3 = null; // Set to null to indicate AWS is not available
+        this.logger.error('❌ AWS SDK import failed:', importError.message);
+        this.logger.error('💡 Install AWS SDK: npm install aws-sdk');
+        throw new Error('AWS SDK not available. Run: npm install aws-sdk');
       }
     } catch (error) {
       this.logger.error('❌ AWS S3 initialization failed:', error);
+      this.logger.error('💡 Check AWS configuration in .env file');
       throw error;
     }
   }
@@ -539,6 +569,316 @@ export class CloudStorageService {
     } catch (error) {
       this.logger.error(`Local delete error: ${error.message}`);
       return false;
+    }
+  }
+
+  // ===========================================
+  // 🔄 MIGRATION UTILITIES (GCS ↔ AWS S3)
+  // ===========================================
+
+  /**
+   * 📦 Migrate file from Google Cloud Storage to AWS S3
+   * 
+   * @param relativePath - Relative path of the file (e.g., "user/profile/123.jpg")
+   * @param targetBucket - Optional: AWS S3 bucket name (uses default if not provided)
+   * @returns Success status and new location details
+   */
+  async migrateFromGcsToS3(
+    relativePath: string,
+    targetBucket?: string
+  ): Promise<{
+    success: boolean;
+    source: string;
+    destination: string;
+    error?: string;
+  }> {
+    try {
+      if (!this.bucket || !this.s3) {
+        return {
+          success: false,
+          source: `gcs://${this.bucketName}/${relativePath}`,
+          destination: `s3://${targetBucket || this.s3BucketName}/${relativePath}`,
+          error: 'Both GCS and S3 must be configured for migration'
+        };
+      }
+
+      this.logger.log(`🔄 Starting GCS → S3 migration: ${relativePath}`);
+
+      // 1️⃣ Download from GCS
+      const gcsFile = this.bucket.file(relativePath);
+      const [fileBuffer] = await gcsFile.download();
+      const [metadata] = await gcsFile.getMetadata();
+
+      this.logger.log(`📥 Downloaded from GCS: ${fileBuffer.length} bytes`);
+
+      // 2️⃣ Upload to S3
+      const bucket = targetBucket || this.s3BucketName;
+      const uploadParams = {
+        Bucket: bucket,
+        Key: relativePath,
+        Body: fileBuffer,
+        ContentType: metadata.contentType || 'application/octet-stream',
+        ACL: 'public-read',
+        CacheControl: 'public, max-age=31536000',
+        Metadata: {
+          'migrated-from': 'gcs',
+          'migration-date': new Date().toISOString(),
+          'original-bucket': this.bucketName
+        }
+      };
+
+      const s3Result = await this.s3.upload(uploadParams).promise();
+
+      this.logger.log(`📤 Uploaded to S3: ${s3Result.Location}`);
+
+      return {
+        success: true,
+        source: `gcs://${this.bucketName}/${relativePath}`,
+        destination: s3Result.Location
+      };
+    } catch (error) {
+      this.logger.error(`❌ GCS → S3 migration failed: ${error.message}`);
+      return {
+        success: false,
+        source: `gcs://${this.bucketName}/${relativePath}`,
+        destination: `s3://${targetBucket || this.s3BucketName}/${relativePath}`,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 📦 Migrate file from AWS S3 to Google Cloud Storage
+   * 
+   * @param relativePath - Relative path of the file (e.g., "user/profile/123.jpg")
+   * @param sourceBucket - Optional: AWS S3 bucket name (uses default if not provided)
+   * @returns Success status and new location details
+   */
+  async migrateFromS3ToGcs(
+    relativePath: string,
+    sourceBucket?: string
+  ): Promise<{
+    success: boolean;
+    source: string;
+    destination: string;
+    error?: string;
+  }> {
+    try {
+      if (!this.s3 || !this.bucket) {
+        return {
+          success: false,
+          source: `s3://${sourceBucket || this.s3BucketName}/${relativePath}`,
+          destination: `gcs://${this.bucketName}/${relativePath}`,
+          error: 'Both S3 and GCS must be configured for migration'
+        };
+      }
+
+      this.logger.log(`🔄 Starting S3 → GCS migration: ${relativePath}`);
+
+      // 1️⃣ Download from S3
+      const bucket = sourceBucket || this.s3BucketName;
+      const s3Params = {
+        Bucket: bucket,
+        Key: relativePath
+      };
+
+      const s3Object = await this.s3.getObject(s3Params).promise();
+      const fileBuffer = s3Object.Body as Buffer;
+
+      this.logger.log(`📥 Downloaded from S3: ${fileBuffer.length} bytes`);
+
+      // 2️⃣ Upload to GCS
+      const gcsFile = this.bucket.file(relativePath);
+      const stream = gcsFile.createWriteStream({
+        metadata: {
+          contentType: s3Object.ContentType || 'application/octet-stream',
+          cacheControl: 'public, max-age=31536000',
+          metadata: {
+            'migrated-from': 's3',
+            'migration-date': new Date().toISOString(),
+            'original-bucket': bucket
+          }
+        },
+        resumable: false,
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        stream.on('error', reject);
+        stream.on('finish', resolve);
+        stream.end(fileBuffer);
+      });
+
+      // Make file public
+      try {
+        await gcsFile.makePublic();
+      } catch (aclError) {
+        this.logger.warn(`Could not set ACL (likely uniform access enabled): ${aclError.message}`);
+      }
+
+      const gcsUrl = `https://storage.googleapis.com/${this.bucketName}/${relativePath}`;
+
+      this.logger.log(`📤 Uploaded to GCS: ${gcsUrl}`);
+
+      return {
+        success: true,
+        source: `s3://${bucket}/${relativePath}`,
+        destination: gcsUrl
+      };
+    } catch (error) {
+      this.logger.error(`❌ S3 → GCS migration failed: ${error.message}`);
+      return {
+        success: false,
+        source: `s3://${sourceBucket || this.s3BucketName}/${relativePath}`,
+        destination: `gcs://${this.bucketName}/${relativePath}`,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 📋 Batch migrate multiple files
+   * 
+   * @param relativePaths - Array of relative paths to migrate
+   * @param direction - Migration direction ('gcs-to-s3' or 's3-to-gcs')
+   * @param deleteSource - Whether to delete source files after successful migration
+   * @returns Migration results for each file
+   */
+  async batchMigrate(
+    relativePaths: string[],
+    direction: 'gcs-to-s3' | 's3-to-gcs',
+    deleteSource: boolean = false
+  ): Promise<{
+    total: number;
+    successful: number;
+    failed: number;
+    results: Array<{
+      path: string;
+      success: boolean;
+      source?: string;
+      destination?: string;
+      error?: string;
+    }>;
+  }> {
+    const results: Array<{
+      path: string;
+      success: boolean;
+      source?: string;
+      destination?: string;
+      error?: string;
+    }> = [];
+    let successful = 0;
+    let failed = 0;
+
+    this.logger.log(`🚀 Starting batch migration: ${relativePaths.length} files (${direction})`);
+
+    for (const relativePath of relativePaths) {
+      try {
+        const result = direction === 'gcs-to-s3' 
+          ? await this.migrateFromGcsToS3(relativePath)
+          : await this.migrateFromS3ToGcs(relativePath);
+
+        if (result.success) {
+          successful++;
+          
+          // Delete source file if requested
+          if (deleteSource) {
+            const deleted = direction === 'gcs-to-s3'
+              ? await this.deleteFromGoogle(relativePath)
+              : await this.deleteFromAws(relativePath);
+            
+            if (deleted) {
+              this.logger.log(`🗑️  Deleted source file: ${relativePath}`);
+            } else {
+              this.logger.warn(`⚠️  Failed to delete source file: ${relativePath}`);
+            }
+          }
+        } else {
+          failed++;
+        }
+
+        results.push({
+          path: relativePath,
+          ...result
+        });
+      } catch (error) {
+        failed++;
+        results.push({
+          path: relativePath,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    this.logger.log(`✅ Batch migration complete: ${successful} successful, ${failed} failed`);
+
+    return {
+      total: relativePaths.length,
+      successful,
+      failed,
+      results
+    };
+  }
+
+  /**
+   * 🔍 Compare file between GCS and S3
+   * Useful for verifying migrations
+   */
+  async compareFiles(relativePath: string): Promise<{
+    gcs: { exists: boolean; size?: number; contentType?: string };
+    s3: { exists: boolean; size?: number; contentType?: string };
+    match: boolean;
+  }> {
+    const result: {
+      gcs: { exists: boolean; size?: number; contentType?: string };
+      s3: { exists: boolean; size?: number; contentType?: string };
+      match: boolean;
+    } = {
+      gcs: { exists: false },
+      s3: { exists: false },
+      match: false
+    };
+
+    try {
+      // Check GCS
+      if (this.bucket) {
+        const gcsFile = this.bucket.file(relativePath);
+        const [exists] = await gcsFile.exists();
+        result.gcs.exists = exists;
+        
+        if (exists) {
+          const [metadata] = await gcsFile.getMetadata();
+          const size = metadata.size ? parseInt(metadata.size.toString()) : undefined;
+          result.gcs.size = size;
+          result.gcs.contentType = metadata.contentType;
+        }
+      }
+
+      // Check S3
+      if (this.s3) {
+        try {
+          const s3Head = await this.s3.headObject({
+            Bucket: this.s3BucketName,
+            Key: relativePath
+          }).promise();
+          
+          result.s3.exists = true;
+          result.s3.size = s3Head.ContentLength;
+          result.s3.contentType = s3Head.ContentType;
+        } catch (error) {
+          result.s3.exists = false;
+        }
+      }
+
+      // Check if files match
+      result.match = result.gcs.exists && 
+                     result.s3.exists && 
+                     result.gcs.size === result.s3.size;
+
+      return result;
+    } catch (error) {
+      this.logger.error(`Error comparing files: ${error.message}`);
+      return result;
     }
   }
 }
