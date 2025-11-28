@@ -49,15 +49,44 @@ export class OriginValidationGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const origin = request.headers.origin || request.headers.referer;
+    const origin = request.headers.origin;
+    const referer = request.headers.referer;
+    const userAgent = request.headers['user-agent'] || 'Unknown';
     
-    // Block requests without origin/referer (Postman, cURL, direct API calls)
-    if (!origin) {
-      this.logger.warn(`🚫 [SECURITY] Request blocked - No origin/referer header`);
+    // Detect and block common API testing tools
+    const blockedUserAgents = [
+      'postman',
+      'insomnia',
+      'thunder client',
+      'httpie',
+      'curl',
+      'wget',
+      'python-requests',
+      'axios',
+      'got',
+      'node-fetch',
+    ];
+    
+    const isApiTool = blockedUserAgents.some(tool => 
+      userAgent.toLowerCase().includes(tool)
+    );
+    
+    if (isApiTool) {
+      this.logger.warn(`🚫 [SECURITY] API testing tool detected and blocked`);
+      this.logger.warn(`   User-Agent: ${userAgent}`);
       this.logger.warn(`   Method: ${request.method} ${request.url}`);
       this.logger.warn(`   IP: ${request.ip}`);
-      this.logger.warn(`   User-Agent: ${request.headers['user-agent']}`);
-      throw new ForbiddenException('Direct API access not allowed. Please use the official application.');
+      throw new ForbiddenException('API testing tools are not allowed. Access denied.');
+    }
+    
+    // Block requests without origin header (primary check)
+    if (!origin) {
+      this.logger.warn(`🚫 [SECURITY] Request blocked - Missing origin header`);
+      this.logger.warn(`   Method: ${request.method} ${request.url}`);
+      this.logger.warn(`   IP: ${request.ip}`);
+      this.logger.warn(`   User-Agent: ${userAgent}`);
+      this.logger.warn(`   Referer: ${referer || 'None'}`);
+      throw new ForbiddenException('Missing origin header. Direct API access not allowed.');
     }
 
     // Extract domain from origin/referer

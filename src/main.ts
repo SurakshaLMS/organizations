@@ -52,72 +52,112 @@ async function bootstrap() {
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   }));
 
-  // Enhanced CORS configuration for any proxy and cross-origin access
+  // 🔒 STRICT PRODUCTION SECURITY - Block unauthorized access
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
-  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS')?.split(',').map(o => o.trim()) || [];
+  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS')?.split(',').map(o => o.trim()).filter(o => o) || [];
   const corsMethods = configService.get<string>('CORS_METHODS', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS').split(',');
   const corsCredentials = configService.get<boolean>('CORS_CREDENTIALS', true);
   const corsMaxAge = configService.get<number>('CORS_MAX_AGE', 86400);
   
-  // SECURITY: Log production configuration
+  // SECURITY: Strict production configuration logging
   if (isProduction) {
-    logger.log('🔒 PRODUCTION MODE ACTIVATED');
-    logger.log(`🛡️  Allowed Origins: ${allowedOrigins.length > 0 ? allowedOrigins.join(', ') : 'NONE - API WILL BE LOCKED DOWN!'}`);
-    logger.log('🚫 Postman/cURL requests will be BLOCKED');
-    logger.log('🚫 Direct API access will be BLOCKED');
-    logger.log('✅ Only authorized frontend domains allowed');
+    logger.log('═══════════════════════════════════════════════════════════');
+    logger.log('🔒 PRODUCTION MODE - MAXIMUM SECURITY ENABLED');
+    logger.log('═══════════════════════════════════════════════════════════');
+    logger.log(`🛡️  Allowed Origins (${allowedOrigins.length}):`);
+    allowedOrigins.forEach(origin => logger.log(`   ✅ ${origin}`));
+    logger.log('───────────────────────────────────────────────────────────');
+    logger.log('🚫 BLOCKED: Postman, cURL, Thunder Client, Insomnia');
+    logger.log('🚫 BLOCKED: Direct API access without origin header');
+    logger.log('🚫 BLOCKED: Requests from non-whitelisted domains');
+    logger.log('🚫 BLOCKED: Missing or invalid authorization tokens');
+    logger.log('───────────────────────────────────────────────────────────');
+    logger.log('✅ ALLOWED: Only whitelisted frontend applications');
+    logger.log('✅ ENFORCED: JWT authentication on all protected routes');
+    logger.log('✅ ENFORCED: Origin header validation');
+    logger.log('═══════════════════════════════════════════════════════════');
     
     if (allowedOrigins.length === 0) {
-      logger.error('⚠️⚠️⚠️ CRITICAL SECURITY WARNING ⚠️⚠️⚠️');
-      logger.error('⚠️  No ALLOWED_ORIGINS configured!');
-      logger.error('⚠️  API will reject ALL requests in production!');
-      logger.error('⚠️  Set ALLOWED_ORIGINS in .env file');
+      logger.error('⚠️⚠️⚠️ CRITICAL SECURITY ERROR ⚠️⚠️⚠️');
+      logger.error('❌ No ALLOWED_ORIGINS configured!');
+      logger.error('❌ API will REJECT ALL requests!');
+      logger.error('❌ Set ALLOWED_ORIGINS in .env.production');
+      logger.error('⚠️⚠️⚠️ APPLICATION WILL NOT ACCEPT ANY REQUESTS ⚠️⚠️⚠️');
     }
   } else {
-    logger.warn('⚠️  DEVELOPMENT MODE - All origins allowed (INSECURE)');
+    logger.warn('═══════════════════════════════════════════════════════════');
+    logger.warn('⚠️  DEVELOPMENT MODE - SECURITY RELAXED (INSECURE)');
+    logger.warn('⚠️  All origins allowed - DO NOT USE IN PRODUCTION');
+    logger.warn('═══════════════════════════════════════════════════════════');
   }
   
-  app.enableCors({
-    origin: isProduction && allowedOrigins.length > 0 
-      ? allowedOrigins  // Production: Use whitelist
-      : true,           // Development: Allow all origins
-    methods: corsMethods,
-    allowedHeaders: [
-      'Accept',
-      'Authorization', 
-      'Content-Type',
-      'X-Requested-With',
-      'X-HTTP-Method-Override',
-      'X-Forwarded-For',
-      'X-Forwarded-Proto',
-      'X-Forwarded-Host',
-      'X-Real-IP',
-      'User-Agent',
-      'Referer',
-      'Cache-Control',
-      'Pragma',
-      'Origin',
-      'Accept-Encoding',
-      'Accept-Language',
-      'Connection',
-      'Host',
-      'ngrok-skip-browser-warning'
-    ],
-    exposedHeaders: [
-      'Content-Length',
-      'Content-Type',
-      'Content-Disposition',
-      'X-Total-Count',
-      'X-Page-Count',
-      'X-Per-Page',
-      'X-Current-Page',
-      'Access-Control-Allow-Origin',
-      'Access-Control-Allow-Credentials'
-    ],
-    credentials: corsCredentials,
-    optionsSuccessStatus: 200, // For legacy browser support
-    preflightContinue: false,
-    maxAge: corsMaxAge, // Configurable preflight cache
+  // Custom CORS validation function for production
+  const corsOptionsDelegate = (req: any, callback: any) => {
+    const requestOrigin = req.headers.origin;
+    let corsOptions: any;
+
+    if (isProduction) {
+      // Production: Strict validation
+      if (allowedOrigins.length === 0) {
+        // No origins configured - block everything
+        logger.error(`🚫 [SECURITY] Request blocked - No allowed origins configured`);
+        corsOptions = { origin: false };
+      } else if (!requestOrigin) {
+        // No origin header - block (catches Postman, cURL, etc.)
+        logger.warn(`🚫 [SECURITY] Request blocked - Missing origin header`);
+        logger.warn(`   User-Agent: ${req.headers['user-agent'] || 'Unknown'}`);
+        corsOptions = { origin: false };
+      } else if (allowedOrigins.includes(requestOrigin)) {
+        // Origin is whitelisted - allow
+        corsOptions = { origin: true };
+      } else {
+        // Origin not in whitelist - block
+        logger.warn(`🚫 [SECURITY] Unauthorized origin blocked: ${requestOrigin}`);
+        corsOptions = { origin: false };
+      }
+    } else {
+      // Development: Allow all
+      corsOptions = { origin: true };
+    }
+
+    corsOptions.methods = corsMethods;
+    corsOptions.credentials = corsCredentials;
+    corsOptions.maxAge = corsMaxAge;
+    
+    callback(null, corsOptions);
+  };
+  
+  app.enableCors(corsOptionsDelegate);
+  
+  // Additional CORS configuration with strict origin validation
+  app.use((req: any, res: any, next: any) => {
+    const requestOrigin = req.headers.origin;
+    
+    // In production, validate origin on every request
+    if (isProduction) {
+      if (!requestOrigin) {
+        // Block requests without origin (Postman, cURL, etc.)
+        logger.warn(`🚫 [SECURITY] Non-browser request blocked on ${req.method} ${req.path}`);
+        logger.warn(`   IP: ${req.ip}`);
+        logger.warn(`   User-Agent: ${req.headers['user-agent'] || 'Unknown'}`);
+        return res.status(403).json({
+          statusCode: 403,
+          message: 'Direct API access forbidden. Use the official application.',
+          error: 'Forbidden'
+        });
+      }
+      
+      if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
+        logger.warn(`🚫 [SECURITY] Unauthorized origin: ${requestOrigin} on ${req.method} ${req.path}`);
+        return res.status(403).json({
+          statusCode: 403,
+          message: 'Origin not authorized',
+          error: 'Forbidden'
+        });
+      }
+    }
+    
+    next();
   });
 
   // Enhanced request size limits for file uploads
