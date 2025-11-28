@@ -136,17 +136,17 @@ async function bootstrap() {
     // In production, validate origin on every request
     if (isProduction) {
       if (!requestOrigin) {
-        // Block requests without origin (Postman, cURL, etc.) - kill connection
+        // Block requests without origin (Postman, cURL, etc.) - drop connection silently
         logger.warn(`🚫 [SECURITY] Non-browser request blocked on ${req.method} ${req.path}`);
         logger.warn(`   IP: ${req.ip}`);
         logger.warn(`   User-Agent: ${req.headers['user-agent'] || 'Unknown'}`);
-        req.socket.destroy();
+        res.socket.destroy();
         return;
       }
       
       if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
         logger.warn(`🚫 [SECURITY] Unauthorized origin: ${requestOrigin} on ${req.method} ${req.path}`);
-        req.socket.destroy();
+        res.socket.destroy();
         return;
       }
     }
@@ -179,7 +179,7 @@ async function bootstrap() {
       else if (requestOrigin && allowedOrigins.length > 0) {
         if (!allowedOrigins.includes(requestOrigin)) {
           logger.warn(`[SECURITY] CORS preflight blocked for origin: ${requestOrigin}`);
-          req.socket.destroy();
+          res.socket.destroy();
           return;
         }
         res.header('Access-Control-Allow-Origin', requestOrigin);
@@ -233,7 +233,7 @@ async function bootstrap() {
       // 🔒 PRODUCTION: Validate origin against whitelist
       if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
         logger.warn(`[SECURITY] CORS request blocked for origin: ${requestOrigin} on ${req.method} ${req.path}`);
-        req.socket.destroy();
+        res.socket.destroy();
         return;
       }
       res.header('Access-Control-Allow-Origin', requestOrigin);
