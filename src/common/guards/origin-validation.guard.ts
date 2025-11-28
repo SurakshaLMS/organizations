@@ -76,8 +76,7 @@ export class OriginValidationGuard implements CanActivate {
       this.logger.warn(`   User-Agent: ${userAgent}`);
       this.logger.warn(`   Method: ${request.method} ${request.url}`);
       this.logger.warn(`   IP: ${request.ip}`);
-      const response = context.switchToHttp().getResponse();
-      response.status(403).end();
+      request.socket.destroy();
       return false;
     }
     
@@ -88,8 +87,7 @@ export class OriginValidationGuard implements CanActivate {
       this.logger.warn(`   IP: ${request.ip}`);
       this.logger.warn(`   User-Agent: ${userAgent}`);
       this.logger.warn(`   Referer: ${referer || 'None'}`);
-      const response = context.switchToHttp().getResponse();
-      response.status(403).end();
+      request.socket.destroy();
       return false;
     }
 
@@ -103,8 +101,7 @@ export class OriginValidationGuard implements CanActivate {
       }
     } catch (error) {
       this.logger.warn(`🚫 [SECURITY] Invalid origin format: ${origin}`);
-      const response = context.switchToHttp().getResponse();
-      response.status(403).end();
+      request.socket.destroy();
       return false;
     }
 
@@ -128,8 +125,7 @@ export class OriginValidationGuard implements CanActivate {
       this.logger.warn(`   IP: ${request.ip}`);
       this.logger.warn(`   User-Agent: ${request.headers['user-agent']}`);
       this.logger.warn(`   Allowed origins: ${this.allowedOrigins.join(', ')}`);
-      const response = context.switchToHttp().getResponse();
-      response.status(403).end();
+      request.socket.destroy();
       return false;
     }
 
