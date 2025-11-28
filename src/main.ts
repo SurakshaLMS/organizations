@@ -140,20 +140,12 @@ async function bootstrap() {
         logger.warn(`🚫 [SECURITY] Non-browser request blocked on ${req.method} ${req.path}`);
         logger.warn(`   IP: ${req.ip}`);
         logger.warn(`   User-Agent: ${req.headers['user-agent'] || 'Unknown'}`);
-        return res.status(403).json({
-          statusCode: 403,
-          message: 'Direct API access forbidden. Use the official application.',
-          error: 'Forbidden'
-        });
+        return res.status(403).end();
       }
       
       if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
         logger.warn(`🚫 [SECURITY] Unauthorized origin: ${requestOrigin} on ${req.method} ${req.path}`);
-        return res.status(403).json({
-          statusCode: 403,
-          message: 'Origin not authorized',
-          error: 'Forbidden'
-        });
+        return res.status(403).end();
       }
     }
     
@@ -185,11 +177,7 @@ async function bootstrap() {
       else if (requestOrigin && allowedOrigins.length > 0) {
         if (!allowedOrigins.includes(requestOrigin)) {
           logger.warn(`[SECURITY] CORS preflight blocked for origin: ${requestOrigin}`);
-          return res.status(403).json({
-            statusCode: 403,
-            message: 'Origin not allowed',
-            error: 'Forbidden',
-          });
+          return res.status(403).end();
         }
         res.header('Access-Control-Allow-Origin', requestOrigin);
       } else {
@@ -242,11 +230,7 @@ async function bootstrap() {
       // 🔒 PRODUCTION: Validate origin against whitelist
       if (allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
         logger.warn(`[SECURITY] CORS request blocked for origin: ${requestOrigin} on ${req.method} ${req.path}`);
-        return res.status(403).json({
-          statusCode: 403,
-          message: 'Origin not allowed',
-          error: 'Forbidden',
-        });
+        return res.status(403).end();
       }
       res.header('Access-Control-Allow-Origin', requestOrigin);
     } else {

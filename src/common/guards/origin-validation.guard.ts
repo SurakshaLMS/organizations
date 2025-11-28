@@ -76,7 +76,9 @@ export class OriginValidationGuard implements CanActivate {
       this.logger.warn(`   User-Agent: ${userAgent}`);
       this.logger.warn(`   Method: ${request.method} ${request.url}`);
       this.logger.warn(`   IP: ${request.ip}`);
-      throw new ForbiddenException('API testing tools are not allowed. Access denied.');
+      const response = context.switchToHttp().getResponse();
+      response.status(403).end();
+      return false;
     }
     
     // Block requests without origin header (primary check)
@@ -86,7 +88,9 @@ export class OriginValidationGuard implements CanActivate {
       this.logger.warn(`   IP: ${request.ip}`);
       this.logger.warn(`   User-Agent: ${userAgent}`);
       this.logger.warn(`   Referer: ${referer || 'None'}`);
-      throw new ForbiddenException('Missing origin header. Direct API access not allowed.');
+      const response = context.switchToHttp().getResponse();
+      response.status(403).end();
+      return false;
     }
 
     // Extract domain from origin/referer
@@ -99,7 +103,9 @@ export class OriginValidationGuard implements CanActivate {
       }
     } catch (error) {
       this.logger.warn(`🚫 [SECURITY] Invalid origin format: ${origin}`);
-      throw new ForbiddenException('Invalid origin');
+      const response = context.switchToHttp().getResponse();
+      response.status(403).end();
+      return false;
     }
 
     // Check if origin is in whitelist
@@ -122,7 +128,9 @@ export class OriginValidationGuard implements CanActivate {
       this.logger.warn(`   IP: ${request.ip}`);
       this.logger.warn(`   User-Agent: ${request.headers['user-agent']}`);
       this.logger.warn(`   Allowed origins: ${this.allowedOrigins.join(', ')}`);
-      throw new ForbiddenException('Origin not authorized. Access denied.');
+      const response = context.switchToHttp().getResponse();
+      response.status(403).end();
+      return false;
     }
 
     // Log successful validation (only in verbose mode)
