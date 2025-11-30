@@ -47,14 +47,13 @@ export class CreateLectureWithDocumentsBodyDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['online', 'physical'])
-  mode?: 'online' | 'physical';
+  mode?: string;
 
-  @IsDateString()
+  @IsString()
   @IsOptional()
   timeStart?: string;
 
-  @IsDateString()
+  @IsString()
   @IsOptional()
   timeEnd?: string;
 
@@ -64,8 +63,7 @@ export class CreateLectureWithDocumentsBodyDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['youtube', 'meet', 'zoom', 'teams'])
-  liveMode?: 'youtube' | 'meet' | 'zoom' | 'teams';
+  liveMode?: string;
 
   @IsString()
   @IsOptional()

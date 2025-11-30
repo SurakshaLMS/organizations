@@ -294,7 +294,7 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true, // Strip non-whitelisted properties
-      forbidNonWhitelisted: true, // Throw error for non-whitelisted properties
+      forbidNonWhitelisted: false, // Don't throw error, just strip extra properties
       forbidUnknownValues: true, // ✅ Prevent prototype pollution
       transform: true, // Transform payloads to be objects typed according to their DTO classes
       transformOptions: {
@@ -303,10 +303,10 @@ async function bootstrap() {
       disableErrorMessages: false, // Show validation errors
       validateCustomDecorators: true, // Support custom validators
       stopAtFirstError: false, // Show all validation errors
-      // ✅ SECURITY: Strict validation
+      // ✅ SECURITY: Relaxed validation for optional fields
       skipMissingProperties: false,
-      skipNullProperties: false,
-      skipUndefinedProperties: false,
+      skipNullProperties: true, // Skip validation for null values
+      skipUndefinedProperties: true, // Skip validation for undefined values
     }),
   );
 

@@ -129,10 +129,10 @@ export class LectureController {
     this.logger.log(`📚 [LEGACY] Creating lecture "${createLectureDto.title}" for cause ${causeId} - User: ${user.email}`);
     
     // Create full DTO with causeId from URL parameter
-    const fullLectureDto: CreateLectureDto = {
+    const fullLectureDto = {
       ...createLectureDto,
       causeId: causeId
-    };
+    } as CreateLectureDto;
     
     return this.lectureService.createLectureWithDocuments(
       fullLectureDto,
