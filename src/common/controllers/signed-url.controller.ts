@@ -108,6 +108,23 @@ export class SignedUrlController {
   }
 
   /**
+   * 🎯 Cause Image Upload
+   */
+  @Post('cause')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get signed URL for cause image upload' })
+  async uploadCauseImage(@Body() dto: InstituteImageUploadDto) {
+    const contentType = this.getContentTypeFromExtension(dto.fileExtension);
+    const filename = `cause-${dto.instituteId}${dto.fileExtension}`;
+    
+    return this.signedUrlService.generateSignedUploadUrl({
+      folder: 'cause-images',
+      fileName: filename,
+      contentType,
+    });
+  }
+
+  /**
    * 📚 Lecture Document Upload
    */
   @Post('lecture')
