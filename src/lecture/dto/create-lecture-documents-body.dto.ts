@@ -58,7 +58,7 @@ export class CreateLectureWithDocumentsBodyDto {
   @IsOptional()
   timeEnd?: string;
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
   liveLink?: string;
 
@@ -67,13 +67,25 @@ export class CreateLectureWithDocumentsBodyDto {
   @IsIn(['youtube', 'meet', 'zoom', 'teams'])
   liveMode?: 'youtube' | 'meet' | 'zoom' | 'teams';
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
   recordingUrl?: string;
 
   @IsBoolean()
   @IsOptional()
   isPublic?: boolean;
+
+  @IsString()
+  @IsOptional()
+  coverImage?: string;
+
+  @IsString()
+  @IsOptional()
+  coverImageUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
 
   // Document metadata (optional - to be paired with uploaded files)
   @IsArray()
