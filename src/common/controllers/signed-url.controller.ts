@@ -6,6 +6,7 @@ import {
   GenerateSignedUrlDto,
   ProfileImageUploadDto,
   InstituteImageUploadDto,
+  CauseImageUploadDto,
   LectureDocumentUploadDto,
 } from '../dto/signed-url.dto';
 
@@ -113,9 +114,9 @@ export class SignedUrlController {
   @Post('cause')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get signed URL for cause image upload' })
-  async uploadCauseImage(@Body() dto: InstituteImageUploadDto) {
+  async uploadCauseImage(@Body() dto: CauseImageUploadDto) {
     const contentType = this.getContentTypeFromExtension(dto.fileExtension);
-    const filename = `cause-${dto.instituteId}${dto.fileExtension}`;
+    const filename = `cause-${dto.causeId}${dto.fileExtension}`;
     
     return this.signedUrlService.generateSignedUploadUrl({
       folder: 'cause-images',

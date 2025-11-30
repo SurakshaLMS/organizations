@@ -89,6 +89,25 @@ export class InstituteImageUploadDto {
   fileExtension: string;
 }
 
+export class CauseImageUploadDto {
+  @ApiProperty({
+    description: 'Cause ID',
+    example: '12345',
+  })
+  @IsString()
+  @IsNotEmpty()
+  causeId: string;
+
+  @ApiProperty({
+    description: 'File extension',
+    example: '.jpg',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^\.[a-z0-9]+$/)
+  fileExtension: string;
+}
+
 export class LectureDocumentUploadDto {
   @ApiProperty({
     description: 'Lecture ID',
