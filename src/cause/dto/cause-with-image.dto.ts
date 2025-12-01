@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, Matches, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -24,6 +24,9 @@ export class CreateCauseWithImageDto {
   })
   @IsString()
   @IsNotEmpty()
+  @MinLength(3, { message: 'Title must be at least 3 characters long' })
+  @MaxLength(200, { message: 'Title cannot exceed 200 characters' })
+  @Transform(({ value }) => value?.trim())
   title: string;
 
   @ApiPropertyOptional({
@@ -32,14 +35,20 @@ export class CreateCauseWithImageDto {
   })
   @IsString()
   @IsOptional()
+  @MinLength(10, { message: 'Description must be at least 10 characters long' })
+  @MaxLength(5000, { message: 'Description cannot exceed 5000 characters' })
+  @Transform(({ value }) => value?.trim())
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Introduction video URL',
+    description: 'Introduction video URL (YouTube, Vimeo, or other video platforms)',
     example: 'https://youtube.com/watch?v=example'
   })
   @IsString()
   @IsOptional()
+  @IsUrl({ protocols: ['http', 'https'] }, { message: 'Invalid video URL format. Must be a valid http or https URL.' })
+  @MaxLength(500, { message: 'Video URL cannot exceed 500 characters' })
+  @Transform(({ value }) => value?.trim())
   introVideoUrl?: string;
 
   @ApiPropertyOptional({

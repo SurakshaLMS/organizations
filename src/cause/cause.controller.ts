@@ -77,7 +77,15 @@ export class CauseController {
     @Body() createCauseDto: CreateCauseWithImageDto,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📋 Creating cause "${createCauseDto.title}" - User: ${user.email}`);
+    this.logger.log(`📋 Creating cause with data: ${JSON.stringify({
+      title: createCauseDto.title,
+      organizationId: createCauseDto.organizationId,
+      hasDescription: !!createCauseDto.description,
+      hasIntroVideo: !!createCauseDto.introVideoUrl,
+      introVideoUrl: createCauseDto.introVideoUrl,
+      isPublic: createCauseDto.isPublic,
+      user: user.email
+    })}`);
     return this.causeService.createCauseWithImage(createCauseDto, null);
   }
 
