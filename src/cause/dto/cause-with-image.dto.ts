@@ -38,7 +38,7 @@ export class CreateCauseWithImageDto {
     description: 'Introduction video URL',
     example: 'https://youtube.com/watch?v=example'
   })
-  @IsUrl()
+  @IsString()
   @IsOptional()
   introVideoUrl?: string;
 
@@ -56,6 +56,14 @@ export class CreateCauseWithImageDto {
     return value;
   })
   isPublic?: boolean = false;
+
+  @ApiPropertyOptional({
+    description: 'Image URL for the cause',
+    example: 'https://example.com/image.jpg'
+  })
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
 }
 
 /**
@@ -85,7 +93,7 @@ export class UpdateCauseWithImageDto {
     description: 'Updated introduction video URL',
     example: 'https://youtube.com/watch?v=updated-example'
   })
-  @IsUrl()
+  @IsString()
   @IsOptional()
   introVideoUrl?: string;
 
@@ -102,6 +110,14 @@ export class UpdateCauseWithImageDto {
     return value;
   })
   isPublic?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Updated image URL for the cause',
+    example: 'https://example.com/updated-image.jpg'
+  })
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
 }
 
 /**
