@@ -39,6 +39,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       // Preserve validation errors (safe to show)
       if (Array.isArray((errorResponse as any).message)) {
         errorDetails = { validationErrors: (errorResponse as any).message };
+        // Log validation errors for debugging
+        this.logger.warn(`Validation failed: ${JSON.stringify((errorResponse as any).message)}`);
       }
     } 
     // ✅ SECURITY: Handle Prisma/Database errors without leaking schema

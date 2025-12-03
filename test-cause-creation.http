@@ -1,0 +1,39 @@
+### Test Cause Creation with YouTube URL
+POST http://localhost:8080/organization/api/v1/causes/with-image
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+{
+  "organizationId": "1",
+  "title": "Test Course with Video",
+  "description": "This is a test course to verify YouTube URL validation works correctly",
+  "introVideoUrl": "https://youtu.be/DhMt5QSveCU?si=9LheYWq7aR1rNeQZ",
+  "isPublic": false
+}
+
+### Test with regular YouTube URL
+POST http://localhost:8080/organization/api/v1/causes/with-image
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+{
+  "organizationId": "1",
+  "title": "Test Course 2",
+  "description": "Testing with standard YouTube URL format",
+  "introVideoUrl": "https://www.youtube.com/watch?v=DhMt5QSveCU",
+  "isPublic": false
+}
+
+### Test with imageUrl field
+POST http://localhost:8080/organization/api/v1/causes/with-image
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+{
+  "organizationId": "1",
+  "title": "Test Course with Image",
+  "description": "Testing with image URL from signed URL flow",
+  "introVideoUrl": "https://youtu.be/DhMt5QSveCU?si=9LheYWq7aR1rNeQZ",
+  "imageUrl": "https://suraksha-lms-main-bucket.s3.us-east-1.amazonaws.com/causes/test-image.jpg",
+  "isPublic": false
+}

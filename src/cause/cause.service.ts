@@ -75,7 +75,7 @@ export class CauseService {
     createCauseDto: CreateCauseWithImageDto,
     image?: any
   ) {
-    const { organizationId, title, description, introVideoUrl, isPublic } = createCauseDto;
+    const { organizationId, title, description, introVideoUrl, isPublic, imageUrl: dtoImageUrl } = createCauseDto;
     const orgBigIntId = convertToBigInt(organizationId);
 
     // First, validate that the organization exists to prevent foreign key constraint violation
@@ -88,10 +88,10 @@ export class CauseService {
       throw new NotFoundException(`Organization with ID ${organizationId} not found`);
     }
 
-    let imageUrl: string | undefined;
+    let imageUrl: string | undefined = dtoImageUrl;
 
-    // Upload image to cloud storage if provided
-    if (image) {
+    // Upload image to cloud storage if provided and no imageUrl in DTO
+    if (image && !dtoImageUrl) {
       try {
         const uploadResult = await this.cloudStorageService.uploadImage(image, 'causes');
         imageUrl = uploadResult.url;

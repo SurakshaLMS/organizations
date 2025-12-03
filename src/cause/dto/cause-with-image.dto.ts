@@ -46,7 +46,7 @@ export class CreateCauseWithImageDto {
   })
   @IsString()
   @IsOptional()
-  @IsUrl({ protocols: ['http', 'https'] }, { message: 'Invalid video URL format. Must be a valid http or https URL.' })
+  @Matches(/^https?:\/\/.+/, { message: 'Invalid video URL format. Must start with http:// or https://' })
   @MaxLength(500, { message: 'Video URL cannot exceed 500 characters' })
   @Transform(({ value }) => value?.trim())
   introVideoUrl?: string;
