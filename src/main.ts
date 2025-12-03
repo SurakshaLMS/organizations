@@ -60,6 +60,48 @@ async function bootstrap() {
   const corsCredentials = configService.get<boolean>('CORS_CREDENTIALS', true);
   const corsMaxAge = configService.get<number>('CORS_MAX_AGE', 86400);
   
+  // SECURITY: Validate critical production environment variables
+  if (isProduction) {
+    const criticalEnvVars = [
+      'DATABASE_URL',
+      'JWT_SECRET',
+      'JWT_REFRESH_SECRET',
+      'ALLOWED_ORIGINS',
+      'AWS_ACCESS_KEY_ID',
+      'AWS_SECRET_ACCESS_KEY',
+      'AWS_S3_BUCKET',
+    ];
+    
+    const missingVars = criticalEnvVars.filter(varName => !configService.get<string>(varName));
+    
+    if (missingVars.length > 0) {
+      logger.error('═══════════════════════════════════════════════════════════');
+      logger.error('🚨 CRITICAL: Missing Production Environment Variables');
+      logger.error('═══════════════════════════════════════════════════════════');
+      missingVars.forEach(varName => {
+        logger.error(`❌ ${varName} is not configured`);
+      });
+      logger.error('═══════════════════════════════════════════════════════════');
+      logger.error('⚠️  Application may not function correctly in production');
+      logger.error('⚠️  Please configure all required environment variables');
+      logger.error('═══════════════════════════════════════════════════════════');
+    }
+    
+    // Check for default/weak secrets
+    const jwtSecret = configService.get<string>('JWT_SECRET');
+    const jwtRefreshSecret = configService.get<string>('JWT_REFRESH_SECRET');
+    
+    if (jwtSecret && (jwtSecret.includes('CHANGE') || jwtSecret.length < 32)) {
+      logger.error('🚨 SECURITY WARNING: JWT_SECRET appears to be default or weak!');
+      logger.error('⚠️  Generate strong secret: openssl rand -base64 64');
+    }
+    
+    if (jwtRefreshSecret && (jwtRefreshSecret.includes('CHANGE') || jwtRefreshSecret.length < 32)) {
+      logger.error('🚨 SECURITY WARNING: JWT_REFRESH_SECRET appears to be default or weak!');
+      logger.error('⚠️  Generate strong secret: openssl rand -base64 64');
+    }
+  }
+  
   // SECURITY: Strict production configuration logging
   if (isProduction) {
     logger.log('═══════════════════════════════════════════════════════════');

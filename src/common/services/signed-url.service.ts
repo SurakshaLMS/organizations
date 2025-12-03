@@ -125,8 +125,8 @@ export class SignedUrlService {
 
       // Try to dynamically import AWS SDK
       try {
-        const dynamicImport = new Function('specifier', 'return import(specifier)');
-        const awsModule = await dynamicImport('aws-sdk').catch(() => null);
+        // SECURITY: Use safer dynamic import instead of Function constructor
+        const awsModule = await import('aws-sdk').catch(() => null);
         if (!awsModule) {
           this.logger.error('⚠️ AWS SDK not installed. Install with: npm install aws-sdk');
           throw new Error('AWS SDK not available');

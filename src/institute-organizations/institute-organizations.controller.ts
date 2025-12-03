@@ -136,7 +136,7 @@ export class InstituteOrganizationsController {
     @Param('organizationId', ParseOrganizationIdPipe()) organizationId: string,
     @Body() updateOrganizationDto: UpdateInstituteOrganizationDto,
   ) {
-    console.log(`🔄 Updating organization ${organizationId} for institute ${instituteId}, imageUrl: ${updateOrganizationDto.imageUrl || 'none'}`);
+    this.logger.log(`🔄 Updating organization ${organizationId} for institute ${instituteId}, imageUrl: ${updateOrganizationDto.imageUrl || 'none'}`);
 
     return this.instituteOrganizationsService.updateOrganization(organizationId, instituteId, updateOrganizationDto);
   }
@@ -151,7 +151,7 @@ export class InstituteOrganizationsController {
     @Param('instituteId', ParseInstituteIdPipe()) instituteId: string,
     @Param('organizationId', ParseOrganizationIdPipe()) organizationId: string
   ) {
-    console.log(`🗑️ Deleting organization ${organizationId} for institute ${instituteId}`);
+    this.logger.log(`🗑️ Deleting organization ${organizationId} for institute ${instituteId}`);
     
     return this.instituteOrganizationsService.deleteOrganization(organizationId, instituteId);
   }

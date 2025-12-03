@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware, BadRequestException } from '@nestjs/common';
+import { Injectable, NestMiddleware, BadRequestException, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class SecurityMiddleware implements NestMiddleware {
+  private readonly logger = new Logger(SecurityMiddleware.name);
   private rateLimiter: any;
 
   constructor(private configService: ConfigService) {
@@ -152,7 +153,7 @@ export class SecurityMiddleware implements NestMiddleware {
       if (value) {
         const numValue = parseInt(value);
         if (!isNaN(numValue) && numValue > pattern.maxValue) {
-          console.warn(`[SECURITY] Bulk abuse attempt detected: ${pattern.key}=${numValue} exceeds max ${pattern.maxValue}`);
+          this.logger.warn(`[SECURITY] Bulk abuse attempt detected: ${pattern.key}=${numValue} exceeds max ${pattern.maxValue}`);
           return true;
         }
       }
@@ -239,7 +240,7 @@ export class SecurityMiddleware implements NestMiddleware {
     
     // SECURITY: Check for bulk abuse attempts
     if (this.detectBulkAbuse(req.query)) {
-      console.error('[SECURITY ALERT] Bulk abuse attempt blocked:', {
+      this.logger.error('[SECURITY ALERT] Bulk abuse attempt blocked:', {
         ip: req.ip,
         query: req.query,
         path: req.path,
@@ -259,7 +260,7 @@ export class SecurityMiddleware implements NestMiddleware {
       // Check query parameters
       const queryDanger = this.checkDangerousInput(req.query);
       if (queryDanger) {
-        console.error('[SECURITY ALERT] Attack blocked in query:', {
+        this.logger.error('[SECURITY ALERT] Attack blocked in query:', {
           ip: req.ip,
           attack: queryDanger,
           query: req.query,
@@ -290,7 +291,7 @@ export class SecurityMiddleware implements NestMiddleware {
       // Check URL parameters
       const paramsDanger = this.checkDangerousInput(req.params);
       if (paramsDanger) {
-        console.error('[SECURITY ALERT] Attack blocked in params:', {
+        this.logger.error('[SECURITY ALERT] Attack blocked in params:', {
           ip: req.ip,
           attack: paramsDanger,
           params: req.params,
