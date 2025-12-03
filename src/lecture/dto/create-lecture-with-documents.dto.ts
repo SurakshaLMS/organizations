@@ -1,5 +1,5 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, Matches, IsArray, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, Matches, IsArray, ValidateNested, MaxLength } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 
 /**
  * DOCUMENT CREATION DTO
@@ -62,8 +62,14 @@ export class CreateLectureWithDocumentsDto {
   @IsOptional()
   timeEnd?: string;
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
+  @Matches(/^https?:\/\/.+/, { message: 'liveLink must be a valid http or https URL' })
+  @MaxLength(500, { message: 'liveLink cannot exceed 500 characters' })
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   liveLink?: string;
 
   @IsString()
@@ -71,8 +77,14 @@ export class CreateLectureWithDocumentsDto {
   @IsIn(['youtube', 'meet', 'zoom', 'teams'])
   liveMode?: 'youtube' | 'meet' | 'zoom' | 'teams';
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
+  @Matches(/^https?:\/\/.+/, { message: 'recordingUrl must be a valid http or https URL' })
+  @MaxLength(500, { message: 'recordingUrl cannot exceed 500 characters' })
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   recordingUrl?: string;
 
   @IsBoolean()

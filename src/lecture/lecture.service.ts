@@ -353,8 +353,14 @@ export class LectureService {
         throw error;
       }
       
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : '';
+      
       this.logger.error(`Enhanced lecture creation failed for cause ${causeId}:`, error);
-      throw new BadRequestException('Failed to create lecture with documents');
+      this.logger.error(`Error details: ${errorMessage}`);
+      this.logger.error(`Error stack: ${errorStack}`);
+      
+      throw new BadRequestException(`Failed to create lecture with documents: ${errorMessage}`);
     }
   }
 

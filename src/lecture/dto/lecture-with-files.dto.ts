@@ -1,6 +1,6 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, Matches, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, Matches, IsArray, ValidateNested, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 /**
  * LECTURE CREATION WITH FILE UPLOAD DTO
@@ -80,8 +80,14 @@ export class CreateLectureWithFilesDto {
     description: 'Live stream link for online lectures',
     example: 'https://meet.google.com/abc-defg-hij'
   })
-  @IsUrl()
+  @IsString()
   @IsOptional()
+  @Matches(/^https?:\/\/.+/, { message: 'liveLink must be a valid http or https URL' })
+  @MaxLength(500, { message: 'liveLink cannot exceed 500 characters' })
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   liveLink?: string;
 
   @ApiPropertyOptional({
@@ -98,8 +104,14 @@ export class CreateLectureWithFilesDto {
     description: 'Recording URL (if available)',
     example: 'https://youtube.com/watch?v=example'
   })
-  @IsUrl()
+  @IsString()
   @IsOptional()
+  @Matches(/^https?:\/\/.+/, { message: 'recordingUrl must be a valid http or https URL' })
+  @MaxLength(500, { message: 'recordingUrl cannot exceed 500 characters' })
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   recordingUrl?: string;
 
   @ApiPropertyOptional({
@@ -191,8 +203,14 @@ export class UpdateLectureWithFilesDto {
     description: 'Updated live stream link for online lectures',
     example: 'https://meet.google.com/updated-link'
   })
-  @IsUrl()
+  @IsString()
   @IsOptional()
+  @Matches(/^https?:\/\/.+/, { message: 'liveLink must be a valid http or https URL' })
+  @MaxLength(500, { message: 'liveLink cannot exceed 500 characters' })
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   liveLink?: string;
 
   @ApiPropertyOptional({
@@ -209,8 +227,14 @@ export class UpdateLectureWithFilesDto {
     description: 'Updated recording URL (if available)',
     example: 'https://youtube.com/watch?v=updated-example'
   })
-  @IsUrl()
+  @IsString()
   @IsOptional()
+  @Matches(/^https?:\/\/.+/, { message: 'recordingUrl must be a valid http or https URL' })
+  @MaxLength(500, { message: 'recordingUrl cannot exceed 500 characters' })
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   recordingUrl?: string;
 
   @ApiPropertyOptional({

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, Query, Logger, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, Query, Logger, UseGuards, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { CauseService } from './cause.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
@@ -77,6 +77,7 @@ export class CauseController {
     @Body() createCauseDto: CreateCauseWithImageDto,
     @GetUser() user: EnhancedJwtPayload
   ) {
+    this.logger.log(`📋 Received cause creation request - Full DTO: ${JSON.stringify(createCauseDto)}`);
     this.logger.log(`📋 Creating cause with data: ${JSON.stringify({
       title: createCauseDto.title,
       organizationId: createCauseDto.organizationId,
@@ -84,8 +85,16 @@ export class CauseController {
       hasIntroVideo: !!createCauseDto.introVideoUrl,
       introVideoUrl: createCauseDto.introVideoUrl,
       isPublic: createCauseDto.isPublic,
+      hasImageUrl: !!createCauseDto.imageUrl,
       user: user.email
     })}`);
+    
+    // Validate organizationId is present
+    if (!createCauseDto.organizationId) {
+      this.logger.error(`❌ Missing organizationId in request body`);
+      throw new BadRequestException('organizationId is required');
+    }
+    
     return this.causeService.createCauseWithImage(createCauseDto, null);
   }
 

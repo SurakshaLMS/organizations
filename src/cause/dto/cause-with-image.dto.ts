@@ -48,7 +48,10 @@ export class CreateCauseWithImageDto {
   @IsOptional()
   @Matches(/^https?:\/\/.+/, { message: 'Invalid video URL format. Must start with http:// or https://' })
   @MaxLength(500, { message: 'Video URL cannot exceed 500 characters' })
-  @Transform(({ value }) => value?.trim())
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   introVideoUrl?: string;
 
   @ApiPropertyOptional({
