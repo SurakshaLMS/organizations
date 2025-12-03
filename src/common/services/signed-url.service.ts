@@ -672,7 +672,7 @@ export class SignedUrlService {
       'student-images': ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
       'bookhire-images': ['.jpg', '.jpeg', '.png', '.webp'],
       'advertisement-media': ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.webm', '.pdf'],
-      'lecture-documents': ['.pdf', '.doc', '.docx', '.ppt', '.pptx'],
+      'lecture-documents': ['.pdf', '.jpg', '.jpeg', '.png', '.docx', '.pptx'], // PDF, images, DOCX, PPTX only
       'lecture-covers': ['.jpg', '.jpeg', '.png', '.webp'],
       'id-documents': ['.pdf', '.jpg', '.jpeg', '.png'],
       'payment-receipts': ['.pdf', '.jpg', '.jpeg', '.png'],
@@ -691,7 +691,7 @@ export class SignedUrlService {
       'organization-images': parseInt(this.configService.get('MAX_INSTITUTE_IMAGE_SIZE', '10485760'), 10), // 10MB
       'student-images': parseInt(this.configService.get('MAX_STUDENT_IMAGE_SIZE', '5242880'), 10), // 5MB
       'advertisement-media': parseInt(this.configService.get('MAX_ADVERTISEMENT_SIZE', '104857600'), 10), // 100MB
-      'lecture-documents': parseInt(this.configService.get('MAX_LECTURE_DOCUMENT_SIZE', '52428800'), 10), // 50MB
+      'lecture-documents': parseInt(this.configService.get('MAX_LECTURE_DOCUMENT_SIZE', '10485760'), 10), // 10MB default (configurable via ENV)
       'lecture-covers': parseInt(this.configService.get('MAX_LECTURE_COVER_SIZE', '5242880'), 10), // 5MB
       'homework-submissions': parseInt(this.configService.get('MAX_HOMEWORK_SIZE', '20971520'), 10), // 20MB
       'teacher-corrections': parseInt(this.configService.get('MAX_CORRECTION_SIZE', '20971520'), 10), // 20MB
