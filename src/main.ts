@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import helmet from 'helmet';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as express from 'express';
@@ -309,6 +310,9 @@ async function bootstrap() {
       skipUndefinedProperties: true, // Skip validation for undefined values
     }),
   );
+
+  // Global request/response logging interceptor
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Global BigInt serialization interceptor
   app.useGlobalInterceptors(new (class {

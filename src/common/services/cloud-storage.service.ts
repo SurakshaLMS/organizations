@@ -111,6 +111,12 @@ export class CloudStorageService {
         
       case 'aws':
       case 's3':
+        // Check for custom base URL first (e.g., CloudFront or custom domain)
+        const customAwsBaseUrl = this.configService.get<string>('AWS_S3_BASE_URL');
+        if (customAwsBaseUrl) {
+          return customAwsBaseUrl;
+        }
+        // Fallback to default AWS S3 URL
         const awsBucket = this.configService.get<string>('AWS_S3_BUCKET');
         const region = this.configService.get<string>('AWS_REGION', 'us-east-1');
         return `https://${awsBucket}.s3.${region}.amazonaws.com`;
@@ -241,7 +247,7 @@ export class CloudStorageService {
   /**
    * 🎯 MAIN METHOD: Convert relative path to full URL
    * Database stores: "organization-images/org-123.jpg"
-   * Returns: "https://storage.googleapis.com/bucket/organization-images/org-123.jpg"
+   * Returns: "https://storage.suraksha.lk/organization-images/org-123.jpg"
    */
   getFullUrl(relativePath: string): string {
     if (!relativePath) return '';
@@ -249,7 +255,14 @@ export class CloudStorageService {
     // Remove leading slash if present
     const cleanPath = relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
     
-    return `${this.baseUrl}/${cleanPath}`;
+    const fullUrl = `${this.baseUrl}/${cleanPath}`;
+    
+    // Debug: Log URL transformation (remove in production)
+    if (process.env.NODE_ENV === 'development') {
+      this.logger.debug(`URL Transform: ${relativePath} → ${fullUrl}`);
+    }
+    
+    return fullUrl;
   }
 
   /**

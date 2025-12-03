@@ -427,7 +427,10 @@ export class OrganizationService {
       causeCount: (org as any)._count.causes,
     }));
 
-    return createPaginatedResponse(transformedOrganizations, total, pagination);
+    // Transform URLs in organizations
+    const organizationsWithUrls = this.urlTransformer.transformCommonFieldsArray(transformedOrganizations);
+
+    return createPaginatedResponse(organizationsWithUrls, total, pagination);
   }
 
   /**
@@ -511,9 +514,12 @@ export class OrganizationService {
       canEnroll: org.enabledEnrollments,
     }));
 
+    // Transform URLs in organizations
+    const organizationsWithUrls = this.urlTransformer.transformCommonFieldsArray(transformedOrganizations);
+
     this.logger.log(`🌍 Found ${total} global organizations user ${userId} is NOT enrolled in`);
 
-    return createPaginatedResponse(transformedOrganizations, total, pagination);
+    return createPaginatedResponse(organizationsWithUrls, total, pagination);
   }
 
   /**
@@ -898,7 +904,10 @@ export class OrganizationService {
       organizationId: cause.organizationId.toString(),
     }));
 
-    return createPaginatedResponse(transformedCauses, total, paginationDto);
+    // Transform URLs: relative paths → full URLs with base domain
+    const causesWithUrls = this.urlTransformer.transformCommonFieldsArray(transformedCauses);
+
+    return createPaginatedResponse(causesWithUrls, total, paginationDto);
   }
 
   /**

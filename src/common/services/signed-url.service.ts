@@ -114,7 +114,10 @@ export class SignedUrlService {
     try {
       this.s3BucketName = this.configService.get<string>('AWS_S3_BUCKET') || '';
       this.s3Region = this.configService.get<string>('AWS_REGION', 'us-east-1');
-      this.baseUrl = `https://${this.s3BucketName}.s3.${this.s3Region}.amazonaws.com`;
+      
+      // Check for custom base URL first (e.g., CloudFront, custom domain, or storage.suraksha.lk)
+      const customAwsBaseUrl = this.configService.get<string>('AWS_S3_BASE_URL');
+      this.baseUrl = customAwsBaseUrl || `https://${this.s3BucketName}.s3.${this.s3Region}.amazonaws.com`;
       
       if (!this.s3BucketName) {
         throw new Error('AWS S3 bucket name not configured');

@@ -7,6 +7,7 @@ import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../co
 import { convertToBigInt, convertToString, EnhancedJwtPayload } from '../auth/organization-access.service';
 import { CloudStorageService, FileUploadResult } from '../common/services/cloud-storage.service';
 import { UrlTransformerService } from '../common/services/url-transformer.service';
+import { extractRelativePath } from '../common/utils/url-path.util';
 
 /**
  * Document upload result interface
@@ -202,9 +203,8 @@ export class LectureService {
 
         for (const docMeta of documentsMetadata) {
           try {
-            // Determine if docUrl is a full URL or relative path
-            const docUrl = docMeta.docUrl || '';
-            const isFullUrl = docUrl.startsWith('http://') || docUrl.startsWith('https://');
+            // Extract relative path for storage URLs, keep external URLs as-is
+            const docUrl = extractRelativePath(docMeta.docUrl) as string || '';
 
             // Create documentation record with provided metadata
             const documentation = await this.prisma.documentation.create({
@@ -213,7 +213,7 @@ export class LectureService {
                 title: docMeta.title || 'Untitled Document',
                 description: docMeta.description || '',
                 content: docMeta.content || '',
-                docUrl: docUrl, // Store relative path only (full URLs stored as-is for external links)
+                docUrl: docUrl, // Store relative path for storage URLs
                 createdAt: new Date(),
                 updatedAt: new Date(),
               },
@@ -221,22 +221,20 @@ export class LectureService {
 
             this.logger.log(`📋 Documentation record created: ${documentation.documentationId}`);
 
-            // Build response URL: full URL stays as-is, relative path gets base URL
-            const responseUrl = isFullUrl 
-              ? docUrl 
-              : `${process.env.GCS_BASE_URL || 'https://storage.googleapis.com/suraksha-lms'}/${docUrl}`;
+            // URL transformation is handled by UrlTransformerService on response
+            // No need to build URL here - just pass the stored value
 
             uploadedDocuments.push({
               documentationId: convertToString(documentation.documentationId),
               title: documentation.title,
-              url: responseUrl, // Return full URL for client
+              url: docUrl, // Relative path - will be transformed to full URL by UrlTransformerService
               fileName: docMeta.title,
               size: 0, // Size not available for pre-uploaded files
               fileId: convertToString(documentation.documentationId),
               uploadedAt: new Date().toISOString(),
             });
 
-            this.logger.log(`✅ Document linked: ${docMeta.title} -> ${responseUrl}`);
+            this.logger.log(`✅ Document linked: ${docMeta.title} -> ${docUrl}`);
           } catch (docError) {
             this.logger.error(`❌ Failed to create document record for ${docMeta.title}:`, docError);
             // Continue with other documents
@@ -799,12 +797,15 @@ export class LectureService {
         updatedAt: doc.updatedAt.toISOString(),
       }));
 
+      // Transform URLs for documents
+      const documentsWithUrls = this.urlTransformer.transformCommonFieldsArray(documents);
+
       // Return enhanced response with updated lecture, all documents, and upload info
       return {
         ...updatedLecture,
-        documents, // All existing documents (including newly uploaded)
+        documents: documentsWithUrls, // All existing documents with full URLs
         uploadedDocuments, // Info about newly uploaded files
-        totalDocuments: documents.length,
+        totalDocuments: documentsWithUrls.length,
         newDocumentsCount: uploadedDocuments.length,
         message: `Lecture updated successfully${uploadedDocuments.length > 0 ? ` with ${uploadedDocuments.length} new documents` : ''}`,
       };

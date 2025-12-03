@@ -37,7 +37,10 @@ export class CreateCauseWithImageDto {
   @IsOptional()
   @MinLength(10, { message: 'Description must be at least 10 characters long' })
   @MaxLength(5000, { message: 'Description cannot exceed 5000 characters' })
-  @Transform(({ value }) => value?.trim())
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   description?: string;
 
   @ApiPropertyOptional({

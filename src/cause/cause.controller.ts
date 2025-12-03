@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Put, Delete, Query, Logger, UseGuards, UseInterceptors, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { CauseService } from './cause.service';
 import { CreateCauseDto, UpdateCauseDto } from './dto/cause.dto';
 import { CreateCauseWithImageDto, UpdateCauseWithImageDto, CauseResponseDto } from './dto/cause-with-image.dto';
@@ -66,34 +66,51 @@ export class CauseController {
   @Post('with-image')
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Create cause with image (Use signed URL flow instead)',
-    description: 'DEPRECATED: Use POST /signed-urls/cause to get upload URL, then create cause with imageUrl field. Authentication required.'
+    summary: 'Create cause with image URL from signed upload',
+    description: `
+      CORRECT FLOW:
+      1. POST /signed-urls/cause to get upload URL and token
+      2. Upload image to the signed URL (PUT request to cloud storage)
+      3. POST to this endpoint with imageUrl and other cause data
+      
+      This endpoint ONLY accepts JSON with imageUrl (not file uploads).
+      For direct file uploads, the signed URL flow is mandatory for security.
+      Authentication required.
+    `
   })
   @ApiResponse({ status: 201, description: 'Cause created with image successfully', type: CauseResponseDto })
-  @ApiResponse({ status: 400, description: 'Invalid request data or image format' })
+  @ApiResponse({ status: 400, description: 'Invalid request data - make sure to send JSON with organizationId, title, and imageUrl' })
   @ApiResponse({ status: 401, description: 'Authentication required' })
-  @ApiResponse({ status: 410, description: 'Endpoint deprecated - use signed URL flow' })
+  @ApiConsumes('application/json')
+  @ApiBody({
+    type: CreateCauseWithImageDto,
+    description: 'Cause data with imageUrl from signed URL upload',
+    examples: {
+      'application/json': {
+        value: {
+          organizationId: '1',
+          title: 'Environmental Conservation Initiative',
+          description: 'A comprehensive initiative to promote environmental awareness',
+          introVideoUrl: 'https://youtu.be/example',
+          imageUrl: 'https://storage.googleapis.com/.../causes/image.jpg',
+          isPublic: false
+        }
+      }
+    }
+  })
   async createCauseWithImage(
     @Body() createCauseDto: CreateCauseWithImageDto,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📋 Received cause creation request - Full DTO: ${JSON.stringify(createCauseDto)}`);
-    this.logger.log(`📋 Creating cause with data: ${JSON.stringify({
-      title: createCauseDto.title,
+    this.logger.log(`📋 Creating cause - Data: ${JSON.stringify({
       organizationId: createCauseDto.organizationId,
+      title: createCauseDto.title,
       hasDescription: !!createCauseDto.description,
       hasIntroVideo: !!createCauseDto.introVideoUrl,
-      introVideoUrl: createCauseDto.introVideoUrl,
-      isPublic: createCauseDto.isPublic,
       hasImageUrl: !!createCauseDto.imageUrl,
+      isPublic: createCauseDto.isPublic,
       user: user.email
     })}`);
-    
-    // Validate organizationId is present
-    if (!createCauseDto.organizationId) {
-      this.logger.error(`❌ Missing organizationId in request body`);
-      throw new BadRequestException('organizationId is required');
-    }
     
     return this.causeService.createCauseWithImage(createCauseDto, null);
   }

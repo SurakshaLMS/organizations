@@ -1,5 +1,5 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, IsArray, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, IsArray, ValidateNested, MaxLength, MinLength } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 
 /**
  * DOCUMENT CREATION DTO
@@ -31,6 +31,9 @@ export class CreateDocumentDto {
 export class CreateLectureWithDocumentsBodyDto {
   @IsString()
   @IsNotEmpty()
+  @MinLength(3, { message: 'Title must be at least 3 characters long' })
+  @MaxLength(200, { message: 'Title cannot exceed 200 characters' })
+  @Transform(({ value }) => value?.trim())
   title: string;
 
   @IsString()
@@ -59,6 +62,10 @@ export class CreateLectureWithDocumentsBodyDto {
 
   @IsString()
   @IsOptional()
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   liveLink?: string;
 
   @IsString()
@@ -67,6 +74,10 @@ export class CreateLectureWithDocumentsBodyDto {
 
   @IsString()
   @IsOptional()
+  @Transform(({ value }) => {
+    const trimmed = value?.trim();
+    return (trimmed === '' || trimmed === null || trimmed === undefined) ? undefined : trimmed;
+  })
   recordingUrl?: string;
 
   @IsBoolean()

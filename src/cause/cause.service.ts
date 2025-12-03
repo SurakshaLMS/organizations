@@ -6,6 +6,7 @@ import { PaginationDto, createPaginatedResponse, PaginatedResponse } from '../co
 import { convertToBigInt, convertToString } from '../auth/organization-access.service';
 import { CloudStorageService } from '../common/services/cloud-storage.service';
 import { UrlTransformerService } from '../common/services/url-transformer.service';
+import { extractRelativePath } from '../common/utils/url-path.util';
 
 @Injectable()
 export class CauseService {
@@ -21,7 +22,10 @@ export class CauseService {
    * Create a new cause (ENHANCED with validation)
    */
   async createCause(createCauseDto: CreateCauseDto) {
-    const { organizationId, title, description, isPublic, imageUrl, introVideoUrl } = createCauseDto;
+    const { organizationId, title, description, isPublic, imageUrl: dtoImageUrl, introVideoUrl } = createCauseDto;
+    
+    // Extract relative path only for storage URLs (imageUrl), keep external URLs as-is (introVideoUrl)
+    const imageUrl = extractRelativePath(dtoImageUrl) as string | undefined;
     const orgBigIntId = convertToBigInt(organizationId);
 
     // Validate that the organization exists to prevent foreign key constraint violation
@@ -88,13 +92,14 @@ export class CauseService {
       throw new NotFoundException(`Organization with ID ${organizationId} not found`);
     }
 
-    let imageUrl: string | undefined = dtoImageUrl;
+    // Extract relative path only for storage URLs (imageUrl), keep external URLs as-is (introVideoUrl)
+    let imageUrl: string | undefined = extractRelativePath(dtoImageUrl) as string | undefined;
 
     // Upload image to cloud storage if provided and no imageUrl in DTO
     if (image && !dtoImageUrl) {
       try {
         const uploadResult = await this.cloudStorageService.uploadImage(image, 'causes');
-        imageUrl = uploadResult.url;
+        imageUrl = extractRelativePath(uploadResult.url) as string | undefined;
       } catch (error) {
         throw new Error(`Image upload failed: ${error.message}`);
       }
@@ -359,29 +364,32 @@ export class CauseService {
         // Delete old image if it exists
         if (existingCause.imageUrl) {
           try {
-            // Extract the relative path from the URL
-            const urlParts = existingCause.imageUrl.split('/');
-            const relativePath = urlParts.slice(-2).join('/'); // Get folder/filename
-            await this.cloudStorageService.deleteFile(relativePath);
+            // Already a relative path in DB, use directly
+            await this.cloudStorageService.deleteFile(existingCause.imageUrl);
           } catch (error) {
             this.logger.warn('Failed to delete old cause image:', error.message);
           }
         }
         
-        imageUrl = uploadResult.url;
+        imageUrl = extractRelativePath(uploadResult.url) as string || null;
       } catch (error) {
         throw new Error(`Image upload failed: ${error.message}`);
       }
     }
 
-    // Prepare update data
+    // Prepare update data with extracted relative paths for storage URLs only
     const updateData: any = {
       ...updateCauseDto,
     };
+    
+    // Extract relative path only for storage URLs (imageUrl), keep external URLs as-is
+    if (updateData.imageUrl) {
+      updateData.imageUrl = extractRelativePath(updateData.imageUrl);
+    }
 
-    // Only include imageUrl if it's being updated
+    // Only include imageUrl if it's being updated via file upload
     if (image) {
-      updateData.imageUrl = imageUrl;
+      updateData.imageUrl = extractRelativePath(imageUrl);
     }
 
     const updatedCause = await this.prisma.cause.update({
@@ -477,7 +485,11 @@ export class CauseService {
       orderBy: { createdAt: 'desc' },
     });
     
-    return this.urlTransformer.transformCommonFieldsArray(causes);
+    this.logger.log(`🔍 Raw causes from DB (first item): ${JSON.stringify(causes[0]?.imageUrl)}`);
+    const transformed = this.urlTransformer.transformCommonFieldsArray(causes);
+    this.logger.log(`🔍 Transformed causes (first item): ${JSON.stringify(transformed[0]?.imageUrl)}`);
+    
+    return transformed;
   }
 
 }

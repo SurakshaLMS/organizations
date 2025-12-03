@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Param, Put, Delete, Query, UseInterceptors, Logger, UseGuards, BadRequestException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { LectureService } from './lecture.service';
 import { CreateLectureDto, UpdateLectureDto, LectureQueryDto } from './dto/lecture.dto';
 import { CreateLectureWithFilesDto, UpdateLectureWithFilesDto } from './dto/lecture-with-files.dto';
@@ -17,16 +17,20 @@ import { EnhancedJwtPayload } from '../auth/organization-access.service';
 /**
  * LECTURE CONTROLLER
  * 
- * Handles all lecture-related operations including document uploads to Google Cloud Storage
- * Enhanced with Multer file upload support for seamless document management
+ * Handles all lecture-related operations with S3 signed URL upload flow
+ * All file uploads must go through the signed URL endpoint first
  * CORS and proxy support handled centrally in main.ts for any origin/proxy configuration
  * 
  * Features:
  * - Basic lecture CRUD operations
- * - Enhanced file upload endpoints with Multer integration
- * - Document management with GCS storage
+ * - Document management with pre-uploaded S3 URLs (signed URL flow)
  * - Comprehensive API documentation with Swagger
- * - Legacy endpoint support for backward compatibility
+ * - JWT authentication and authorization
+ * 
+ * UPLOAD FLOW:
+ * 1. Frontend requests signed URL from /signed-url/generate-upload-url
+ * 2. Frontend uploads file directly to S3 using signed URL
+ * 3. Frontend sends returned URL to lecture endpoints (this controller)
  */
 @ApiTags('Lectures')
 @Controller('lectures')
@@ -59,34 +63,35 @@ export class LectureController {
   }
 
   /**
-   * CREATE LECTURE WITH FILE UPLOADS (Enhanced)
+   * CREATE LECTURE WITH DOCUMENT URLs (Signed URL Flow)
    * 
-   * Enhanced endpoint that allows creating a lecture with multiple document uploads to GCS
-   * Uses multipart/form-data to handle file uploads with Multer
-   * Supports up to 10 document files per lecture
+   * This endpoint accepts JSON with pre-uploaded document URLs
+   * 
+   * REQUIRED UPLOAD FLOW:
+   * 1. Upload files first via POST /signed-url/generate-upload-url
+   * 2. Upload file to returned signed URL
+   * 3. Pass returned URLs in documents array here
+   * 
    * Authentication required
    */
   @Post('with-files')
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Create lecture with document uploads to Google Cloud Storage',
-    description: 'Authentication required'
+    summary: 'Create lecture with pre-uploaded document URLs (use signed URL flow)',
+    description: 'Authentication required. Files must be uploaded via signed URL flow first.'
   })
-  @ApiConsumes('multipart/form-data')
   @ApiBody({ 
     type: CreateLectureWithFilesDto,
-    description: 'Lecture data with optional file uploads (use form-data with field name "documents")' 
+    description: 'Lecture data with document URLs from signed upload (JSON format only)' 
   })
   @ApiResponse({ status: 201, description: 'Lecture created with documents successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
+  @ApiResponse({ status: 400, description: 'Invalid request data. Ensure you are sending JSON with pre-uploaded URLs.' })
   @ApiResponse({ status: 401, description: 'Authentication required' })
-  @ApiResponse({ status: 413, description: 'File too large or too many files' })
-  @ApiResponse({ status: 410, description: 'Endpoint deprecated - use signed URL flow' })
   async createLectureWithFiles(
     @Body() createLectureDto: CreateLectureWithFilesDto,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" - User: ${user.email}`);
+    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" with ${createLectureDto.documents?.length || 0} documents - User: ${user.email}`);
     
     return this.lectureService.createLectureWithDocuments(
       createLectureDto,
@@ -97,25 +102,23 @@ export class LectureController {
   }
 
   /**
-   * CREATE LECTURE WITH DOCUMENTS (Legacy Endpoint)
+   * CREATE LECTURE WITH DOCUMENTS (Signed URL Flow)
    * 
-   * Legacy endpoint that requires causeId in URL path
-   * Maintained for backward compatibility
-   * Use POST /lectures/with-files for new implementations
+   * This endpoint accepts JSON with pre-uploaded document URLs (using signed URL flow)
+   * Files must be uploaded first via /signed-url/generate-upload-url
+   * Then pass the returned URLs in the documents array
    * Authentication required
    */
   @Post('with-documents/:causeId')
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Create lecture with document uploads (Legacy - use /with-files instead)',
-    deprecated: true,
-    description: 'Authentication required'
+    summary: 'Create lecture with document URLs (use signed URL flow to upload files first)',
+    description: 'Authentication required. Upload files first via /signed-url/generate-upload-url, then pass URLs here.'
   })
-  @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'causeId', description: 'ID of the cause to create lecture for' })
   @ApiBody({ 
     type: CreateLectureWithDocumentsBodyDto,
-    description: 'Lecture data with optional file uploads (use form-data)' 
+    description: 'Lecture data with document URLs from signed upload (JSON format)' 
   })
   @ApiResponse({ status: 201, description: 'Lecture created with documents successfully' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
@@ -126,7 +129,14 @@ export class LectureController {
     @Body() createLectureDto: CreateLectureWithDocumentsBodyDto,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 [LEGACY] Creating lecture "${createLectureDto.title}" for cause ${causeId} - User: ${user.email}`);
+    this.logger.log(`📚 Received lecture creation request - Full DTO: ${JSON.stringify(createLectureDto)}`);
+    this.logger.log(`📚 Creating lecture "${createLectureDto.title}" for cause ${causeId} - User: ${user.email}`);
+    
+    // Validate required fields
+    if (!createLectureDto.title || createLectureDto.title.trim() === '') {
+      this.logger.error(`❌ Missing or empty title in request body`);
+      throw new BadRequestException('title is required and cannot be empty');
+    }
     
     // Create full DTO with causeId from URL parameter
     const fullLectureDto = {
@@ -206,62 +216,67 @@ export class LectureController {
   }
 
   /**
-   * UPDATE LECTURE WITH FILE UPLOADS (Enhanced)
+   * UPDATE LECTURE WITH FILES (Signed URL Flow)
    * 
-   * Enhanced endpoint for updating lecture with new document uploads
-   * Supports both updating lecture details and adding new documents
-   * Uses multipart/form-data with FilesInterceptor for better file handling
+   * Enhanced endpoint for updating lecture with pre-uploaded document URLs
+   * Files must be uploaded via signed URL flow first
+   * 
+   * REQUIRED UPLOAD FLOW:
+   * 1. Upload files first via POST /signed-url/generate-upload-url
+   * 2. Upload file to returned signed URL
+   * 3. Pass returned URLs in documents array here
+   * 
    * Authentication required - uses JWT token
    */
   @Put(':id/with-files')
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Update lecture with document uploads to Google Cloud Storage',
-    description: 'Authentication required'
+    summary: 'Update lecture with pre-uploaded document URLs (use signed URL flow)',
+    description: 'Authentication required. Files must be uploaded via signed URL flow first.'
   })
   @ApiBearerAuth()
-  @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Lecture ID to update' })
   @ApiBody({ 
     type: UpdateLectureWithFilesDto,
-    description: 'Lecture update data with optional file uploads (use form-data with field name "documents")' 
+    description: 'Lecture update data with document URLs from signed upload (JSON format only)' 
   })
   @ApiResponse({ status: 200, description: 'Lecture updated with documents successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized - Authentication required' })
   @ApiResponse({ status: 404, description: 'Lecture not found' })
-  @ApiResponse({ status: 400, description: 'Invalid request data or file format' })
-  @ApiResponse({ status: 413, description: 'File too large or too many files' })
+  @ApiResponse({ status: 400, description: 'Invalid request data. Ensure you are sending JSON with pre-uploaded URLs.' })
   async updateLectureWithFiles(
     @Param('id') id: string,
     @Body() updateLectureDto: UpdateLectureWithFilesDto,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Updating lecture ${id} by user ${user.sub}`);
+    this.logger.log(`📚 Updating lecture ${id} with ${updateLectureDto.documents?.length || 0} documents by user ${user.sub}`);
     return this.lectureService.updateLectureWithDocuments(id, updateLectureDto, [], user);
   }
 
   /**
-   * UPDATE LECTURE WITH DOCUMENTS (Legacy Endpoint)
+   * UPDATE LECTURE WITH DOCUMENTS (Signed URL Flow)
    * 
-   * Legacy endpoint for updating lecture with new document uploads
-   * Maintained for backward compatibility
-   * Use PUT /:id/with-files for new implementations
-   * Accepts files from any field name (documents, files, file, etc.)
+   * Endpoint for updating lecture with pre-uploaded document URLs
+   * Files must be uploaded via signed URL flow first
+   * 
+   * REQUIRED UPLOAD FLOW:
+   * 1. Upload files first via POST /signed-url/generate-upload-url
+   * 2. Upload file to returned signed URL
+   * 3. Pass returned URLs in documents array here
+   * 
    * Authentication required - uses JWT token
    */
   @Put(':id/with-documents')
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Update lecture with document uploads (Legacy - use /:id/with-files instead)',
-    deprecated: true,
-    description: 'Authentication required'
+    summary: 'Update lecture with pre-uploaded document URLs (use signed URL flow)',
+    description: 'Authentication required. Files must be uploaded via signed URL flow first.'
   })
   @ApiBearerAuth()
-  @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'Lecture ID to update' })
   @ApiBody({ 
     type: UpdateLectureDto,
-    description: 'Lecture update data with optional file uploads (use form-data with any field name like documents, files, or file)' 
+    description: 'Lecture update data with document URLs from signed upload (JSON format only)' 
   })
   @ApiResponse({ status: 200, description: 'Lecture updated with documents successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized - Authentication required' })

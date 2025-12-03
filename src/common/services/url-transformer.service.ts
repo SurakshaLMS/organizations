@@ -35,7 +35,9 @@ export class UrlTransformerService {
 
     // It's a relative path - convert to full public URL
     try {
-      return this.cloudStorageService.getFullUrl(url);
+      const transformed = this.cloudStorageService.getFullUrl(url);
+      this.logger.log(`✨ URL Transform: "${url}" → "${transformed}"`);
+      return transformed;
     } catch (error) {
       this.logger.warn(`Failed to transform URL: ${url}`, error.message);
       return url;
