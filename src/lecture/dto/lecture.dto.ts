@@ -1,4 +1,6 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, Matches, IsNumberString } from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl, IsDateString, IsIn, Matches, IsNumberString, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { CreateDocumentDto } from './create-lecture-documents-body.dto';
 
 /**
  * ENTERPRISE LECTURE CREATION DTO
@@ -109,6 +111,12 @@ export class UpdateLectureDto {
   @IsBoolean()
   @IsOptional()
   isPublic?: boolean;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateDocumentDto)
+  @IsOptional()
+  documents?: CreateDocumentDto[];
 }
 
 /**

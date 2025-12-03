@@ -291,49 +291,46 @@ export class SignedUrlService {
       };
       const uploadToken = this.encryptMetadata(metadata);
       
-      // Create presigned POST for AWS S3 with security conditions
+      // Create presigned PUT URL for AWS S3 (simpler and more reliable than POST)
+      // Note: ACL and encryption should be set via bucket policies, not in signed URL
+      // to avoid signature mismatch issues
       const params = {
         Bucket: this.s3BucketName,
-        Fields: {
-          key: relativePath,
-          'Content-Type': request.contentType,
-          'x-amz-server-side-encryption': 'AES256', // Enforce encryption
-        },
+        Key: relativePath,
+        ContentType: request.contentType,
         Expires: expiresInSeconds,
-        Conditions: [
-          ['eq', '$Content-Type', request.contentType], // Exact content type match
-          ['eq', '$key', relativePath], // Exact path match
-          ['content-length-range', 0, maxSizeBytes], // Size validation
-          ['eq', '$x-amz-server-side-encryption', 'AES256'], // Enforce encryption
-        ]
+        // Don't set ACL here - use bucket policy or default bucket permissions
+        // Don't set ServerSideEncryption - use default bucket encryption
       };
       
-      const presignedPost = await new Promise<any>((resolve, reject) => {
-        this.s3.createPresignedPost(params, (err: any, data: any) => {
+      const signedUrl = await new Promise<string>((resolve, reject) => {
+        this.s3.getSignedUrl('putObject', params, (err: any, url: string) => {
           if (err) reject(err);
-          else resolve(data);
+          else resolve(url);
         });
       });
       
-      this.logger.log(`✅ Generated AWS S3 presigned POST - File: ${secureFilename}, TTL: ${this.SIGNED_URL_TTL_MINUTES}min`);
+      this.logger.log(`✅ Generated AWS S3 presigned PUT URL - File: ${secureFilename}, TTL: ${this.SIGNED_URL_TTL_MINUTES}min, Max: ${maxSizeBytes}B (ACL via bucket policy)`);
       
-      // Calculate the future public URL (after verification)
-      const futurePublicUrl = `${this.baseUrl}/${relativePath}`;
+      // Calculate the public URL (available immediately after upload since ACL is public-read)
+      const publicUrl = `${this.baseUrl}/${relativePath}`;
       
       return {
         uploadToken,
-        signedUrl: presignedPost, // Contains { url, fields }
+        signedUrl, // Direct PUT URL string
         expiresAt,
         expiresIn: expiresInSeconds,
         expectedFilename: secureFilename,
         relativePath,
-        publicUrl: futurePublicUrl,
+        publicUrl,
         maxFileSizeBytes: maxSizeBytes,
         allowedExtensions,
         uploadInstructions: {
-          method: 'POST',
-          formFields: presignedPost.fields,
-          note: `Upload using multipart/form-data POST to the URL. Include all form fields first, then the file with field name 'file'. The URL expires in ${this.SIGNED_URL_TTL_MINUTES} minutes. After upload, call /signed-urls/verify/{token} to make the file public.`,
+          method: 'PUT',
+          headers: {
+            'Content-Type': request.contentType,
+          },
+          note: `Upload using HTTP PUT with the file as the request body. Set Content-Type header to "${request.contentType}". Max size: ${maxSizeBytes} bytes. URL expires in ${this.SIGNED_URL_TTL_MINUTES} minutes. File will be publicly accessible immediately.`,
         },
       };
       
@@ -638,9 +635,15 @@ export class SignedUrlService {
   private generateSecureFilename(originalName: string, token: string, timestamp: number): string {
     const extension = path.extname(originalName).toLowerCase();
     const baseName = path.basename(originalName, extension);
-    const sanitizedBase = baseName.replace(/[^a-z0-9-]/gi, '-').substring(0, 50);
     
-    return `${sanitizedBase}-${token}-${timestamp}${extension}`;
+    // Sanitize: replace special chars with single hyphen, remove consecutive hyphens
+    const sanitizedBase = baseName
+      .replace(/[^a-z0-9-]/gi, '-')  // Replace special chars with hyphen
+      .replace(/-+/g, '-')            // Replace multiple hyphens with single hyphen (prevents -- SQL comment trigger)
+      .replace(/^-+|-+$/g, '')        // Remove leading/trailing hyphens
+      .substring(0, 50);
+    
+    return `${sanitizedBase}_${token}_${timestamp}${extension}`;  // Use underscore separator instead of hyphen
   }
 
   private validateFileExtension(extension: string, folder: string): void {

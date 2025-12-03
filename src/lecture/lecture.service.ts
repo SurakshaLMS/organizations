@@ -237,6 +237,18 @@ export class LectureService {
             this.logger.log(`✅ Document linked: ${docMeta.title} -> ${docUrl}`);
           } catch (docError) {
             this.logger.error(`❌ Failed to create document record for ${docMeta.title}:`, docError);
+            
+            // If database creation fails, delete the uploaded file from S3 to prevent orphaned files
+            const docUrl = extractRelativePath(docMeta.docUrl);
+            if (docUrl) {
+              try {
+                await this.cloudStorage.deleteFile(docUrl);
+                this.logger.log(`🗑️ Cleaned up orphaned file from S3: ${docUrl}`);
+              } catch (cleanupError) {
+                this.logger.error(`Failed to cleanup orphaned file ${docUrl}:`, cleanupError);
+              }
+            }
+            
             // Continue with other documents
           }
         }
@@ -636,9 +648,14 @@ export class LectureService {
       const organizationId = convertToString(lecture.cause.organizationId);
       this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
 
-      // Prepare update data
+      // Prepare update data (exclude documents field - not a Prisma field)
       const updateData: any = {};
       Object.keys(updateLectureDto).forEach(key => {
+        // Skip documents field - handled separately in updateLectureWithDocuments
+        if (key === 'documents') {
+          return;
+        }
+        
         const value = updateLectureDto[key as keyof UpdateLectureDto];
         if (value !== undefined) {
           if (key === 'timeStart' || key === 'timeEnd') {
@@ -712,6 +729,8 @@ export class LectureService {
     files?: any[],
     user?: EnhancedJwtPayload
   ) {
+    const uploadedFilePaths: string[] = []; // Track uploaded files for cleanup on failure
+    
     try {
       const lectureBigIntId = convertToBigInt(lectureId);
 
@@ -771,6 +790,78 @@ export class LectureService {
         }
       }
 
+      // Handle documents from DTO (pre-uploaded via signed URL)
+      if (updateLectureDto.documents && updateLectureDto.documents.length > 0) {
+        this.logger.log(`📝 Creating ${updateLectureDto.documents.length} documents from pre-uploaded URLs`);
+
+        for (const docMeta of updateLectureDto.documents) {
+          let relativePath: string | null | undefined = null;
+          
+          try {
+            // Skip if no docUrl provided
+            if (!docMeta.docUrl) {
+              this.logger.warn(`⚠️ Skipping document ${docMeta.title} - no docUrl provided`);
+              continue;
+            }
+
+            // Extract relative path from full URL
+            relativePath = extractRelativePath(docMeta.docUrl);
+            
+            if (!relativePath) {
+              this.logger.warn(`⚠️ Skipping document ${docMeta.title} - invalid docUrl: ${docMeta.docUrl}`);
+              continue;
+            }
+
+            this.logger.log(`💾 Saving document: ${docMeta.title} with path: ${relativePath}`);
+
+            // Track this file for potential cleanup
+            uploadedFilePaths.push(relativePath);
+
+            // Create database record for the document
+            const document = await this.prisma.documentation.create({
+              data: {
+                title: docMeta.title,
+                description: docMeta.description || `Document for lecture ${lectureId}`,
+                content: docMeta.content,
+                docUrl: relativePath, // Store relative path in DB
+                lectureId: lectureBigIntId,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              },
+            });
+
+            // Extract filename from the relative path
+            const fileName = relativePath.split('/').pop() || 'unknown';
+
+            uploadedDocuments.push({
+              documentationId: convertToString(document.documentationId),
+              title: document.title,
+              url: docMeta.docUrl, // Return original full URL
+              fileName: fileName,
+              size: 0, // Size not available for pre-uploaded files
+              fileId: convertToString(document.documentationId),
+              uploadedAt: new Date().toISOString(),
+            });
+
+            this.logger.log(`✅ Document record created: ${docMeta.title} (ID: ${document.documentationId})`);
+          } catch (docError) {
+            this.logger.error(`Failed to create document record for ${docMeta.title}:`, docError);
+            
+            // If database creation fails, delete the uploaded file from S3 to prevent orphaned files
+            if (relativePath) {
+              try {
+                await this.cloudStorage.deleteFile(relativePath);
+                this.logger.log(`🗑️ Cleaned up orphaned file from S3: ${relativePath}`);
+              } catch (cleanupError) {
+                this.logger.error(`Failed to cleanup orphaned file ${relativePath}:`, cleanupError);
+              }
+            }
+            
+            // Continue with other documents even if one fails
+          }
+        }
+      }
+
       // Fetch ALL existing documents for this lecture
       const allDocuments = await this.prisma.documentation.findMany({
         where: { lectureId: lectureBigIntId },
@@ -814,8 +905,138 @@ export class LectureService {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
         throw error;
       }
+      
+      // If update fails completely, cleanup any files that were uploaded in this request
+      if (uploadedFilePaths.length > 0) {
+        this.logger.warn(`⚠️ Update failed, cleaning up ${uploadedFilePaths.length} orphaned files`);
+        for (const filePath of uploadedFilePaths) {
+          try {
+            await this.cloudStorage.deleteFile(filePath);
+            this.logger.log(`🗑️ Cleaned up orphaned file: ${filePath}`);
+          } catch (cleanupError) {
+            this.logger.error(`Failed to cleanup file ${filePath}:`, cleanupError);
+          }
+        }
+      }
+      
       this.logger.error(`Failed to update lecture with documents for ID ${lectureId}:`, error);
       throw new BadRequestException('Failed to update lecture with documents');
+    }
+  }
+
+  /**
+   * DELETE SINGLE DOCUMENT
+   * Public method to delete a document (requires authorization)
+   */
+  async deleteDocument(documentationId: string, user?: EnhancedJwtPayload): Promise<{ message: string }> {
+    try {
+      const docIdBigInt = convertToBigInt(documentationId);
+
+      // Get document with lecture and organization info for authorization
+      const document = await this.prisma.documentation.findUnique({
+        where: { documentationId: docIdBigInt },
+        select: {
+          documentationId: true,
+          title: true,
+          docUrl: true,
+          lecture: {
+            select: {
+              lectureId: true,
+              title: true,
+              cause: {
+                select: {
+                  organizationId: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!document) {
+        throw new NotFoundException('Document not found');
+      }
+
+      // JWT-based access validation - require moderator or admin
+      if (user) {
+        const organizationId = convertToString(document.lecture.cause.organizationId);
+        this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
+      } else {
+        throw new UnauthorizedException('Authentication required');
+      }
+
+      // Delete file from S3 storage
+      if (document.docUrl) {
+        try {
+          await this.cloudStorage.deleteFile(document.docUrl);
+          this.logger.log(`🗑️ Deleted file from S3: ${document.docUrl}`);
+        } catch (storageError) {
+          this.logger.error(`Failed to delete file from S3: ${document.docUrl}`, storageError);
+          // Continue with database deletion even if S3 fails
+        }
+      }
+
+      // Delete from database
+      await this.prisma.documentation.delete({
+        where: { documentationId: docIdBigInt },
+      });
+
+      this.logger.warn(`🗑️ Document deleted: ${document.title} (ID: ${documentationId}) by user ${user?.sub || 'unknown'}`);
+      
+      return {
+        message: `Document "${document.title}" deleted successfully`,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+      this.logger.error(`Failed to delete document ${documentationId}:`, error);
+      throw new BadRequestException('Failed to delete document');
+    }
+  }
+
+  /**
+   * DELETE SINGLE DOCUMENT (Helper method)
+   * Private helper for internal use
+   */
+  private async deleteDocumentWithFile(documentationId: bigint): Promise<boolean> {
+    try {
+      // Get document details
+      const document = await this.prisma.documentation.findUnique({
+        where: { documentationId },
+        select: {
+          documentationId: true,
+          title: true,
+          docUrl: true,
+        },
+      });
+
+      if (!document) {
+        this.logger.warn(`⚠️ Document ${documentationId} not found in database`);
+        return false;
+      }
+
+      // Delete file from S3 storage first
+      if (document.docUrl) {
+        try {
+          await this.cloudStorage.deleteFile(document.docUrl);
+          this.logger.log(`🗑️ Deleted file from S3: ${document.docUrl}`);
+        } catch (storageError) {
+          this.logger.error(`Failed to delete file from S3: ${document.docUrl}`, storageError);
+          // Continue with database deletion even if S3 fails
+        }
+      }
+
+      // Delete from database
+      await this.prisma.documentation.delete({
+        where: { documentationId },
+      });
+
+      this.logger.log(`✅ Document deleted: ${document.title} (ID: ${documentationId})`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to delete document ${documentationId}:`, error);
+      return false;
     }
   }
 

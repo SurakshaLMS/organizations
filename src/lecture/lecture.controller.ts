@@ -333,4 +333,31 @@ export class LectureController {
     this.logger.log(`📚 Fetching documents for lecture ${id} - User: ${user.email}`);
     return this.lectureService.getLectureDocuments(id, user);
   }
+
+  /**
+   * DELETE DOCUMENT
+   * 
+   * Deletes a specific document from both database and S3 storage
+   * Requires organization moderator or admin permission
+   * 
+   * @example DELETE /organization/api/v1/lectures/documents/123
+   */
+  @Delete('documents/:documentId')
+  @UseGuards(EnhancedJwtAuthGuard)
+  @ApiOperation({ 
+    summary: 'Delete lecture document',
+    description: 'Delete a document from lecture (removes from both database and S3 storage). Requires moderator permission.'
+  })
+  @ApiParam({ name: 'documentId', description: 'Document ID to delete' })
+  @ApiResponse({ status: 200, description: 'Document deleted successfully' })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Document not found' })
+  async deleteDocument(
+    @Param('documentId') documentId: string,
+    @GetUser() user: EnhancedJwtPayload
+  ) {
+    this.logger.log(`🗑️ Deleting document ${documentId} - User: ${user.email}`);
+    return this.lectureService.deleteDocument(documentId, user);
+  }
 }
