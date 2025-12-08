@@ -217,22 +217,31 @@ export class CauseController {
    * Delete cause
    * Authentication required
    */
+  /**
+   * DELETE CAUSE (SOFT DELETE with CASCADE)
+   * 
+   * Soft deletes a cause and cascades to all related lectures and documents
+   * Only accessible by organization PRESIDENT and ADMIN roles
+   * 
+   * Authentication required
+   */
   @Delete(':id')
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Delete cause (Authentication required)',
-    description: 'Delete cause with authentication'
+    summary: 'Soft delete cause (Presidents and Admins only)',
+    description: 'Soft deletes a cause and all related lectures and documents. Only organization presidents and admins can perform this action.'
   })
   @ApiParam({ name: 'id', description: 'Cause ID' })
-  @ApiResponse({ status: 200, description: 'Cause deleted successfully' })
+  @ApiResponse({ status: 200, description: 'Cause soft deleted successfully with cascade' })
   @ApiResponse({ status: 401, description: 'Authentication required' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions - Presidents and Admins only' })
   @ApiResponse({ status: 404, description: 'Cause not found' })
   async deleteCause(
     @Param('id') causeId: string,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📋 Deleting cause ${causeId} - User: ${user.email}`);
-    return this.causeService.deleteCause(causeId, user.sub);
+    this.logger.log(`📋 Soft deleting cause ${causeId} - User: ${user.email}`);
+    return this.causeService.deleteCause(causeId, user.sub, user);
   }
 
   /**

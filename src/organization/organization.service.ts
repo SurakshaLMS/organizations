@@ -853,7 +853,10 @@ export class OrganizationService {
       throw new NotFoundException('Organization not found');
     }
 
-    const where: any = { organizationId: orgBigIntId };
+    const where: any = { 
+      organizationId: orgBigIntId,
+      isActive: true, // Only show active (non-deleted) causes
+    };
 
     // Add search functionality
     if (paginationDto?.search) {

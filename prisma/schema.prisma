@@ -170,6 +170,7 @@ model Cause {
   title          String   @db.VarChar(255)
   description    String?  @db.Text
   isPublic       Boolean  @default(false)
+  isActive       Boolean  @default(true)
   introVideoUrl  String?  @db.VarChar(500)
   imageUrl       String?  @db.VarChar(500)
   createdAt      DateTime @default(now()) @db.DateTime(0)
@@ -181,6 +182,7 @@ model Cause {
 
   @@index([organizationId])
   @@index([isPublic])
+  @@index([isActive])
   @@map("org_causes")
 }
 
@@ -191,6 +193,7 @@ model Lecture {
   content      String?   @db.Text
   description  String?   @db.Text
   isPublic     Boolean   @default(false)
+  isActive     Boolean   @default(true)
   liveLink     String?   @db.VarChar(500)
   liveMode     String?   @db.VarChar(50)
   mode         String?   @db.VarChar(50)
@@ -206,6 +209,7 @@ model Lecture {
 
   @@index([causeId])
   @@index([isPublic])
+  @@index([isActive])
   @@index([timeStart])
   @@index([mode])
   @@map("org_lectures")
@@ -234,12 +238,14 @@ model Documentation {
   content         String?  @db.Text
   description     String?  @db.Text
   docUrl          String?  @db.VarChar(500)
+  isActive        Boolean  @default(true)
   createdAt       DateTime @default(now()) @db.DateTime(0)
   updatedAt       DateTime @default(now()) @updatedAt @db.DateTime(0)
 
   lecture Lecture @relation(fields: [lectureId], references: [lectureId], onDelete: Cascade)
 
   @@index([lectureId])
+  @@index([isActive])
   @@map("org_documentation")
 }
 

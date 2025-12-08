@@ -166,7 +166,9 @@ export class CauseService {
   async getCauses(userId?: string, paginationDto?: PaginationDto): Promise<PaginatedResponse<any>> {
     const pagination = paginationDto || new PaginationDto();
     
-    const where: any = {};
+    const where: any = {
+      isActive: true, // Only show active (non-deleted) causes
+    };
 
     if (userId) {
       const userBigIntId = convertToBigInt(userId);
@@ -265,8 +267,11 @@ export class CauseService {
    */
   async getCauseById(causeId: string, userId?: string) {
     const causeBigIntId = convertToBigInt(causeId);
-    const cause = await this.prisma.cause.findUnique({
-      where: { causeId: causeBigIntId },
+    const cause = await this.prisma.cause.findFirst({
+      where: { 
+        causeId: causeBigIntId,
+        isActive: true,
+      },
       select: {
         causeId: true,
         title: true,
@@ -419,22 +424,122 @@ export class CauseService {
   }
 
   /**
-   * Delete cause
+   * Delete cause (SOFT DELETE with CASCADE)
+   * 
+   * Soft deletes a cause and cascades to all related lectures and documents
+   * Only accessible by organization PRESIDENT and ADMIN roles
+   * 
+   * Cascade behavior:
+   * - Sets cause.isActive = false
+   * - Sets all related lectures.isActive = false
+   * - Sets all related documents.isActive = false
    */
-  async deleteCause(causeId: string, userId: string) {
+  async deleteCause(causeId: string, userId: string, user?: any) {
     const causeBigIntId = convertToBigInt(causeId);
+    
+    // Get cause with organization info for permission check
     const cause = await this.prisma.cause.findUnique({
       where: { causeId: causeBigIntId },
-      select: { organizationId: true },
+      select: { 
+        causeId: true,
+        title: true,
+        organizationId: true,
+        isActive: true,
+        _count: {
+          select: {
+            lectures: true,
+            assignments: true,
+          }
+        }
+      },
     });
 
     if (!cause) {
       throw new NotFoundException('Cause not found');
     }
 
-    return this.prisma.cause.delete({
-      where: { causeId: causeBigIntId },
+    if (!cause.isActive) {
+      throw new NotFoundException('Cause has already been deleted');
+    }
+
+    // Verify user has PRESIDENT or ADMIN role in the organization
+    const organizationId = convertToString(cause.organizationId);
+    const userBigIntId = convertToBigInt(userId);
+    
+    const userRole = await this.prisma.organizationUser.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: cause.organizationId,
+          userId: userBigIntId,
+        },
+      },
+      select: {
+        role: true,
+        isVerified: true,
+      },
     });
+
+    if (!userRole || !userRole.isVerified) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+
+    if (userRole.role !== 'PRESIDENT' && userRole.role !== 'ADMIN') {
+      throw new ForbiddenException('Only organization presidents and admins can delete causes');
+    }
+
+    // Start transaction for cascade soft delete
+    const result = await this.prisma.$transaction(async (prisma) => {
+      // 1. Soft delete all documents related to lectures in this cause
+      const documentsUpdate = await prisma.documentation.updateMany({
+        where: {
+          lecture: {
+            causeId: causeBigIntId,
+          },
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      // 2. Soft delete all lectures in this cause
+      const lecturesUpdate = await prisma.lecture.updateMany({
+        where: {
+          causeId: causeBigIntId,
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      // 3. Soft delete the cause itself
+      const causeUpdate = await prisma.cause.update({
+        where: { causeId: causeBigIntId },
+        data: {
+          isActive: false,
+        },
+      });
+
+      return {
+        cause: causeUpdate,
+        lecturesAffected: lecturesUpdate.count,
+        documentsAffected: documentsUpdate.count,
+      };
+    });
+
+    this.logger.warn(`🗑️ Soft deleted cause ${causeId} (${cause.title}) with ${result.lecturesAffected} lectures and ${result.documentsAffected} documents by user ${userId}`);
+
+    return {
+      message: 'Cause and all related content soft deleted successfully',
+      deletedCause: {
+        causeId: convertToString(result.cause.causeId),
+        title: result.cause.title,
+        deletedAt: new Date().toISOString(),
+      },
+      cascade: {
+        lecturesAffected: result.lecturesAffected,
+        documentsAffected: result.documentsAffected,
+      },
+    };
   }
 
   /**
@@ -443,7 +548,10 @@ export class CauseService {
   async getCausesByOrganization(organizationId: string, userId?: string) {
     const orgBigIntId = convertToBigInt(organizationId);
     
-    const where: any = { organizationId: orgBigIntId };
+    const where: any = { 
+      organizationId: orgBigIntId,
+      isActive: true,
+    };
 
     if (!userId) {
       // Only public causes for unauthenticated users

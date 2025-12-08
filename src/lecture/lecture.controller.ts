@@ -292,26 +292,30 @@ export class LectureController {
   }
 
   /**
-   * DELETE LECTURE
+   * DELETE LECTURE (SOFT DELETE with CASCADE)
+   * 
+   * Soft deletes a lecture and all related documents
+   * Only accessible by organization PRESIDENT and ADMIN roles
    * 
    * Authentication required
-   * Implements cascade deletion of all related documents from S3 and database
+   * Implements cascade soft deletion of all related documents
    */
   @Delete(':id')
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Delete lecture (Authentication required)',
-    description: 'Delete lecture with authentication'
+    summary: 'Soft delete lecture (Presidents and Admins only)',
+    description: 'Soft deletes a lecture and all related documents. Only organization presidents and admins can perform this action.'
   })
   @ApiParam({ name: 'id', description: 'Lecture ID' })
-  @ApiResponse({ status: 200, description: 'Lecture deleted successfully' })
+  @ApiResponse({ status: 200, description: 'Lecture soft deleted successfully with cascade' })
   @ApiResponse({ status: 401, description: 'Authentication required' })
-  @ApiResponse({ status: 404, description: 'Lecture not found' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions - Presidents and Admins only' })
+  @ApiResponse({ status: 404, description: 'Lecture not found or already deleted' })
   async deleteLecture(
     @Param('id') id: string,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`📚 Deleting lecture ${id} - User: ${user.email}`);
+    this.logger.log(`📚 Soft deleting lecture ${id} - User: ${user.email}`);
     return this.lectureService.deleteLecture(id, user);
   }
 
@@ -335,29 +339,29 @@ export class LectureController {
   }
 
   /**
-   * DELETE DOCUMENT
+   * DELETE DOCUMENT (SOFT DELETE)
    * 
-   * Deletes a specific document from both database and S3 storage
-   * Requires organization moderator or admin permission
+   * Soft deletes a specific document
+   * Only accessible by organization PRESIDENT and ADMIN roles
    * 
    * @example DELETE /organization/api/v1/lectures/documents/123
    */
   @Delete('documents/:documentId')
   @UseGuards(EnhancedJwtAuthGuard)
   @ApiOperation({ 
-    summary: 'Delete lecture document',
-    description: 'Delete a document from lecture (removes from both database and S3 storage). Requires moderator permission.'
+    summary: 'Soft delete lecture document (Presidents and Admins only)',
+    description: 'Soft deletes a document from lecture. Only organization presidents and admins can perform this action.'
   })
   @ApiParam({ name: 'documentId', description: 'Document ID to delete' })
-  @ApiResponse({ status: 200, description: 'Document deleted successfully' })
+  @ApiResponse({ status: 200, description: 'Document soft deleted successfully' })
   @ApiResponse({ status: 401, description: 'Authentication required' })
-  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  @ApiResponse({ status: 404, description: 'Document not found' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions - Presidents and Admins only' })
+  @ApiResponse({ status: 404, description: 'Document not found or already deleted' })
   async deleteDocument(
     @Param('documentId') documentId: string,
     @GetUser() user: EnhancedJwtPayload
   ) {
-    this.logger.log(`🗑️ Deleting document ${documentId} - User: ${user.email}`);
+    this.logger.log(`🗑️ Soft deleting document ${documentId} - User: ${user.email}`);
     return this.lectureService.deleteDocument(documentId, user);
   }
 }

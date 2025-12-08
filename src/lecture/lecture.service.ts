@@ -427,6 +427,9 @@ export class LectureService {
             // NO cause relation - saves unnecessary join
             // Include document details (not just count)
             documentations: {
+              where: {
+                isActive: true,
+              },
               select: {
                 documentationId: true,
                 title: true,
@@ -516,8 +519,11 @@ export class LectureService {
       const lectureBigIntId = convertToBigInt(lectureId);
       
       // Get lecture with minimal joins and related documents
-      const lecture = await this.prisma.lecture.findUnique({
-        where: { lectureId: lectureBigIntId },
+      const lecture = await this.prisma.lecture.findFirst({
+        where: { 
+          lectureId: lectureBigIntId,
+          isActive: true, // Only show active (non-deleted) lectures
+        },
         select: {
           lectureId: true,
           title: true,
@@ -536,6 +542,9 @@ export class LectureService {
           causeId: true, // Only ID needed
           // Get related documents with minimal fields
           documentations: {
+            where: {
+              isActive: true, // Only show active (non-deleted) documents
+            },
             select: {
               documentationId: true,
               title: true,
@@ -864,7 +873,10 @@ export class LectureService {
 
       // Fetch ALL existing documents for this lecture
       const allDocuments = await this.prisma.documentation.findMany({
-        where: { lectureId: lectureBigIntId },
+        where: { 
+          lectureId: lectureBigIntId,
+          isActive: true, // Only show active (non-deleted) documents
+        },
         select: {
           documentationId: true,
           title: true,
@@ -939,6 +951,7 @@ export class LectureService {
           documentationId: true,
           title: true,
           docUrl: true,
+          isActive: true,
           lecture: {
             select: {
               lectureId: true,
@@ -957,40 +970,59 @@ export class LectureService {
         throw new NotFoundException('Document not found');
       }
 
-      // JWT-based access validation - require moderator or admin
+      if (!document.isActive) {
+        throw new NotFoundException('Document has already been deleted');
+      }
+
+      // JWT-based access validation - require president or admin only
       if (user) {
         const organizationId = convertToString(document.lecture.cause.organizationId);
-        this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
+        try {
+          this.jwtAccessValidation.requireOrganizationAdmin(user, organizationId);
+        } catch (adminError) {
+          // Check if user is president
+          const userId = convertToBigInt(user.sub);
+          const userRole = await this.prisma.organizationUser.findUnique({
+            where: {
+              organizationId_userId: {
+                organizationId: document.lecture.cause.organizationId,
+                userId: userId,
+              },
+            },
+            select: {
+              role: true,
+              isVerified: true,
+            },
+          });
+
+          if (!userRole || !userRole.isVerified || userRole.role !== 'PRESIDENT') {
+            throw new ForbiddenException(
+              'Insufficient permissions. Only organization presidents and admins can delete documents.'
+            );
+          }
+        }
       } else {
         throw new UnauthorizedException('Authentication required');
       }
 
-      // Delete file from S3 storage
-      if (document.docUrl) {
-        try {
-          await this.cloudStorage.deleteFile(document.docUrl);
-          this.logger.log(`🗑️ Deleted file from S3: ${document.docUrl}`);
-        } catch (storageError) {
-          this.logger.error(`Failed to delete file from S3: ${document.docUrl}`, storageError);
-          // Continue with database deletion even if S3 fails
-        }
-      }
-
-      // Delete from database
-      await this.prisma.documentation.delete({
+      // Soft delete the document
+      await this.prisma.documentation.update({
         where: { documentationId: docIdBigInt },
+        data: {
+          isActive: false,
+        },
       });
 
-      this.logger.warn(`🗑️ Document deleted: ${document.title} (ID: ${documentationId}) by user ${user?.sub || 'unknown'}`);
+      this.logger.warn(`🗑️ Document soft deleted: ${document.title} (ID: ${documentationId}) by user ${user?.sub || 'unknown'}`);
       
       return {
-        message: `Document "${document.title}" deleted successfully`,
+        message: `Document "${document.title}" soft deleted successfully`,
       };
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof UnauthorizedException) {
         throw error;
       }
-      this.logger.error(`Failed to delete document ${documentationId}:`, error);
+      this.logger.error(`Failed to soft delete document ${documentationId}:`, error);
       throw new BadRequestException('Failed to delete document');
     }
   }
@@ -1041,22 +1073,35 @@ export class LectureService {
   }
 
   /**
-   * DELETE LECTURE (ENTERPRISE OPTIMIZED)
+   * DELETE LECTURE (SOFT DELETE with CASCADE)
+   * 
+   * Soft deletes a lecture and all related documents
+   * Only accessible by organization PRESIDENT and ADMIN roles
+   * 
+   * Cascade behavior:
+   * - Sets lecture.isActive = false
+   * - Sets all related documents.isActive = false
    */
   async deleteLecture(lectureId: string, user?: EnhancedJwtPayload) {
     try {
       const lectureBigIntId = convertToBigInt(lectureId);
 
-      // Get lecture with minimal organization data
+      // Get lecture with organization data and document count
       const lecture = await this.prisma.lecture.findUnique({
         where: { lectureId: lectureBigIntId },
         select: {
           lectureId: true,
           title: true,
           causeId: true,
+          isActive: true,
           cause: {
             select: {
               organizationId: true,
+            },
+          },
+          _count: {
+            select: {
+              documentations: true,
             },
           },
         },
@@ -1066,103 +1111,78 @@ export class LectureService {
         throw new NotFoundException('Lecture not found');
       }
 
+      if (!lecture.isActive) {
+        throw new NotFoundException('Lecture has already been deleted');
+      }
+
       // JWT-based access validation 
-      // Allow organization admins and moderators to delete lectures
-      // Since Lecture model lacks createdBy field, we implement organization-level permissions
+      // Only allow organization presidents and admins to soft delete lectures
       const organizationId = convertToString(lecture.cause.organizationId);
       if (user) {
         try {
           // Try organization admin first (highest permission)
           this.jwtAccessValidation.requireOrganizationAdmin(user, organizationId);
         } catch (adminError) {
-          // If not admin, try moderator (teacher equivalent)
-          try {
-            this.jwtAccessValidation.requireOrganizationModerator(user, organizationId);
-          } catch (moderatorError) {
+          // Check if user is president
+          const userId = convertToBigInt(user.sub);
+          const userRole = await this.prisma.organizationUser.findUnique({
+            where: {
+              organizationId_userId: {
+                organizationId: lecture.cause.organizationId,
+                userId: userId,
+              },
+            },
+            select: {
+              role: true,
+              isVerified: true,
+            },
+          });
+
+          if (!userRole || !userRole.isVerified || userRole.role !== 'PRESIDENT') {
             throw new ForbiddenException(
-              'Insufficient permissions. Only organization admins and moderators can delete lectures.'
+              'Insufficient permissions. Only organization presidents and admins can delete lectures.'
             );
           }
         }
       }
 
-      // Step 1: Get all documents associated with this lecture
-      const documents = await this.prisma.documentation.findMany({
-        where: { lectureId: lectureBigIntId },
-        select: {
-          documentationId: true,
-          title: true,
-          docUrl: true,
-        },
-      });
-
-      this.logger.log(`🗑️ Found ${documents.length} documents to delete for lecture ${lectureId}`);
-
-      // Step 2: Delete documents from S3 storage
-      const deletedDocuments: Array<{
-        documentationId: string;
-        title: string;
-        url: string | null;
-      }> = [];
-      
-      const failedDeletions: Array<{
-        documentationId: string;
-        title: string;
-        error: string;
-      }> = [];
-
-      for (const document of documents) {
-        try {
-          if (document.docUrl) {
-            // Delete file from cloud storage using relative path stored in DB
-            await this.cloudStorage.deleteFile(document.docUrl);
-            this.logger.log(`📄 Deleted document from storage: ${document.title}`);
-          }
-          
-          deletedDocuments.push({
-            documentationId: convertToString(document.documentationId),
-            title: document.title,
-            url: document.docUrl,
-          });
-        } catch (storageError) {
-          this.logger.error(`Failed to delete document ${document.title} from storage:`, storageError);
-          failedDeletions.push({
-            documentationId: convertToString(document.documentationId),
-            title: document.title,
-            error: 'Storage deletion failed',
-          });
-          // Continue with database deletion even if storage fails
-        }
-      }
-
-      // Step 3: Delete documents from database (this will cascade due to foreign key relationship)
-      // The Prisma schema should have onDelete: Cascade for this to work automatically
-      // But we'll be explicit for safety
-      if (documents.length > 0) {
-        await this.prisma.documentation.deleteMany({
-          where: { lectureId: lectureBigIntId },
+      // Start transaction for cascade soft delete
+      const result = await this.prisma.$transaction(async (prisma) => {
+        // 1. Soft delete all documents related to this lecture
+        const documentsUpdate = await prisma.documentation.updateMany({
+          where: {
+            lectureId: lectureBigIntId,
+          },
+          data: {
+            isActive: false,
+          },
         });
-        this.logger.log(`🗑️ Deleted ${documents.length} documents from database for lecture ${lectureId}`);
-      }
 
-      // Step 4: Delete the lecture itself
-      await this.prisma.lecture.delete({
-        where: { lectureId: lectureBigIntId },
+        // 2. Soft delete the lecture itself
+        const lectureUpdate = await prisma.lecture.update({
+          where: { lectureId: lectureBigIntId },
+          data: {
+            isActive: false,
+          },
+        });
+
+        return {
+          lecture: lectureUpdate,
+          documentsAffected: documentsUpdate.count,
+        };
       });
 
-      this.logger.warn(`🗑️ Lecture ${lectureId} (${lecture.title}) and ${documents.length} documents deleted ${user ? `by user ${user.sub}` : 'without authentication'}`);
+      this.logger.warn(`🗑️ Soft deleted lecture ${lectureId} (${lecture.title}) with ${result.documentsAffected} documents by user ${user?.sub || 'unknown'}`);
       
       return {
-        message: 'Lecture and all related documents deleted successfully',
+        message: 'Lecture and all related documents soft deleted successfully',
         deletedLecture: {
-          lectureId: convertToString(lecture.lectureId),
-          title: lecture.title,
+          lectureId: convertToString(result.lecture.lectureId),
+          title: result.lecture.title,
           deletedAt: new Date().toISOString(),
         },
-        deletedDocuments: {
-          count: deletedDocuments.length,
-          successful: deletedDocuments,
-          failed: failedDeletions,
+        cascade: {
+          documentsAffected: result.documentsAffected,
         },
       };
 
@@ -1185,8 +1205,11 @@ export class LectureService {
       const lectureBigIntId = convertToBigInt(lectureId);
       
       // First check if lecture exists and get access info
-      const lecture = await this.prisma.lecture.findUnique({
-        where: { lectureId: lectureBigIntId },
+      const lecture = await this.prisma.lecture.findFirst({
+        where: { 
+          lectureId: lectureBigIntId,
+          isActive: true, // Only allow access to active (non-deleted) lectures
+        },
         select: {
           lectureId: true,
           isPublic: true,
@@ -1212,7 +1235,10 @@ export class LectureService {
 
       // Get documents with minimal fields
       const documents = await this.prisma.documentation.findMany({
-        where: { lectureId: lectureBigIntId },
+        where: { 
+          lectureId: lectureBigIntId,
+          isActive: true, // Only show active (non-deleted) documents
+        },
         select: {
           documentationId: true,
           title: true,
@@ -1266,7 +1292,9 @@ export class LectureService {
    * - Smart query building for performance
    */
   private buildOptimizedWhereClause(user: EnhancedJwtPayload | undefined, queryDto: LectureQueryDto): any {
-    const where: any = {};
+    const where: any = {
+      isActive: true, // Only show active (non-deleted) lectures
+    };
 
     // Step 1: CAUSE ID FILTERING (PRIMARY OPTIMIZATION - NO JOINS NEEDED)
     if (queryDto.causeIds) {
